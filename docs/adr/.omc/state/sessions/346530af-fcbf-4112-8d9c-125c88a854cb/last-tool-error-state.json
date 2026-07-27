@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk ls -1 /Users/masroor/.claude/projects/-Users-masroor-projects-lumora-probe/memory/ 2>&1\",\"description\":\"Check memory index existence\"}",
+  "error": "Exit code 1\nls: /Users/masroor/.claude/projects/-Users-masroor-projects-lumora-probe/memory/: No such file or directory",
+  "timestamp": "2026-07-27T20:49:12.044Z",
+  "retry_count": 1
+}

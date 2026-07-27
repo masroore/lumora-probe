@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk ls -la /Users/masroor/projects/lumora-probe/docs/ && rtk wc -l /Users/masroor/projects/lumora-probe/docs/*\",\"description\":\"List docs in project\"}",
+  "error": "Exit code 1\n755  architecture-baseline/\n644  .DS_Store  10.0K",
+  "timestamp": "2026-07-27T19:56:20.520Z",
+  "retry_count": 1
+}
