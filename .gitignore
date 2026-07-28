@@ -106,9 +106,6 @@ huggingface/
 .supermaven/
 .codex/
 .agent/
-AGENTS.md
-CLAUDE.md
-COPILOT.md
 .cursorrules
 .windsurfrules
 .aider.conf.yml
