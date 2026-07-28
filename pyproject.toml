@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 probe-lite = "probe_lite.cli:main"
+probe_lite = "probe_lite.cli:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -54,6 +54,12 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | [0025](ADR-0025-frontend-asset-pipeline.md) | Node at asset-build time only; built assets committed |
 | [0026](ADR-0026-redaction-and-handover.md) | Honest partial redaction; object-dropping is the default handover |
 
+## Probe Lite tools
+
+| ADR | Decision |
+|-----|----------|
+| [0027](ADR-0027-sender-study-association-boundary.md) | Sender Lite uses one exact-fidelity association per Study |
+
 ## Recorded deviations from the baseline
 
 Each is argued in full in its ADR.
