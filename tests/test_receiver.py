@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 import socket
 import threading
@@ -111,10 +112,17 @@ def _set_transfer_syntax(dataset: object, transfer_syntax: str) -> None:
     dataset.is_implicit_VR = transfer_syntax == "1.2.840.10008.1.2"
 
 
+def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert predicate()
+
+
 def _start_receiver(tmp_path: Path, log_format: str = "json", **kwargs: object) -> ProbeReceiver:
     receiver = ProbeReceiver(_config(tmp_path, log_format=log_format, **kwargs))
     receiver.start()
-    time.sleep(0.05)
+    _wait_until(lambda: receiver.server is not None)
     return receiver
 
 
@@ -261,7 +269,7 @@ def test_stop_event_produces_clean_shutdown(
     stop_event = threading.Event()
     thread = threading.Thread(target=receiver.serve, args=(stop_event,))
     thread.start()
-    time.sleep(0.05)
+    _wait_until(lambda: receiver.server is not None)
     stop_event.set()
     thread.join(timeout=5)
 
