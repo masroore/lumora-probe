@@ -1,0 +1,57 @@
+# Auto detect text files and normalise line endings
+* text=auto
+
+# Python
+*.py text diff=python
+*.pyi text diff=python
+
+# Data / config
+*.toml text
+*.yaml text
+*.yml text
+*.json text
+*.md text diff=markdown
+*.txt text
+*.cfg text
+*.ini text
+
+# Binary files - treat as binary (no diff, no merge)
+*.safetensors binary
+*.bin binary
+*.pt binary
+*.pth binary
+*.onnx binary
+*.h5 binary
+*.hdf5 binary
+*.tflite binary
+*.pb binary
+*.pkl binary
+*.pickle binary
+*.joblib binary
+*.gguf binary
+*.ggml binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.bmp binary
+*.tiff binary
+
+# Archives
+*.zip binary
+*.tar.gz binary
+*.tar.bz2 binary
+*.rar binary
+*.7z binary
+*.whl binary
+
+# Large data
+*.csv binary
+*.parquet binary
+*.arrow binary
+*.feather binary
+*.tfrecord binary
