@@ -110,6 +110,8 @@ huggingface/
 .windsurfrules
 .aider.conf.yml
 .aider.tags.cache.v3/
+.omp/
+.omc/
 
 # Dataset files
 *.csv
