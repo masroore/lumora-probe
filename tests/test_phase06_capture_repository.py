@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -139,6 +142,45 @@ async def test_active_capture_is_marked_interrupted_on_rebuild(tmp_path: Path) -
     recovered = CapturePackage.open(writer.capture_path).manifest
     assert recovered.state == "interrupted"
     assert recovered.interruption_reason == "capture was active during process restart"
+
+
+@pytest.mark.asyncio
+async def test_abrupt_process_exit_recovers_active_capture_and_torn_line(tmp_path: Path) -> None:
+    paths, repository = repository_for(tmp_path)
+    script = """
+from datetime import UTC, datetime
+from pathlib import Path
+import os
+import sys
+from lumora_probe.captures.format import CaptureFidelity, CaptureManifest, CapturePackageWriter
+
+root = Path(sys.argv[1])
+capture_id = sys.argv[2]
+writer = CapturePackageWriter(
+    root,
+    CaptureManifest(
+        capture_id=capture_id,
+        created_at=datetime(2026, 7, 29, tzinfo=UTC),
+        fidelity=CaptureFidelity.EVENTS,
+        state="running",
+    ),
+)
+writer.append_event_raw(b'{"event_name":"AssociationStarted"}')
+with (writer.capture_path / "events.jsonl").open("ab") as handle:
+    handle.write(b'{"event_name":"torn"')
+os._exit(17)
+"""
+    result = await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-c", script, str(paths.captures), BASE_ID],
+        check=False,
+    )
+    assert result.returncode == 17
+
+    await repository.rebuild(paths.captures)
+    recovered = CapturePackage.open(paths.captures / BASE_ID).manifest
+    assert recovered.state == "interrupted"
+    assert (paths.captures / BASE_ID / "events.jsonl").read_bytes().count(b"\n") == 1
 
 
 @pytest.mark.asyncio
