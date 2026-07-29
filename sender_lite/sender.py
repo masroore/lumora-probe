@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 from dataclasses import dataclass
@@ -127,7 +128,7 @@ class Sender:
                 duration=duration,
                 error=None if success else f"echo status 0x{status_code or 0:04X}",
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  -- echo top-level guard per plan §12
             duration = time.monotonic() - started
             return EchoResult(
                 success=False,
@@ -137,10 +138,8 @@ class Sender:
             )
         finally:
             if assoc is not None and assoc.is_established:
-                try:
+                with contextlib.suppress(Exception):
                     assoc.release()
-                except Exception:
-                    pass
 
     # ------------------------------------------------------------- send_study
     def send_study(self, study: StudyBatch, cancel_event: threading.Event) -> StudyResult:
@@ -377,7 +376,7 @@ class Sender:
                                 study_uid=study.study_uid,
                                 reason="association_lost",
                             )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001  -- per-instance failure continuation per plan §10.7
                     duration = time.monotonic() - inst_started
                     self.logger.error(
                         "instance_failed",
@@ -397,10 +396,8 @@ class Sender:
             # Teardown
             if cancel_event.is_set() or not association_usable:
                 if assoc.is_established:
-                    try:
+                    with contextlib.suppress(Exception):
                         assoc.abort()
-                    except Exception:
-                        pass
                 self.logger.error(
                     "association_aborted",
                     study_uid=study.study_uid,
@@ -409,11 +406,9 @@ class Sender:
             else:
                 try:
                     assoc.release()
-                except Exception:
-                    try:
+                except Exception:  # noqa: BLE001  -- release failed; best-effort abort in teardown
+                    with contextlib.suppress(Exception):
                         assoc.abort()
-                    except Exception:
-                        pass
 
             final = _study_result(study.study_uid, tuple(results), started)
             self.logger.info(
@@ -427,7 +422,7 @@ class Sender:
                 duration=round(final.duration, 3),
             )
             return final
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  -- send_study top-level guard per plan §10.6/§16
             failed = tuple(
                 _failed_instance(inst, reason=str(exc), duration=time.monotonic() - started)
                 for inst in instances
@@ -435,10 +430,8 @@ class Sender:
             return _study_result(study.study_uid, failed, started)
         finally:
             if assoc is not None and assoc.is_established:
-                try:
+                with contextlib.suppress(Exception):
                     assoc.release()
-                except Exception:
-                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +506,7 @@ def _revalidate(inst: CatalogInstance) -> str | None:
         return "file_symlink"
     try:
         ds = dcmread(path, force=False)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  -- revalidation read per plan §10.4
         return f"read_failed: {exc}"
     try:
         if str(getattr(ds, "StudyInstanceUID", "")) != inst.study_uid:
@@ -529,7 +522,7 @@ def _revalidate(inst: CatalogInstance) -> str | None:
             return "file_meta_missing"
         if str(getattr(file_meta, "TransferSyntaxUID", "")) != inst.transfer_syntax_uid:
             return "transfer_syntax_changed"
-    except Exception as exc:
+    except (AttributeError, ValueError) as exc:
         return f"uid_check_failed: {exc}"
     return None
 

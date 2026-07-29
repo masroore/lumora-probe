@@ -203,11 +203,10 @@ def _check_toml_types(data: dict[str, object], path: Path) -> None:
                 raise ValueError(
                     f"config key {key!r} in {path} must be a string, got {type(value).__name__}"
                 )
-        elif key == "verbose":
-            if not isinstance(value, bool):
-                raise ValueError(
-                    f"config key {key!r} in {path} must be a boolean, got {type(value).__name__}"
-                )
+        elif key == "verbose" and not isinstance(value, bool):
+            raise ValueError(
+                f"config key {key!r} in {path} must be a boolean, got {type(value).__name__}"
+            )
 
 
 def _load_toml(path: Path) -> dict[str, object]:
@@ -221,7 +220,7 @@ def _load_toml(path: Path) -> dict[str, object]:
     except tomllib.TOMLDecodeError as exc:
         raise ValueError(f"invalid TOML in {path}: {exc}") from exc
     if not isinstance(data, dict):
-        raise ValueError(f"config root must be a table: {path}")
+        raise ValueError(f"config root must be a table: {path}")  # noqa: TRY004  -- all config errors are ValueError/exit-2 per plan §7.5
     unknown = set(data.keys()) - _TOML_FIELDS
     if unknown:
         raise ValueError(f"unknown config key(s) in {path}: {', '.join(sorted(unknown))}")

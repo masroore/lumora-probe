@@ -85,7 +85,7 @@ def test_cli_overrides_toml(tmp_path: Path) -> None:
     input_dir.mkdir()
     _write_toml(
         tmp_path / "sender-lite.toml",
-        f'input = "./dicom"\nhost = "10.0.0.1"\nport = 2000\nverbose = true\n',
+        'input = "./dicom"\nhost = "10.0.0.1"\nport = 2000\nverbose = true\n',
     )
     config = parse_args(
         ["--host", "192.168.1.1", "--port", "3000"],

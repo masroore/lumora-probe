@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 UID_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
 
 

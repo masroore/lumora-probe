@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_PORT = 11112
 DEFAULT_AE_TITLE = "PROBE_LITE"
 DEFAULT_OUTPUT = Path("./received")

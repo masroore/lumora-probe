@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 import socket
 import threading
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,8 +15,8 @@ from probe_lite.receiver import (
     CANNOT_UNDERSTAND,
     DATASET_DOES_NOT_MATCH_SOP_CLASS,
     OUT_OF_RESOURCES,
-    ProbeReceiver,
     SUCCESS,
+    ProbeReceiver,
 )
 from probe_lite.storage import StorageError
 
@@ -129,9 +129,9 @@ def _start_receiver(tmp_path: Path, log_format: str = "json", **kwargs: object) 
 def _send_store(
     pydicom: object, pynetdicom: object, receiver: ProbeReceiver, ae_title: str, dataset: object
 ) -> object:
+    from pydicom.uid import ExplicitVRLittleEndian
     from pynetdicom import AE
     from pynetdicom.sop_class import SecondaryCaptureImageStorage, Verification
-    from pydicom.uid import ExplicitVRLittleEndian
 
     sender = AE(ae_title=ae_title)
     sender.add_requested_context(Verification)
@@ -146,12 +146,12 @@ def _send_store(
 
 
 def test_echo_and_store_round_trip(tmp_path: Path, dicom_stack: tuple[object, object]) -> None:
-    pydicom, pynetdicom = dicom_stack
+    pydicom, _ = dicom_stack
     receiver = _start_receiver(tmp_path)
     try:
+        from pydicom.uid import ExplicitVRLittleEndian
         from pynetdicom import AE
         from pynetdicom.sop_class import SecondaryCaptureImageStorage, Verification
-        from pydicom.uid import ExplicitVRLittleEndian
 
         sender = AE(ae_title="SENDER")
         sender.add_requested_context(Verification)
@@ -179,12 +179,12 @@ def test_echo_and_store_round_trip(tmp_path: Path, dicom_stack: tuple[object, ob
 def test_multiple_instances_are_partitioned_by_study_and_series(
     tmp_path: Path, dicom_stack: tuple[object, object]
 ) -> None:
-    pydicom, pynetdicom = dicom_stack
+    pydicom, _ = dicom_stack
     receiver = _start_receiver(tmp_path)
     try:
+        from pydicom.uid import ExplicitVRLittleEndian
         from pynetdicom import AE
         from pynetdicom.sop_class import SecondaryCaptureImageStorage
-        from pydicom.uid import ExplicitVRLittleEndian
 
         sender = AE(ae_title="MULTI")
         sender.add_requested_context(SecondaryCaptureImageStorage, ExplicitVRLittleEndian)
@@ -207,12 +207,12 @@ def test_multiple_instances_are_partitioned_by_study_and_series(
 
 
 def test_transfer_syntax_is_preserved(tmp_path: Path, dicom_stack: tuple[object, object]) -> None:
-    pydicom, pynetdicom = dicom_stack
+    pydicom, _ = dicom_stack
     receiver = _start_receiver(tmp_path)
     try:
+        from pydicom.uid import ExplicitVRBigEndian, ExplicitVRLittleEndian, ImplicitVRLittleEndian
         from pynetdicom import AE
         from pynetdicom.sop_class import SecondaryCaptureImageStorage
-        from pydicom.uid import ExplicitVRBigEndian, ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
         syntaxes = (ImplicitVRLittleEndian, ExplicitVRLittleEndian, ExplicitVRBigEndian)
         for index, transfer_syntax in enumerate(syntaxes):

@@ -12,7 +12,6 @@ from .config import Config
 from .log import ProbeLogger
 from .storage import InvalidDatasetError, Storage, StorageError
 
-
 SUCCESS = 0x0000
 OUT_OF_RESOURCES = 0xA700
 DATASET_DOES_NOT_MATCH_SOP_CLASS = 0xA900
@@ -56,7 +55,7 @@ class ProbeReceiver:
             try:
                 from pynetdicom import _config
             except ImportError:
-                import pynetdicom._config as _config
+                import pynetdicom._config as _config  # noqa: PLR0402  -- fallback for older pynetdicom layout
 
             from pynetdicom.sop_class import Verification
         except ImportError as exc:
@@ -229,7 +228,7 @@ class ProbeReceiver:
                 status="0xA700",
             )
             return OUT_OF_RESOURCES
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  -- store-handler error tolerance per plan §1.4/§10.7
             return self._fallback_raw(event, sop_instance_uid, exc)
 
         transfer_syntax = getattr(getattr(event, "context", None), "transfer_syntax", "unknown")
@@ -257,13 +256,14 @@ class ProbeReceiver:
         try:
             try:
                 raw_bytes = event.encoded_dataset()
-            except Exception:
-                raw_bytes = getattr(getattr(event, "request", None), "DataSet")
+            except Exception:  # noqa: BLE001  -- raw-dataset fallback across pynetdicom versions
+                request = getattr(event, "request", None)
+                raw_bytes = request.DataSet if request is not None else None
             if hasattr(raw_bytes, "getvalue"):
                 raw_bytes = raw_bytes.getvalue()
             if not isinstance(raw_bytes, bytes):
                 raw_bytes = bytes(raw_bytes)
-        except Exception as raw_exc:
+        except Exception as raw_exc:  # noqa: BLE001  -- raw-dataset fallback tolerance
             self.logger.error(
                 "instance_store_failed",
                 sop_instance_uid=sop_instance_uid,

@@ -5,7 +5,6 @@ import pytest
 
 from sender_lite.log import SenderLogger
 
-
 PHI_FIELDS = (
     "patient_name",
     "patient_id",
@@ -72,7 +71,7 @@ def test_json_logging_flushes_each_event() -> None:
     lines = [line for line in output.getvalue().splitlines() if line]
     assert len(lines) == 3
     for line in lines:
-        record = json.loads(line)
+        json.loads(line)
     assert lines[0].endswith("\n") or len(lines) == 3  # each was flushed as its own line
 
 

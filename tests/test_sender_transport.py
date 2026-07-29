@@ -28,21 +28,21 @@ TS_IMPLICIT = "1.2.840.10008.1.2"
 
 
 def _make_config(**overrides: object) -> Config:
-    defaults = dict(
-        input=None,
-        host="127.0.0.1",
-        port=11112,
-        calling_ae="SENDER_LITE",
-        called_ae="PROBE_LITE",
-        study_delay=0.0,
-        connect_timeout=5.0,
-        dimse_timeout=5.0,
-        max_pdu=16382,
-        log_format="text",
-        verbose=False,
-        echo=False,
-        config_path=None,
-    )
+    defaults = {
+        "input": None,
+        "host": "127.0.0.1",
+        "port": 11112,
+        "calling_ae": "SENDER_LITE",
+        "called_ae": "PROBE_LITE",
+        "study_delay": 0.0,
+        "connect_timeout": 5.0,
+        "dimse_timeout": 5.0,
+        "max_pdu": 16382,
+        "log_format": "text",
+        "verbose": False,
+        "echo": False,
+        "config_path": None,
+    }
     defaults.update(overrides)
     return Config(**defaults)
 
@@ -900,7 +900,7 @@ def test_integration_one_study_one_instance(tmp_path: Path) -> None:
         # Create DICOM file
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm")
+        _make_dicom_file(input_dir / "test.dcm")
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()
@@ -987,7 +987,7 @@ def test_integration_transfer_syntax_preserved_implicit(tmp_path: Path) -> None:
     try:
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_IMPLICIT)
+        _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_IMPLICIT)
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()
@@ -1030,7 +1030,7 @@ def test_integration_transfer_syntax_preserved_explicit(tmp_path: Path) -> None:
     try:
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_EXPLICIT)
+        _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_EXPLICIT)
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()

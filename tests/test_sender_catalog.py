@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
+from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import (
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
@@ -14,19 +14,14 @@ from pydicom.uid import (
 )
 
 from sender_lite.catalog import (
-    Catalog,
-    CatalogInstance,
-    CatalogIssue,
     REASON_CONFLICT,
     REASON_INVALID_TRANSFER_SYNTAX,
     REASON_MISSING_UID,
-    REASON_SOP_MISMATCH,
     REASON_SOP_INSTANCE_MISMATCH,
-    SeriesCatalog,
-    StudyBatch,
+    REASON_SOP_MISMATCH,
+    CatalogError,
     build_catalog,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -436,7 +431,7 @@ def test_presentation_requirements(tmp_path: Path) -> None:
 
 
 def test_input_root_not_exists_raises() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(CatalogError):
         build_catalog(Path("/nonexistent/path/xyz"))
 
 
@@ -445,5 +440,5 @@ def test_input_root_is_symlink_raises(tmp_path: Path) -> None:
     real.mkdir()
     link = tmp_path / "link"
     os.symlink(real, link)
-    with pytest.raises(Exception):
+    with pytest.raises(CatalogError):
         build_catalog(link)

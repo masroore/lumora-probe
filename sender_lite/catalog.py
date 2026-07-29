@@ -115,13 +115,13 @@ def _validate_uid(value: object) -> tuple[str | None, str | None]:
         return None, REASON_MULTI_VALUED_UID
     try:
         text = str(value)
-    except Exception:
+    except (TypeError, ValueError):
         return None, REASON_INVALID_UID
     if not text:
         return None, REASON_MISSING_UID
     try:
         uid = UID(text)
-    except Exception:
+    except (TypeError, ValueError):
         return None, REASON_INVALID_UID
     if not uid.is_valid:
         return None, REASON_INVALID_UID
@@ -141,7 +141,7 @@ def _parse_instance_number(value: object) -> int | None:
     # Accept int-like decimal strings
     try:
         text = str(value).strip()
-    except Exception:
+    except (TypeError, ValueError):
         return None
     if not text:
         return None
@@ -150,14 +150,14 @@ def _parse_instance_number(value: object) -> int | None:
     if stripped.isdigit() and stripped:
         try:
             return int(text)
-        except Exception:
+        except (TypeError, ValueError):
             return None
     # Try float -> int if it's a whole number (e.g., "1.0" or Decimal("1"))
     try:
         f = float(text)
         if f.is_integer():
             return int(f)
-    except Exception:
+    except (TypeError, ValueError):
         pass
     return None
 
@@ -184,7 +184,7 @@ def _read_candidate(path: Path) -> tuple[CatalogInstance | None, CatalogIssue | 
 
     try:
         ds = dcmread(path, stop_before_pixels=True, force=False)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001  -- pydicom/malformed-file rejection per plan §8.2.6
         return None, CatalogIssue(path=path, reason=REASON_READ, message=str(exc))
 
     # Required dataset UIDs
@@ -248,7 +248,7 @@ def _read_candidate(path: Path) -> tuple[CatalogInstance | None, CatalogIssue | 
         )
     try:
         ts_obj = UID(ts_uid)
-    except Exception:
+    except (TypeError, ValueError):
         return None, CatalogIssue(
             path=path, reason=REASON_INVALID_TRANSFER_SYNTAX, message="invalid TransferSyntaxUID"
         )
