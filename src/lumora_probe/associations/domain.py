@@ -38,16 +38,16 @@ class Association:
         self.association_id = _identity(association_id, field="association_id")
         self.calling_ae = _ae_title(calling_ae)
         self.called_ae = _ae_title(called_ae)
-        if local_endpoint is not None and not isinstance(local_endpoint, NetworkEndpoint):
+        if local_endpoint is not None and type(local_endpoint) is not NetworkEndpoint:
             raise domain_invariant(
                 "local_endpoint must be a NetworkEndpoint", field="local_endpoint"
             )
-        if remote_endpoint is not None and not isinstance(remote_endpoint, NetworkEndpoint):
+        if remote_endpoint is not None and type(remote_endpoint) is not NetworkEndpoint:
             raise domain_invariant(
                 "remote_endpoint must be a NetworkEndpoint", field="remote_endpoint"
             )
         contexts = tuple(presentation_contexts)
-        if any(not isinstance(context, PresentationContext) for context in contexts):
+        if any(type(context) is not PresentationContext for context in contexts):
             raise domain_invariant(
                 "presentation_contexts must contain PresentationContext values",
                 field="presentation_contexts",
@@ -230,7 +230,7 @@ def _ae_title(value: AETitle | str) -> AETitle:
 
 
 def _association(value: Association, *, field: str) -> Association:
-    if not isinstance(value, Association):
+    if type(value) is not Association:
         raise domain_invariant(f"{field} must be an Association", field=field, value=value)
     return value
 
