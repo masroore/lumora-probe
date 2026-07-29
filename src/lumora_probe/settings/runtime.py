@@ -35,6 +35,7 @@ class RuntimeSettings(BaseModel):
 
     ring_buffer_seconds: int = Field(default=1800, ge=1, le=86400)
     ring_buffer_max_mb: int = Field(default=2048, ge=1, le=102400)
+    ring_buffer_events_only: bool = False
     decode_cache_max_mb: int = Field(default=512, ge=1, le=102400)
     ae_allowlist: tuple[str, ...] = ()
     ip_allowlist: tuple[str, ...] = ()
@@ -65,6 +66,7 @@ _STARTUP_ONLY = frozenset(
 _ENV_NAMES = {
     "ring_buffer_seconds": "LUMORA_RING_BUFFER_SECONDS",
     "ring_buffer_max_mb": "LUMORA_RING_BUFFER_MAX_MB",
+    "ring_buffer_events_only": "LUMORA_RING_BUFFER_EVENTS_ONLY",
     "decode_cache_max_mb": "LUMORA_DECODE_CACHE_MAX_MB",
     "ae_allowlist": "LUMORA_AE_ALLOWLIST",
     "ip_allowlist": "LUMORA_IP_ALLOWLIST",
