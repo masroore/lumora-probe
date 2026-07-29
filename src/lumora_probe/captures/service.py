@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import concurrent.futures
 import json
+import os
+import threading
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from lumora_probe.core.bus import EventIngress, EventSubscription, SubscriberChannel
-from lumora_probe.core.clock import Clock, SystemClock
-from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
@@ -25,6 +26,38 @@ from .format import (
     ClockAnchor,
     FsyncPolicy,
 )
+
+
+class CaptureClock(Protocol):
+    """Injected wall and monotonic clock for capture lifecycle operations."""
+
+    def now(self) -> datetime: ...
+
+    def monotonic_ns(self) -> int: ...
+
+
+class CaptureIdGenerator(Protocol):
+    """Injected UUIDv7 identity source for capture lifecycle operations."""
+
+    def new_id(self) -> str: ...
+
+
+class CaptureEventIngress(Protocol):
+    """Minimal event publication contract required by the capture engine."""
+
+    async def publish(
+        self, event: EventEnvelope, *, capture_id: str | None = None
+    ) -> EventEnvelope: ...
+
+    def publish_from_thread(
+        self, event: EventEnvelope, *, capture_id: str | None = None
+    ) -> concurrent.futures.Future[EventEnvelope]: ...
+
+
+class CaptureRepositorySink(Protocol):
+    """Minimal asynchronous index update contract used after sealing."""
+
+    async def index(self, package: Any, *, source_root: Path | None = None) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,23 +134,31 @@ class RingBufferService:
         self,
         *,
         config: RingBufferConfig | None = None,
-        clock: Clock | None = None,
+        clock: CaptureClock,
+        root: Path | None = None,
     ) -> None:
         self.config = config or RingBufferConfig()
-        self.clock = clock or SystemClock()
+        self.clock = clock
+        self.root = root.expanduser().resolve() if root is not None else None
         self._records: deque[RingBufferRecord] = deque()
         self._bytes_used = 0
         self._started = False
+        self._lock = threading.RLock()
 
     @property
     def started(self) -> bool:
         return self._started
 
     async def start(self) -> None:
+        with self._lock:
+            self._load()
+            if self._expire(self.clock.now()) and self.root is not None:
+                self._rewrite()
         self._started = True
-        self._expire(self.clock.now())
 
     async def stop(self) -> None:
+        with self._lock:
+            self._rewrite()
         self._started = False
 
     async def stop_accepting(self) -> None:
@@ -139,7 +180,7 @@ class RingBufferService:
 
     def record_event(self, event: EventEnvelope) -> RingBufferRecord:
         """Record a canonical event without mutating the published envelope."""
-        raw = _canonical_json(event.model_dump(mode="json")).encode("utf-8")
+        raw = event.to_json_bytes()
         record = RingBufferRecord(
             kind="event",
             raw=raw,
@@ -247,43 +288,107 @@ class RingBufferService:
         """Return retained records in insertion order for a promotion window."""
         start_utc = _utc(start) if start is not None else None
         end_utc = _utc(end) if end is not None else None
-        return tuple(
-            record
-            for record in self._records
-            if (start_utc is None or record.occurred_at >= start_utc)
-            and (end_utc is None or record.occurred_at <= end_utc)
-            and (aggregate_id is None or record.aggregate_id == aggregate_id)
-        )
+        with self._lock:
+            return tuple(
+                record
+                for record in self._records
+                if (start_utc is None or record.occurred_at >= start_utc)
+                and (end_utc is None or record.occurred_at <= end_utc)
+                and (aggregate_id is None or record.aggregate_id == aggregate_id)
+            )
 
     def status(self) -> RingBufferStatus:
-        oldest = self._records[0].recorded_at if self._records else None
-        newest = self._records[-1].recorded_at if self._records else None
+        with self._lock:
+            oldest = self._records[0].recorded_at if self._records else None
+            newest = self._records[-1].recorded_at if self._records else None
+            bytes_used = self._bytes_used
+            record_count = len(self._records)
         expires_at = oldest + timedelta(seconds=self.config.retention_seconds) if oldest else None
         return RingBufferStatus(
             enabled=self._started,
             events_only=self.config.events_only,
             retention_seconds=self.config.retention_seconds,
             max_bytes=self.config.max_bytes,
-            bytes_used=self._bytes_used,
-            record_count=len(self._records),
+            bytes_used=bytes_used,
+            record_count=record_count,
             oldest_at=oldest,
             newest_at=newest,
             expires_at=expires_at,
         )
 
     def _append(self, record: RingBufferRecord) -> None:
-        self._records.append(record)
-        self._bytes_used += record.size
-        self._expire(record.recorded_at)
-        while self._records and self._bytes_used > self.config.max_bytes:
-            expired = self._records.popleft()
-            self._bytes_used -= expired.size
+        with self._lock:
+            self._records.append(record)
+            self._bytes_used += record.size
+            removed = self._expire(record.recorded_at)
+            while self._records and self._bytes_used > self.config.max_bytes:
+                expired = self._records.popleft()
+                self._bytes_used -= expired.size
+                removed = True
+            if self.root is not None:
+                if removed:
+                    self._rewrite()
+                else:
+                    self._append_persisted(record)
 
-    def _expire(self, now: datetime) -> None:
+    def _expire(self, now: datetime) -> bool:
+        removed = False
         cutoff = now - timedelta(seconds=self.config.retention_seconds)
         while self._records and self._records[0].recorded_at < cutoff:
             expired = self._records.popleft()
             self._bytes_used -= expired.size
+            removed = True
+        return removed
+
+    @property
+    def _records_path(self) -> Path | None:
+        return self.root / "records.jsonl" if self.root is not None else None
+
+    def _load(self) -> None:
+        path = self._records_path
+        if path is None or not path.is_file() or self._records:
+            return
+        for line in path.read_bytes().splitlines():
+            try:
+                value = json.loads(line)
+                record = RingBufferRecord(
+                    kind=str(value["kind"]),
+                    raw=base64.b64decode(value["raw"]),
+                    occurred_at=datetime.fromisoformat(value["occurred_at"]),
+                    recorded_at=datetime.fromisoformat(value["recorded_at"]),
+                    monotonic_ns=int(value["monotonic_ns"]),
+                    aggregate_id=value.get("aggregate_id"),
+                    metadata=dict(value.get("metadata", {})),
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+            self._records.append(record)
+            self._bytes_used += record.size
+
+    def _append_persisted(self, record: RingBufferRecord) -> None:
+        path = self._records_path
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("ab") as handle:
+            handle.write(_ring_json(record))
+            handle.write(b"\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def _rewrite(self) -> None:
+        path = self._records_path
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.tmp")
+        with temporary.open("wb") as handle:
+            for record in self._records:
+                handle.write(_ring_json(record))
+                handle.write(b"\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
 
 
 @dataclass(slots=True)
@@ -302,19 +407,22 @@ class CaptureEngine:
         self,
         captures_root: Path,
         *,
+        ring_root: Path | None = None,
         ring_buffer: RingBufferService | None = None,
-        event_ingress: EventIngress | None = None,
-        clock: Clock | None = None,
-        id_generator: IdGenerator | None = None,
+        event_ingress: CaptureEventIngress | None = None,
+        capture_repository: CaptureRepositorySink | None = None,
+        clock: CaptureClock,
+        id_generator: CaptureIdGenerator,
         fsync_policy: FsyncPolicy = FsyncPolicy.ALWAYS,
     ) -> None:
         self.captures_root = captures_root.expanduser().resolve()
-        self.ring_buffer = ring_buffer or RingBufferService(clock=clock)
+        self.ring_buffer = ring_buffer or RingBufferService(clock=clock, root=ring_root)
         self.event_ingress = event_ingress
-        self.clock = clock or SystemClock()
-        self.id_generator = id_generator or UUIDv7Generator()
+        self.capture_repository = capture_repository
+        self.clock = clock
+        self.id_generator = id_generator
         self.fsync_policy = FsyncPolicy(fsync_policy)
-        self._subscription: EventSubscription | None = None
+        self._subscription: Any | None = None
         self._worker: asyncio.Task[None] | None = None
         self._accepting = False
         self._sessions: dict[str, _CaptureSession] = {}
@@ -332,7 +440,7 @@ class CaptureEngine:
         if self.event_ingress is None and bus is not None and hasattr(bus, "publish"):
             self.event_ingress = bus
         if bus is not None and hasattr(bus, "subscribe"):
-            self._subscription = await bus.subscribe(channel=SubscriberChannel.CAPTURE)
+            self._subscription = await bus.subscribe(channel="capture")
             self._worker = asyncio.create_task(self._consume(), name="lumora-capture-writer")
 
     async def stop_accepting(self) -> None:
@@ -385,6 +493,8 @@ class CaptureEngine:
         source_capture_id: str | None = None,
         incomplete_aggregates: Iterable[str] = (),
     ) -> str:
+        if CaptureFidelity(fidelity) is CaptureFidelity.WIRE:
+            raise ValueError("wire fidelity is unavailable until raw wire capture is enabled")
         identifier = capture_id or self.id_generator.new_id()
         if identifier in self._sessions:
             raise ValueError(f"capture session already exists: {identifier}")
@@ -428,6 +538,8 @@ class CaptureEngine:
         await self._publish_lifecycle("CaptureStopped", capture_id, {"capture_id": capture_id})
         await self.drain()
         session.capture.complete()
+        await self._publish_lifecycle("CaptureCompleted", capture_id, {"capture_id": capture_id})
+        await self.drain()
         session.writer.update_manifest(
             session.writer.manifest.model_copy(
                 update={
@@ -438,6 +550,7 @@ class CaptureEngine:
         )
         sealed = session.writer.seal(completed_at=self.clock.now())
         self._sessions.pop(capture_id)
+        await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
     async def interrupt_session(self, capture_id: str, *, reason: str) -> CaptureManifest:
@@ -460,6 +573,7 @@ class CaptureEngine:
         )
         sealed = session.writer.seal(completed_at=self.clock.now())
         self._sessions.pop(capture_id)
+        await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
     async def promote_window(
@@ -470,13 +584,26 @@ class CaptureEngine:
         capture_id: str | None = None,
         aggregate_id: str | None = None,
     ) -> CaptureManifest:
-        return await asyncio.to_thread(
+        manifest = await asyncio.to_thread(
             self.promote_window_sync,
             start=start,
             end=end,
             capture_id=capture_id,
             aggregate_id=aggregate_id,
         )
+        await self._publish_lifecycle(
+            "CapturePromoted",
+            manifest.capture_id,
+            {
+                "capture_id": manifest.capture_id,
+                "requested_start": _utc(start).isoformat(),
+                "requested_end": _utc(end).isoformat(),
+                "partial": manifest.partial,
+            },
+        )
+        await self.drain()
+        await self._index_if_configured(manifest, self.captures_root / manifest.capture_id)
+        return manifest
 
     def promote_window_sync(
         self,
@@ -494,14 +621,22 @@ class CaptureEngine:
         pdus = tuple(record for record in records if record.kind == "pdu")
         objects = tuple(record for record in records if record.kind == "object")
         incomplete = _incomplete_aggregates(events)
-        fidelity = CaptureFidelity.PROTOCOL if pdus else CaptureFidelity.EVENTS
+        if pdus:
+            fidelity = CaptureFidelity.PROTOCOL
+        elif objects:
+            fidelity = CaptureFidelity.OBJECTS
+        else:
+            fidelity = CaptureFidelity.EVENTS
+        aggregate_ids = tuple(
+            sorted({record.aggregate_id for record in events if record.aggregate_id is not None})
+        )
         manifest = CaptureManifest(
             capture_id=identifier,
             created_at=self.clock.now(),
             fidelity=fidelity,
             state=CaptureState.RUNNING.value,
             source="ring-buffer",
-            source_capture_id=aggregate_id,
+            source_capture_id=None,
             partial=bool(incomplete),
             promoted_from_buffer=True,
             incomplete_aggregates=incomplete,
@@ -509,6 +644,11 @@ class CaptureEngine:
                 wall_time=records[0].occurred_at,
                 monotonic_ns=records[0].monotonic_ns,
             ),
+            promotion_requested_start=_utc(start),
+            promotion_requested_end=_utc(end),
+            promotion_actual_start=records[0].occurred_at,
+            promotion_actual_end=records[-1].occurred_at,
+            source_aggregate_ids=aggregate_ids,
         )
         writer = CapturePackageWriter(
             self.captures_root,
@@ -527,6 +667,42 @@ class CaptureEngine:
         )
         return writer.seal(completed_at=self.clock.now()) if promoted else writer.seal()
 
+    def record_pdu(
+        self,
+        pdu: Mapping[str, Any] | bytes,
+        *,
+        occurred_at: datetime | None = None,
+        monotonic_ns: int = 0,
+        aggregate_id: str | None = None,
+    ) -> RingBufferRecord | None:
+        """Adapt the association PDU sink into ring and active capture streams."""
+        record = self.ring_buffer.record_pdu(
+            pdu,
+            occurred_at=occurred_at,
+            monotonic_ns=monotonic_ns,
+            aggregate_id=aggregate_id,
+        )
+        if record is None:
+            return None
+        for session in self._sessions.values():
+            if session.writer.manifest.fidelity is not CaptureFidelity.EVENTS:
+                session.writer.append_pdu_raw(record.raw)
+        return record
+
+    def record_object(self, data: bytes, **metadata: Any) -> RingBufferRecord | None:
+        """Adapt received object bytes into ring and active capture streams."""
+        record = self.ring_buffer.record_object(data, **metadata)
+        if record is None:
+            return None
+        for session in self._sessions.values():
+            if session.writer.manifest.fidelity in {
+                CaptureFidelity.OBJECTS,
+                CaptureFidelity.PROTOCOL,
+                CaptureFidelity.WIRE,
+            }:
+                session.writer.put_object(record.raw, **dict(record.metadata))
+        return record
+
     async def _consume(self) -> None:
         assert self._subscription is not None
         while True:
@@ -539,9 +715,7 @@ class CaptureEngine:
     def _record_event(self, event: EventEnvelope) -> None:
         self.ring_buffer.record_event(event)
         for session in self._sessions.values():
-            session.writer.append_event_raw(
-                _canonical_json(event.model_dump(mode="json")).encode("utf-8")
-            )
+            session.writer.append_event_raw(event.to_json_bytes())
             if event.origin is EventOrigin.CLIENT_ASSERTED:
                 session.client_asserted_event_count += 1
 
@@ -573,23 +747,54 @@ class CaptureEngine:
         except KeyError as exc:
             raise ValueError(f"capture session not found: {capture_id}") from exc
 
+    async def _index_if_configured(self, manifest: CaptureManifest, path: Path) -> None:
+        if self.capture_repository is None:
+            return
+        from .format import CapturePackage
+
+        await self.capture_repository.index(
+            CapturePackage.open(path),
+            source_root=self.captures_root,
+        )
+
 
 def _incomplete_aggregates(events: Iterable[RingBufferRecord]) -> tuple[str, ...]:
-    first_by_aggregate: dict[str, str] = {}
+    grouped: dict[str, list[str]] = {}
     for record in events:
-        if record.aggregate_id is not None:
-            first_by_aggregate.setdefault(
-                record.aggregate_id, str(record.metadata.get("event_name", ""))
+        if record.aggregate_id is not None and str(
+            record.metadata.get("event_name", "")
+        ).startswith("Association"):
+            grouped.setdefault(record.aggregate_id, []).append(
+                str(record.metadata.get("event_name", ""))
             )
     return tuple(
         aggregate_id
-        for aggregate_id, first_event_name in first_by_aggregate.items()
-        if first_event_name != "AssociationStarted"
+        for aggregate_id, names in grouped.items()
+        if names[0] != "AssociationStarted"
+        or names[-1]
+        not in {
+            "AssociationReleased",
+            "AssociationAborted",
+        }
     )
 
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _ring_json(record: RingBufferRecord) -> bytes:
+    return _canonical_json(
+        {
+            "kind": record.kind,
+            "raw": base64.b64encode(record.raw).decode("ascii"),
+            "occurred_at": record.occurred_at.isoformat(),
+            "recorded_at": record.recorded_at.isoformat(),
+            "monotonic_ns": record.monotonic_ns,
+            "aggregate_id": record.aggregate_id,
+            "metadata": dict(record.metadata),
+        }
+    ).encode("utf-8")
 
 
 def _validate_raw_json(raw: bytes) -> bytes:
@@ -605,10 +810,4 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-__all__ = [
-    "CaptureEngine",
-    "RingBufferConfig",
-    "RingBufferRecord",
-    "RingBufferService",
-    "RingBufferStatus",
-]
+__all__: tuple[str, ...] = ()

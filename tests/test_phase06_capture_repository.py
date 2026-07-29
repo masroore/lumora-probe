@@ -23,6 +23,7 @@ from lumora_probe.captures.repository import (
 from lumora_probe.core.config import StartupConfig
 from lumora_probe.core.paths import DataPaths
 from lumora_probe.core.storage import StorageDatabases
+from tests.doubles.clock import ControllableClock
 
 BASE_ID = "018f0c40-7d3d-7abc-8d2e-5b5a58fce0b5"
 SECOND_ID = "018f0c40-7d3d-7abd-8d2e-5b5a58fce0b5"
@@ -65,7 +66,10 @@ def repository_for(tmp_path: Path) -> tuple[DataPaths, CaptureRepository]:
     paths.initialise(network_detector=lambda _: False)
     databases = StorageDatabases.from_paths(paths, network_detector=lambda _: False)
     databases.initialise()
-    return paths, CaptureRepository(databases)
+    return paths, CaptureRepository(
+        databases,
+        clock=ControllableClock(datetime(2026, 7, 29, tzinfo=UTC)),
+    )
 
 
 @pytest.mark.asyncio

@@ -35,12 +35,15 @@ def make_event(clock: ControllableClock, *, name: str = "AssociationStarted") ->
     )
 
 
-def test_ring_buffer_enforces_bytes_and_time_retention() -> None:
+@pytest.mark.asyncio
+async def test_ring_buffer_enforces_bytes_and_time_retention(tmp_path: Path) -> None:
     clock = ControllableClock(datetime(2026, 7, 29, tzinfo=UTC))
     ring = RingBufferService(
         config=RingBufferConfig(retention_seconds=60, max_bytes=1000),
         clock=clock,
+        root=tmp_path / "ringbuffer",
     )
+    await ring.start()
     event = make_event(clock)
     ring.record_event(event)
     ring.record_pdu({"pdu": "x"}, occurred_at=clock.now(), monotonic_ns=1)
@@ -51,6 +54,10 @@ def test_ring_buffer_enforces_bytes_and_time_retention() -> None:
     ring.record_event(event.model_copy(update={"occurred_at": clock.now()}))
     assert ring.snapshot(start=clock.now() - timedelta(seconds=60))
     assert ring.status().oldest_at == clock.now()
+    await ring.stop()
+    reloaded = RingBufferService(clock=clock, root=tmp_path / "ringbuffer")
+    await reloaded.start()
+    assert reloaded.status().record_count == ring.status().record_count
 
 
 def test_events_only_buffer_drops_protocol_and_objects() -> None:
@@ -66,7 +73,12 @@ async def test_capture_engine_writes_explicit_session_and_promotion(tmp_path: Pa
     clock = ControllableClock(datetime(2026, 7, 29, tzinfo=UTC))
     ids = SeededIdGenerator([CAPTURE_ID, PROMOTED_ID, EVENT_ID, CORRELATION_ID])
     bus = EventBus(clock=clock, id_generator=ids)
-    engine = CaptureEngine(tmp_path / "captures", event_ingress=bus, clock=clock, id_generator=ids)
+    engine = CaptureEngine(
+        tmp_path / "captures",
+        event_ingress=bus,
+        clock=clock,
+        id_generator=ids,
+    )
     await engine.start(event_bus=bus)
 
     capture_id = await engine.start_session(fidelity=CaptureFidelity.EVENTS)

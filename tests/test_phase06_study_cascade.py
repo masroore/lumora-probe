@@ -12,6 +12,7 @@ from lumora_probe.core.errors import PathSecurityError
 from lumora_probe.core.paths import DataPaths
 from lumora_probe.core.storage import StorageDatabases
 from lumora_probe.studies.repository import StudyProjectionRepository
+from tests.doubles.clock import ControllableClock
 
 CAPTURE_IDS = (
     "018f0c40-7d3d-7abc-8d2e-5b5a58fce0b5",
@@ -48,7 +49,10 @@ async def test_three_capture_study_cascade_preserves_surviving_projection(tmp_pa
     for offset, capture_id in enumerate(CAPTURE_IDS):
         create_capture(paths.captures, capture_id, offset)
 
-    captures = CaptureRepository(databases)
+    captures = CaptureRepository(
+        databases,
+        clock=ControllableClock(datetime(2026, 7, 29, tzinfo=UTC)),
+    )
     await captures.rebuild(paths.captures)
     with databases.app.write_transaction() as connection:
         connection.executemany(
@@ -104,7 +108,10 @@ async def test_capture_deletion_refuses_unconfigured_artifact_root(tmp_path: Pat
     databases = StorageDatabases.from_paths(paths, network_detector=lambda _: False)
     databases.initialise()
     create_capture(paths.captures, CAPTURE_IDS[0], 0)
-    await CaptureRepository(databases).rebuild(paths.captures)
+    await CaptureRepository(
+        databases,
+        clock=ControllableClock(datetime(2026, 7, 29, tzinfo=UTC)),
+    ).rebuild(paths.captures)
 
     studies = StudyProjectionRepository(databases)
     with pytest.raises(PathSecurityError):

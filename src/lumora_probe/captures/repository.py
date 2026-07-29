@@ -11,8 +11,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
-from lumora_probe.core.clock import Clock, SystemClock
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
 
 from .format import (
@@ -23,6 +23,12 @@ from .format import (
     FsyncPolicy,
     unpack_capture,
 )
+
+
+class RepositoryClock(Protocol):
+    """Injected wall and monotonic clock used for recovery timestamps."""
+
+    def now(self) -> datetime: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,10 +136,10 @@ class CaptureRepository:
         self,
         databases: StorageDatabases,
         *,
-        clock: Clock | None = None,
+        clock: RepositoryClock,
     ) -> None:
         self.databases = databases
-        self.clock = clock or SystemClock()
+        self.clock = clock
 
     async def index(
         self, package: CapturePackage, *, source_root: Path | None = None

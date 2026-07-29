@@ -108,6 +108,11 @@ class CaptureManifest(BaseModel):
     interruption_reason: str | None = None
     client_asserted_event_count: int = Field(default=0, ge=0)
     clock_anchor: ClockAnchor | None = None
+    promotion_requested_start: datetime | None = None
+    promotion_requested_end: datetime | None = None
+    promotion_actual_start: datetime | None = None
+    promotion_actual_end: datetime | None = None
+    source_aggregate_ids: tuple[str, ...] = ()
     objects: tuple[CaptureObject, ...] = ()
 
     @field_validator("capture_id")
