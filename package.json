@@ -1,0 +1,23 @@
+{
+  "name": "lumora-probe-assets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Build-time frontend assets for Lumora Probe",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:assets": "node scripts/build-assets.mjs",
+    "check:assets": "npm run build:assets && git diff --exit-code -- static assets/vendor"
+  },
+  "devDependencies": {
+    "@cornerstonejs/core": "^4.0.0",
+    "@tailwindcss/cli": "^4.1.11",
+    "alpinejs": "^3.14.9",
+    "chart.js": "^4.5.0",
+    "esbuild": "^0.25.9",
+    "htmx.org": "^2.0.6",
+    "tabulator-tables": "^6.3.1",
+    "tailwindcss": "^4.1.11"
+  }
+}

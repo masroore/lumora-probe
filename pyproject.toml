@@ -29,12 +29,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
+artifacts = ["static/**", "assets/vendor/**"]
+include = ["static/**", "assets/vendor/**"]
 packages = [
     "src/lumora_probe",
     "probe_lite",
     "sender_lite",
     "lumora_lite_common",
 ]
+
+[tool.hatch.build.targets.wheel.force-include]
+"static" = "static"
+"assets/vendor" = "assets/vendor"
 
 [dependency-groups]
 dev = [
