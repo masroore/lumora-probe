@@ -36,8 +36,12 @@ packages = [
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.30,<2.0",
     "import-linter>=2.0,<3.0",
+    "pip-audit>=2.9,<3.0",
     "pytest>=9.0",
+    "pytest-asyncio>=1.0,<2.0",
+    "pytest-cov>=7.0,<8.0",
     "ruff>=0.12",
 ]
 
@@ -47,3 +51,18 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: isolated pure logic tests",
+    "component: tests using real filesystem, database, or bus components",
+    "dicom: tests exercising DICOM networking or parsing",
+    "e2e: end-to-end workflow tests",
+    "interop: tests against external DICOM implementations",
+    "slow: tests excluded from the default fast gate",
+]
+
+[tool.basedpyright]
+include = ["src/lumora_probe/core", "src/lumora_probe/shared"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
