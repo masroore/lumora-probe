@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from lumora_probe.core.config import ConfigSource, StartupConfig, load_startup_config
 from lumora_probe.core.errors import (
@@ -41,6 +42,8 @@ def test_startup_config_precedence_and_provenance(tmp_path: Path) -> None:
     assert sources["port"] is ConfigSource.ENV
     assert sources["bind_host"] is ConfigSource.FILE
     assert sources["executor_workers"] is ConfigSource.DEFAULT
+    with pytest.raises(ValidationError):
+        config.port = 8040
 
 
 def test_startup_config_validation_names_key_and_source(tmp_path: Path) -> None:
