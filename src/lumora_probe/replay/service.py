@@ -38,9 +38,11 @@ class ProtocolReplayService:
         self,
         datasets: Iterable[ProtocolReplayDataset],
         *,
+        capture_fidelity: str,
         speed: float = 1.0,
     ) -> ProtocolReplayResult:
         """Send datasets in persisted order at original or scaled timing."""
+        _require_protocol_fidelity(capture_fidelity)
         _validate_speed(speed)
         source_datasets = tuple(datasets)
         _validate_protocol_monotonic_order(source_datasets)
@@ -105,6 +107,22 @@ class EventReplayService:
 def _validate_speed(speed: float) -> None:
     if not math.isfinite(speed) or speed <= 0:
         raise ValueError("replay speed must be a finite value greater than zero")
+
+
+def _require_protocol_fidelity(capture_fidelity: str) -> None:
+    if capture_fidelity not in {"protocol", "wire"}:
+        raise ReplayDomainError(
+            code="LUMORA-REPLAY-FID-001",
+            message=(
+                f"Protocol replay is unavailable for capture fidelity {capture_fidelity!r}; "
+                "the protocol stream (pdus.jsonl) is missing"
+            ),
+            remediation="Use a capture with fidelity 'protocol' or 'wire'.",
+            context={
+                "capture_fidelity": capture_fidelity,
+                "required_stream": "pdus.jsonl",
+            },
+        )
 
 
 def _validate_monotonic_order(events: tuple[EventEnvelope, ...]) -> None:

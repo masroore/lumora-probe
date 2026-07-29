@@ -55,6 +55,7 @@ async def test_protocol_replay_sends_order_and_reconstructs_monotonic_timing() -
             dataset(1, monotonic_ns=2_100),
             dataset(2, monotonic_ns=5_100),
         ],
+        capture_fidelity="protocol",
         speed=2.0,
     )
 
@@ -71,7 +72,24 @@ async def test_protocol_replay_rejects_non_monotonic_input_before_network_send()
 
     with pytest.raises(ReplayDomainError, match="not monotonic"):
         await ProtocolReplayService(sender).replay(
-            [dataset(0, monotonic_ns=2), dataset(1, monotonic_ns=1)]
+            [dataset(0, monotonic_ns=2), dataset(1, monotonic_ns=1)],
+            capture_fidelity="protocol",
+        )
+
+    assert sender.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capture_fidelity", ["events", "objects"])
+async def test_protocol_replay_refuses_capture_without_protocol_stream(
+    capture_fidelity: str,
+) -> None:
+    sender = FakeDatasetSender([])
+
+    with pytest.raises(ReplayDomainError, match="pdus.jsonl"):
+        await ProtocolReplayService(sender).replay(
+            [dataset(0, monotonic_ns=1)],
+            capture_fidelity=capture_fidelity,
         )
 
     assert sender.calls == []
