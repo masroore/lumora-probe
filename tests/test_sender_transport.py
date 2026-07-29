@@ -1216,7 +1216,9 @@ def test_presentation_context_rejected_includes_affected_count() -> None:
 
     # Association accepts nothing, rejects our only context.
     fake_assoc = FakeAssociation(
-        established=True, accepted_contexts=[], rejected_contexts=[FakeContext(SOP_CLASS, TS_EXPLICIT)]
+        established=True,
+        accepted_contexts=[],
+        rejected_contexts=[FakeContext(SOP_CLASS, TS_EXPLICIT)],
     )
     fake_ae = FakeAE(fake_assoc)
     with (
@@ -1234,4 +1236,3 @@ def test_presentation_context_rejected_includes_affected_count() -> None:
     assert pcr[0]["sop_class_uid"] == SOP_CLASS
     assert pcr[0]["transfer_syntax_uid"] == TS_EXPLICIT
     assert pcr[0]["affected_instance_count"] == 1
-
