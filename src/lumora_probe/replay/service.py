@@ -7,12 +7,57 @@ import math
 from collections.abc import Awaitable, Callable, Iterable
 from itertools import pairwise
 
+from lumora_probe.associations.contracts import DICOMStoreResult
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.events import EventEnvelope
 
-from .contracts import EventPublisher, EventReplayResult
+from .contracts import (
+    DICOMDatasetSender,
+    EventPublisher,
+    EventReplayResult,
+    ProtocolReplayDataset,
+    ProtocolReplayResult,
+)
 
 ReplaySleeper = Callable[[float], Awaitable[None]]
+
+
+class ProtocolReplayService:
+    """Replay captured DICOM datasets through an injected async sender."""
+
+    def __init__(
+        self,
+        sender: DICOMDatasetSender,
+        *,
+        sleeper: ReplaySleeper | None = None,
+    ) -> None:
+        self.sender = sender
+        self.sleeper = sleeper if sleeper is not None else asyncio.sleep
+
+    async def replay(
+        self,
+        datasets: Iterable[ProtocolReplayDataset],
+        *,
+        speed: float = 1.0,
+    ) -> ProtocolReplayResult:
+        """Send datasets in persisted order at original or scaled timing."""
+        _validate_speed(speed)
+        source_datasets = tuple(datasets)
+        _validate_protocol_monotonic_order(source_datasets)
+
+        results: list[DICOMStoreResult] = []
+        for previous, dataset in _with_previous_dataset(source_datasets):
+            if previous is not None:
+                delay_seconds = (dataset.monotonic_ns - previous.monotonic_ns) / 1_000_000_000
+                delay_seconds /= speed
+                if delay_seconds > 0:
+                    await self.sleeper(delay_seconds)
+            results.append(
+                await self.sender.send_dataset(
+                    dataset.raw_bytes, transfer_syntax=dataset.transfer_syntax
+                )
+            )
+        return ProtocolReplayResult(tuple(results))
 
 
 class EventReplayService:
@@ -76,6 +121,29 @@ def _validate_monotonic_order(events: tuple[EventEnvelope, ...]) -> None:
                     "current_event_id": current.event_id,
                 },
             )
+
+
+def _validate_protocol_monotonic_order(datasets: tuple[ProtocolReplayDataset, ...]) -> None:
+    for previous, current in pairwise(datasets):
+        if current.monotonic_ns < previous.monotonic_ns:
+            raise ReplayDomainError(
+                code="LUMORA-REPLAY-TIME-002",
+                message="Protocol replay dataset stream is not monotonic",
+                remediation="Restore the capture with datasets in persisted sequence order.",
+                context={
+                    "previous_monotonic_ns": previous.monotonic_ns,
+                    "current_monotonic_ns": current.monotonic_ns,
+                },
+            )
+
+
+def _with_previous_dataset(
+    datasets: tuple[ProtocolReplayDataset, ...],
+) -> Iterable[tuple[ProtocolReplayDataset | None, ProtocolReplayDataset]]:
+    previous: ProtocolReplayDataset | None = None
+    for dataset in datasets:
+        yield previous, dataset
+        previous = dataset
 
 
 def _with_previous(

@@ -10,6 +10,7 @@ import threading
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from typing import Any, Protocol, cast
 
 from lumora_probe.core.lifecycle import ServiceHealth
@@ -284,6 +285,32 @@ class DICOMSCUClient:
         finally:
             if association is not None and association.is_established:
                 association.release()
+
+    async def send_dataset(self, raw_bytes: bytes, *, transfer_syntax: str) -> DICOMStoreResult:
+        """Parse raw DICOM bytes off-loop and send one C-STORE dataset."""
+        return await asyncio.to_thread(self._send_dataset_sync, raw_bytes, transfer_syntax)
+
+    def _send_dataset_sync(self, raw_bytes: bytes, transfer_syntax: str) -> DICOMStoreResult:
+        started = self._monotonic_ns()
+        try:
+            from pydicom import dcmread
+            from pydicom.dataset import FileMetaDataset
+
+            dataset = dcmread(BytesIO(raw_bytes), force=True)
+            file_meta = getattr(dataset, "file_meta", None) or FileMetaDataset()
+            return self._store_sync(
+                dataset,
+                abstract_syntax=str(dataset.SOPClassUID),
+                transfer_syntax=transfer_syntax,
+                file_meta=file_meta,
+            )
+        except Exception as exc:  # noqa: BLE001 - parsing is a transport failure result
+            return DICOMStoreResult(
+                success=False,
+                status=None,
+                duration_ns=self._monotonic_ns() - started,
+                error=str(exc),
+            )
 
     def store_dataset(
         self,
