@@ -29,6 +29,7 @@ can be deleted and rebuilt. The directory must contain `manifest.json`; `events.
 - `capture_id`: UUIDv7 capture identity.
 - `created_at`, optional `completed_at`: timezone-aware timestamps.
 - `fidelity`: `events`, `protocol`, `wire`, or `objects`.
+- `state`: lifecycle state at sealing time (`completed` or `interrupted`).
 - `source`: provenance label (`live` by default).
 - `partial`, `promoted_from_buffer`, `incomplete_aggregates`.
 - `client_asserted_event_count`.

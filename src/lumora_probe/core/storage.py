@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import threading
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -83,9 +83,7 @@ CREATE TABLE IF NOT EXISTS instances (
     columns INTEGER,
     created_at TEXT NOT NULL,
     UNIQUE (capture_id, study_uid, series_uid, sop_instance_uid, object_digest),
-    FOREIGN KEY (capture_id) REFERENCES captures(capture_id) ON DELETE CASCADE,
-    FOREIGN KEY (study_uid, series_uid) REFERENCES series(study_uid, series_uid)
-        ON DELETE CASCADE
+    FOREIGN KEY (capture_id) REFERENCES captures(capture_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS event_window (
@@ -213,7 +211,7 @@ class SQLiteDatabase:
         self._writer_lock = threading.RLock()
 
     @contextmanager
-    def connection(self, *, read_only: bool = False) -> Iterator[sqlite3.Connection]:
+    def connection(self, *, read_only: bool = False) -> Generator[sqlite3.Connection]:
         connection = self.policy.connect(self.path, read_only=read_only)
         try:
             yield connection
@@ -221,7 +219,7 @@ class SQLiteDatabase:
             connection.close()
 
     @contextmanager
-    def write_transaction(self) -> Iterator[sqlite3.Connection]:
+    def write_transaction(self) -> Generator[sqlite3.Connection]:
         """Serialize writes while retaining SQLite's concurrent reader support."""
         with self._writer_lock, self.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -291,6 +289,23 @@ def recreate_index_schema(path: Path, *, policy: SQLiteConnectionPolicy | None =
         connection.commit()
 
 
+def rebuild_study_projection(connection: sqlite3.Connection) -> None:
+    """Recompute Study and Series rows from capture-owned instance rows."""
+    connection.execute("DELETE FROM series")
+    connection.execute("DELETE FROM studies")
+    connection.execute(
+        "INSERT INTO studies(study_uid, first_seen_at, last_seen_at, capture_count, "
+        "instance_count, partial) SELECT study_uid, MIN(created_at), MAX(created_at), "
+        "COUNT(DISTINCT capture_id), COUNT(*), CASE WHEN COUNT(DISTINCT capture_id) > 1 THEN 1 ELSE 0 END "
+        "FROM instances GROUP BY study_uid"
+    )
+    connection.execute(
+        "INSERT INTO series(study_uid, series_uid, first_seen_at, last_seen_at, capture_count, instance_count) "
+        "SELECT study_uid, series_uid, MIN(created_at), MAX(created_at), COUNT(DISTINCT capture_id), COUNT(*) "
+        "FROM instances GROUP BY study_uid, series_uid"
+    )
+
+
 def migrate_app_schema(path: Path, *, policy: SQLiteConnectionPolicy | None = None) -> None:
     """Apply idempotent app database migrations."""
     connection_policy = policy or SQLiteConnectionPolicy()
@@ -350,6 +365,7 @@ __all__ = [
     "SQLiteDatabase",
     "StorageDatabases",
     "migrate_app_schema",
+    "rebuild_study_projection",
     "recreate_index_schema",
     "schema_sql",
 ]

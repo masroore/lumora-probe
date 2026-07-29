@@ -32,6 +32,7 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | [0005](ADR-0005-replay-fidelity-tiers.md) | Event replay and protocol replay in v1; fidelity tiers gate both |
 | [0013](ADR-0013-studies-are-projections.md) | Study/Series/Instance are projections over captures |
 | [0018](ADR-0018-conditions-versus-findings.md) | Observed conditions vs inferred findings, physically separate |
+| [0029](ADR-0029-cascade-semantics.md) | Capture deletion recomputes projections and preserves study-level references |
 
 ## Interfaces
 

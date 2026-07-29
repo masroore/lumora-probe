@@ -98,6 +98,7 @@ class CaptureManifest(BaseModel):
     created_at: datetime
     completed_at: datetime | None = None
     fidelity: CaptureFidelity
+    state: str = "completed"
     source: str = "live"
     source_capture_id: str | None = None
     redaction_profile: str | None = None
