@@ -1,0 +1,367 @@
+{
+  "catalog_version": 1,
+  "envelope": {
+    "fields": {
+      "aggregate_id": "<class 'str'>",
+      "aggregate_type": "<class 'str'>",
+      "causation_id": "str | None",
+      "correlation_id": "<class 'str'>",
+      "event_id": "<class 'str'>",
+      "event_name": "<class 'str'>",
+      "event_version": "<class 'int'>",
+      "monotonic_ns": "<class 'int'>",
+      "occurred_at": "<class 'datetime.datetime'>",
+      "origin": "<enum 'EventOrigin'>",
+      "payload": "dict[str, typing.Any]",
+      "producer": "<class 'str'>",
+      "replay_id": "str | None",
+      "replay_of_event_id": "str | None",
+      "sequence": "int | None",
+      "severity": "<enum 'EventSeverity'>"
+    },
+    "unknown_event_pairs": "accepted_as_opaque_payload",
+    "unknown_fields": "preserved"
+  },
+  "events": [
+    {
+      "category": "Analysis",
+      "event_name": "AnalysisCompleted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "ApplicationStarted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "ApplicationStopped",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Association",
+      "event_name": "AssociationAborted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Association",
+      "event_name": "AssociationAccepted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Association",
+      "event_name": "AssociationRejected",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Association",
+      "event_name": "AssociationReleased",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Association",
+      "event_name": "AssociationStarted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "DIMSE",
+      "event_name": "CEchoReceived",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "DIMSE",
+      "event_name": "CFindReceived",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "DIMSE",
+      "event_name": "CGetRequested",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "DIMSE",
+      "event_name": "CMoveRequested",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "DIMSE",
+      "event_name": "CStoreReceived",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Capture",
+      "event_name": "CaptureCompleted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Capture",
+      "event_name": "CaptureStarted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Capture",
+      "event_name": "CaptureStopped",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Viewer",
+      "event_name": "CineStarted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "ClockAnomalyDetected",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "ConfigurationChanged",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Dataset",
+      "event_name": "DatasetLoaded",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Dataset",
+      "event_name": "DatasetParsed",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "ErrorRaised",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "EventsDropped",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Viewer",
+      "event_name": "ImageDisplayed",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Dataset",
+      "event_name": "MetadataExtracted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Plugin",
+      "event_name": "PluginLoaded",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Replay",
+      "event_name": "ReplayCompleted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Replay",
+      "event_name": "ReplayFinished",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Replay",
+      "event_name": "ReplayPaused",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Replay",
+      "event_name": "ReplayStarted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Reporting",
+      "event_name": "ReportExported",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Reporting",
+      "event_name": "ReportGenerated",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "System",
+      "event_name": "WarningRaised",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    },
+    {
+      "category": "Viewer",
+      "event_name": "WindowLevelChanged",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload"
+    }
+  ]
+}
