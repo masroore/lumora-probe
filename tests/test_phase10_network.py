@@ -64,3 +64,27 @@ def test_listener_config_validates_ae_titles() -> None:
 def test_listener_config_normalizes_allowlist() -> None:
     config = DICOMListenerConfig(allowed_calling_aets=frozenset({"SCU_AE"}))
     assert config.allowed_calling_aets == frozenset({"SCU_AE"})
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_scu_establishes_negotiates_echoes_and_releases(free_port: int) -> None:
+    listener = DICOMListener(DICOMListenerConfig(port=free_port))
+    await listener.start()
+    try:
+        from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+
+        result = await DICOMSCUClient(
+            DICOMSCUConfig(
+                host="127.0.0.1",
+                port=free_port,
+                calling_ae="TEST-SCU",
+                called_ae="LUMORA",
+            )
+        ).echo()
+
+        assert result.success is True
+        assert result.status == 0x0000
+        assert result.error is None
+    finally:
+        await listener.stop()

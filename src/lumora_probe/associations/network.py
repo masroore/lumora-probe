@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -61,6 +62,111 @@ class DICOMListenerConfig:
         object.__setattr__(self, "ae_title", title)
         normalized = frozenset(_normalize_ae_title(value) for value in self.allowed_calling_aets)
         object.__setattr__(self, "allowed_calling_aets", normalized)
+
+
+@dataclass(frozen=True, slots=True)
+class DICOMSCUConfig:
+    """Peer and calling identity configuration for the DICOM SCU."""
+
+    host: str
+    port: int
+    calling_ae: AETitle | str = "LUMORA-SCU"
+    called_ae: AETitle | str = "ANY-SCP"
+    max_pdu: int = DEFAULT_MAX_PDU
+    timeout_seconds: float = 10.0
+
+    def __post_init__(self) -> None:
+        if not self.host.strip() or any(character.isspace() for character in self.host):
+            raise ValueError("host must be a non-empty host without whitespace")
+        if type(self.port) is not int or isinstance(self.port, bool) or not 1 <= self.port <= 65535:
+            raise ValueError("port must be between 1 and 65535")
+        if type(self.max_pdu) is not int or not 4_096 <= self.max_pdu <= 131_072:
+            raise ValueError("max_pdu must be between 4096 and 131072")
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        object.__setattr__(
+            self,
+            "calling_ae",
+            self.calling_ae if isinstance(self.calling_ae, AETitle) else AETitle(self.calling_ae),
+        )
+        object.__setattr__(
+            self,
+            "called_ae",
+            self.called_ae if isinstance(self.called_ae, AETitle) else AETitle(self.called_ae),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DICOMEchoResult:
+    """Result of one C-ECHO verification attempt."""
+
+    success: bool
+    status: int | None
+    duration_ns: int
+    error: str | None = None
+
+
+class DICOMSCUClient:
+    """Async facade over a pynetdicom SCU verification association."""
+
+    def __init__(self, config: DICOMSCUConfig, *, clock: AssociationClock | None = None) -> None:
+        self.config = config
+        self.clock = clock
+
+    async def echo(self) -> DICOMEchoResult:
+        """Establish, negotiate, verify, and release one association off the event loop."""
+        return await asyncio.to_thread(self._echo_sync)
+
+    def _echo_sync(self) -> DICOMEchoResult:
+        started = self._monotonic_ns()
+        association: Any | None = None
+        try:
+            from pynetdicom import AE
+            from pynetdicom.sop_class import Verification
+        except ImportError as exc:
+            raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
+
+        ae = AE(ae_title=str(self.config.calling_ae))
+        ae.maximum_pdu_size = self.config.max_pdu
+        ae.acse_timeout = self.config.timeout_seconds
+        ae.dimse_timeout = self.config.timeout_seconds
+        ae.network_timeout = self.config.timeout_seconds
+        ae.add_requested_context(Verification)
+        try:
+            association = ae.associate(
+                self.config.host,
+                self.config.port,
+                ae_title=str(self.config.called_ae),
+                max_pdu=self.config.max_pdu,
+            )
+            if not association.is_established:
+                return DICOMEchoResult(
+                    success=False,
+                    status=None,
+                    duration_ns=self._monotonic_ns() - started,
+                    error="association was not established",
+                )
+            response = association.send_c_echo()
+            status = _status_code(response)
+            return DICOMEchoResult(
+                success=status == DICOM_SUCCESS,
+                status=status,
+                duration_ns=self._monotonic_ns() - started,
+                error=None if status == DICOM_SUCCESS else f"C-ECHO status 0x{status:04X}",
+            )
+        except Exception as exc:  # noqa: BLE001 - network boundary returns an explicit result
+            return DICOMEchoResult(
+                success=False,
+                status=None,
+                duration_ns=self._monotonic_ns() - started,
+                error=str(exc),
+            )
+        finally:
+            if association is not None and association.is_established:
+                association.release()
+
+    def _monotonic_ns(self) -> int:
+        return self.clock.monotonic_ns() if self.clock is not None else 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +473,11 @@ def _contexts(association: Any) -> tuple[dict[str, object], ...]:
     return tuple(values)
 
 
+def _status_code(response: Any) -> int:
+    value = getattr(response, "Status", response)
+    return int(value)
+
+
 def _normalize_ae_title(value: str) -> str:
     return str(AETitle(value))
 
@@ -385,6 +496,9 @@ __all__ = [
     "DEFAULT_DICOM_PORT",
     "DEFAULT_MAX_PDU",
     "DICOMListener",
+    "DICOMSCUClient",
+    "DICOMSCUConfig",
+    "DICOMEchoResult",
     "DICOMListenerConfig",
     "DICOM_SUCCESS",
     "AssociationAuditRecord",
