@@ -145,7 +145,7 @@ class EventSubscription:
                 else:
                     await self.enqueue_capture(event)
             self._delivered += 1
-        except Exception:
+        except Exception:  # noqa: BLE001 - one subscriber must not stop the bus
             self._failures += 1
             self._bus.record_subscriber_failure(self, event)
         finally:
@@ -304,7 +304,7 @@ class EventBus:
                 published = await self._publish_one(request.event, request.capture_id)
                 if not request.result.done():
                     request.result.set_result(published)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - isolate one ingress failure
                 if not request.result.done():
                     request.result.set_exception(exc)
             finally:
