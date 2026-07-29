@@ -21,7 +21,7 @@ from lumora_probe.core.errors import (
 )
 
 from .association_routes import create_association_router
-from .capture_routes import create_capture_router
+from .capture_routes import RetentionStateProvider, create_capture_router
 from .client_event_routes import (
     ClientEventPublisher,
     RateLimiter,
@@ -137,6 +137,7 @@ async def validation_exception_handler(request: Request, error: Exception) -> JS
 def create_app(
     *,
     capture_store: ResourceStore | None = None,
+    retention_provider: RetentionStateProvider | None = None,
     projection_store: ResourceStore | None = None,
     association_store: ResourceStore | None = None,
     event_store: ResourceStore | None = None,
@@ -177,7 +178,9 @@ def create_app(
     application.add_exception_handler(RequestValidationError, validation_exception_handler)
     application.add_middleware(SecurityMiddleware, policy=active_policy)
     application.include_router(api_v1_router)
-    application.include_router(create_capture_router(capture_store), prefix=API_PREFIX)
+    application.include_router(
+        create_capture_router(capture_store, retention_provider), prefix=API_PREFIX
+    )
     for router in create_projection_routers(projection_store):
         application.include_router(router, prefix=API_PREFIX)
     application.include_router(create_association_router(association_store), prefix=API_PREFIX)

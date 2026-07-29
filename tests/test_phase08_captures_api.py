@@ -12,6 +12,11 @@ from lumora_probe.web.capture_routes import create_capture_router
 from lumora_probe.web.resources import FilesystemCaptureStore, InMemoryResourceStore
 
 
+class FakeRetentionProvider:
+    def status(self):
+        return {"enabled": True, "record_count": 3, "expires_at": "2026-07-29T00:30:00+00:00"}
+
+
 @pytest.mark.asyncio
 async def test_capture_collection_is_paginated_and_retrievable() -> None:
     store = InMemoryResourceStore(
@@ -49,6 +54,17 @@ async def test_capture_delete_is_explicit() -> None:
     assert response.status_code == 200
     assert response.json() == {"deleted": True, "capture_id": "a"}
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_ring_buffer_retention_state_is_exposed() -> None:
+    application = create_app(retention_provider=FakeRetentionProvider())
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/api/v1/captures/ring-buffer")
+
+    assert response.status_code == 200
+    assert response.json()["record_count"] == 3
 
 
 def test_capture_router_can_be_assembled_independently() -> None:

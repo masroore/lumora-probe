@@ -33,8 +33,8 @@ class SettingSource(StrEnum):
 class RuntimeSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    ring_buffer_seconds: int = Field(default=300, ge=1, le=86400)
-    ring_buffer_max_mb: int = Field(default=512, ge=1, le=102400)
+    ring_buffer_seconds: int = Field(default=1800, ge=1, le=86400)
+    ring_buffer_max_mb: int = Field(default=2048, ge=1, le=102400)
     decode_cache_max_mb: int = Field(default=512, ge=1, le=102400)
     ae_allowlist: tuple[str, ...] = ()
     ip_allowlist: tuple[str, ...] = ()

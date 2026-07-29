@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -17,11 +17,30 @@ _CAPTURE_POLICY = QueryPolicy.from_fields(
 )
 
 
-def create_capture_router(store: ResourceStore | None = None) -> APIRouter:
+class RetentionStateProvider(Protocol):
+    """Protocol-like boundary for ring-buffer retention state."""
+
+    def status(self) -> Any:
+        """Return JSON-compatible retention state."""
+        ...
+
+
+def create_capture_router(
+    store: ResourceStore | None = None,
+    retention_provider: RetentionStateProvider | None = None,
+) -> APIRouter:
     """Create capture routes against an injected resource store."""
 
     resource_store = store or InMemoryResourceStore()
     router = APIRouter(prefix="/captures", tags=["captures"])
+
+    @router.get("/ring-buffer")
+    async def get_ring_buffer_status() -> Mapping[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        if retention_provider is None:
+            return {"enabled": False, "reason": "ring buffer service is not mounted"}
+        status = retention_provider.status()
+        as_dict = getattr(status, "as_dict", None)
+        return as_dict() if callable(as_dict) else status
 
     @router.get("")
     async def list_captures(  # pyright: ignore[reportUnusedFunction]
