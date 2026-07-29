@@ -103,3 +103,26 @@ async def test_capture_engine_writes_explicit_session_and_promotion(tmp_path: Pa
     assert (
         CapturePackage.open(tmp_path / "captures" / PROMOTED_ID).manifest.capture_id == PROMOTED_ID
     )
+
+
+@pytest.mark.asyncio
+async def test_active_protocol_session_receives_pdu_and_object_sink_records(tmp_path: Path) -> None:
+    clock = ControllableClock(datetime(2026, 7, 29, tzinfo=UTC))
+    ids = SeededIdGenerator([CAPTURE_ID])
+    engine = CaptureEngine(tmp_path / "captures", clock=clock, id_generator=ids)
+    await engine.start()
+    await engine.start_session(capture_id=CAPTURE_ID, fidelity=CaptureFidelity.PROTOCOL)
+
+    engine({"association_id": "assoc-1", "pdu_type": "P_DATA_TF", "monotonic_ns": 10})
+    engine.record_object(
+        b"dicom-bytes",
+        study_uid="1.2.3",
+        series_uid="1.2.3.4",
+        sop_instance_uid="1.2.3.4.5",
+    )
+    await engine.stop_session(CAPTURE_ID)
+    await engine.stop()
+
+    package = CapturePackage.open(tmp_path / "captures" / CAPTURE_ID)
+    assert (package.path / "pdus.jsonl").read_text(encoding="utf-8").count("\n") == 1
+    assert len(package.manifest.objects) == 1

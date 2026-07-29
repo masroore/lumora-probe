@@ -12,8 +12,11 @@ from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
+
+import pydicom
 
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
@@ -702,6 +705,40 @@ class CaptureEngine:
             }:
                 session.writer.put_object(record.raw, **dict(record.metadata))
         return record
+
+    def __call__(self, record: Mapping[str, Any]) -> RingBufferRecord | None:
+        """Act as the association layer's off-bus PDU trace sink."""
+        association_id = record.get("association_id")
+        return self.record_pdu(
+            record,
+            monotonic_ns=int(record.get("monotonic_ns", 0)),
+            aggregate_id=str(association_id) if association_id is not None else None,
+        )
+
+    def store_c_store(self, event: Any) -> int:
+        """Act as a C-STORE sink, retaining an encoded dataset when enabled."""
+        dataset = getattr(event, "dataset", None)
+        if dataset is None:
+            return 0xA700
+        try:
+            output = BytesIO()
+            pydicom.dcmwrite(output, dataset, write_like_original=True)
+            study_uid = str(dataset.StudyInstanceUID)
+            series_uid = str(dataset.SeriesInstanceUID)
+            sop_instance_uid = str(dataset.SOPInstanceUID)
+            transfer_syntax = getattr(
+                getattr(dataset, "file_meta", None), "TransferSyntaxUID", None
+            )
+            self.record_object(
+                output.getvalue(),
+                study_uid=study_uid,
+                series_uid=series_uid,
+                sop_instance_uid=sop_instance_uid,
+                transfer_syntax_uid=str(transfer_syntax) if transfer_syntax else None,
+            )
+        except (AttributeError, OSError, TypeError, ValueError):
+            return 0xA700
+        return 0x0000
 
     async def _consume(self) -> None:
         assert self._subscription is not None
