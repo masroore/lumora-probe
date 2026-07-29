@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, Protocol
 
 
@@ -41,6 +43,21 @@ class InMemoryResourceStore:
 
     def put(self, resource: str, resource_id: str, value: Mapping[str, Any]) -> None:
         self._resources.setdefault(resource, {})[resource_id] = dict(value)
+
+
+class FilesystemCaptureStore(InMemoryResourceStore):
+    """Capture store that removes the indexed capture directory on delete."""
+
+    async def delete(self, resource: str, resource_id: str) -> bool:
+        record = await self.get(resource, resource_id)
+        if record is None:
+            return False
+        capture_path = record.get("path")
+        if isinstance(capture_path, str):
+            path = Path(capture_path).expanduser().resolve()
+            if path.is_dir():
+                shutil.rmtree(path)
+        return await super().delete(resource, resource_id)
 
 
 __all__: tuple[str, ...] = ()

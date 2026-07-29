@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 import pytest
 
 from lumora_probe.web.api import create_app
 from lumora_probe.web.capture_routes import create_capture_router
-from lumora_probe.web.resources import InMemoryResourceStore
+from lumora_probe.web.resources import FilesystemCaptureStore, InMemoryResourceStore
 
 
 @pytest.mark.asyncio
@@ -51,3 +53,16 @@ async def test_capture_delete_is_explicit() -> None:
 
 def test_capture_router_can_be_assembled_independently() -> None:
     assert create_capture_router().prefix == "/captures"
+
+
+@pytest.mark.asyncio
+async def test_capture_delete_removes_capture_directory(tmp_path: Path) -> None:
+    capture_path = tmp_path / "capture-a"
+    capture_path.mkdir()
+    (capture_path / "manifest.json").write_text("{}", encoding="utf-8")
+    store = FilesystemCaptureStore(
+        {"captures": {"a": {"capture_id": "a", "path": str(capture_path)}}}
+    )
+
+    assert await store.delete("captures", "a") is True
+    assert not capture_path.exists()

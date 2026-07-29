@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, FastAPI, Request
+from typing import cast
+
+from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from lumora_probe.core.clock import Clock, SystemClock
@@ -77,6 +80,46 @@ async def lumora_error_handler(request: Request, error: Exception) -> JSONRespon
     )
 
 
+async def http_exception_handler(request: Request, error: Exception) -> JSONResponse:
+    """Normalize route-level HTTP failures into the public error contract."""
+
+    http_error = cast(HTTPException, error)
+    correlation_id = request.headers.get("X-Correlation-ID") or new_correlation_id()
+    response = ErrorResponse(
+        status=http_error.status_code,
+        code=f"LUMORA-WEB-HTTP-{http_error.status_code}",
+        message=str(http_error.detail),
+        remediation="Correct the request and retry.",
+        context={},
+        correlation_id=correlation_id,
+    )
+    return JSONResponse(
+        status_code=http_error.status_code,
+        content=response.model_dump(mode="json"),
+        headers={"X-Correlation-ID": correlation_id},
+    )
+
+
+async def validation_exception_handler(request: Request, error: Exception) -> JSONResponse:
+    """Normalize Pydantic request validation failures into the public error contract."""
+
+    validation_error = cast(RequestValidationError, error)
+    correlation_id = request.headers.get("X-Correlation-ID") or new_correlation_id()
+    response = ErrorResponse(
+        status=422,
+        code="LUMORA-WEB-VALIDATION-001",
+        message="Request validation failed.",
+        remediation="Correct the fields listed in context and retry.",
+        context={"errors": validation_error.errors()},
+        correlation_id=correlation_id,
+    )
+    return JSONResponse(
+        status_code=422,
+        content=response.model_dump(mode="json"),
+        headers={"X-Correlation-ID": correlation_id},
+    )
+
+
 def create_app(
     *,
     capture_store: ResourceStore | None = None,
@@ -100,6 +143,8 @@ def create_app(
         description="DICOM observability, troubleshooting, and engineering platform.",
     )
     application.add_exception_handler(LumoraError, lumora_error_handler)
+    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(RequestValidationError, validation_exception_handler)
     application.add_middleware(SecurityMiddleware, policy=security_policy or SecurityPolicy())
     application.include_router(api_v1_router)
     application.include_router(create_capture_router(capture_store), prefix=API_PREFIX)
