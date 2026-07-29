@@ -25,6 +25,7 @@ dependencies = [
 [project.scripts]
 probe-lite = "probe_lite.cli:main"
 sender-lite = "sender_lite.cli:main"
+lumora = "lumora_probe.cli:main"
 
 [build-system]
 requires = ["hatchling"]
