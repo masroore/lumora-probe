@@ -131,3 +131,21 @@ forbidden_modules =
     lumora_probe.plugins.service
     lumora_probe.plugins.repository
     lumora_probe.plugins.api
+
+[importlinter:time_identity_boundary]
+name = Non-core Lumora modules do not import time or uuid directly
+type = forbidden
+source_modules =
+    lumora_probe.shared
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+    lumora_probe.web
+forbidden_modules =
+    time
+    uuid

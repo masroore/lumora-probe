@@ -21,7 +21,7 @@ def test_all_import_contracts_are_kept() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Contracts: 6 kept, 0 broken." in result.stdout
+    assert "Contracts: 7 kept, 0 broken." in result.stdout
 
 
 def test_each_import_contract_fails_on_a_deliberate_violation() -> None:
