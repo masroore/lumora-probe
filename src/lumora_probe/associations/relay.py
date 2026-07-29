@@ -66,6 +66,101 @@ class DICOMRelay(DICOMListener):
         super().__init__(config, **kwargs)
         self.relay_config = relay_config
 
+    def _handlers(self) -> list[tuple[Any, Callable[..., Any]]]:
+        from pynetdicom import evt
+
+        handlers = super()._handlers()
+        handlers.extend(
+            [
+                (evt.EVT_C_FIND, self._on_c_find),
+                (evt.EVT_C_GET, self._on_c_get),
+                (evt.EVT_C_MOVE, self._on_c_move),
+                (evt.EVT_N_ACTION, self._on_unrecognized_dimse),
+                (evt.EVT_N_CREATE, self._on_unrecognized_dimse),
+                (evt.EVT_N_DELETE, self._on_unrecognized_dimse),
+                (evt.EVT_N_EVENT_REPORT, self._on_unrecognized_dimse),
+                (evt.EVT_N_GET, self._on_unrecognized_dimse),
+                (evt.EVT_N_SET, self._on_unrecognized_dimse),
+            ]
+        )
+        return handlers
+
+    def _on_c_find(self, event: Any):
+        self._publish_dimse_event(
+            event.assoc,
+            "CFindReceived",
+            {"dimse": "C-FIND", "query_response_count": 0},
+        )
+        upstream = self.relay_config.upstream
+        if upstream is None:
+            yield 0xA700, None
+            return
+        count = 0
+        try:
+            for status, identifier in DICOMSCUClient(upstream, clock=self.clock).iter_find(
+                event.identifier, query_model=str(event.context.abstract_syntax)
+            ):
+                count += 1
+                yield status, identifier
+        finally:
+            self._publish_dimse_event(
+                event.assoc,
+                "CFindCompleted",
+                {"dimse": "C-FIND", "query_response_count": count},
+            )
+
+    def _on_c_get(self, event: Any):
+        self._publish_dimse_event(
+            event.assoc,
+            "CGetRequested",
+            {"dimse": "C-GET", "response_count": 0},
+        )
+        upstream = self.relay_config.upstream
+        if upstream is None:
+            yield 0xA700, None
+            return
+        count = 0
+        for status, dataset in DICOMSCUClient(upstream, clock=self.clock).iter_get(
+            event.identifier, query_model=str(event.context.abstract_syntax)
+        ):
+            count += 1
+            yield status, dataset
+
+    def _on_c_move(self, event: Any):
+        move_destination = getattr(event, "move_destination", None)
+        if move_destination is None:
+            move_destination = getattr(event.request, "MoveDestination", "unknown")
+        self._publish_dimse_event(
+            event.assoc,
+            "CMoveRequested",
+            {"dimse": "C-MOVE", "move_destination": str(move_destination)},
+        )
+        upstream = self.relay_config.upstream
+        if upstream is None:
+            yield 0xA700, None
+            return
+        for status, identifier in DICOMSCUClient(upstream, clock=self.clock).iter_move(
+            event.identifier,
+            move_aet=str(move_destination),
+            query_model=str(event.context.abstract_syntax),
+        ):
+            yield status, identifier
+
+    def _on_unrecognized_dimse(self, event: Any) -> int:
+        request = getattr(event, "request", None)
+        self._publish_dimse_event(
+            event.assoc,
+            "UnrecognizedDimseObserved",
+            {
+                "command_field": getattr(request, "CommandField", None),
+                "affected_sop_class_uid": str(getattr(request, "AffectedSOPClassUID", "unknown")),
+                "dataset_present": getattr(request, "DataSet", None) not in (None, b""),
+                "relay_mode": self.relay_config.negotiation_label,
+                "aborted": False,
+            },
+        )
+        return 0x0122
+
     def _on_c_store(self, event: Any) -> int:
         payload = _c_store_payload(event)
         upstream = self.relay_config.upstream

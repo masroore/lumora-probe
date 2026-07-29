@@ -225,6 +225,62 @@ class DICOMSCUClient:
             if association is not None and association.is_established:
                 association.release()
 
+    def iter_find(self, identifier: Any, *, query_model: str):
+        """Yield C-FIND responses from the configured peer."""
+        yield from self._iter_query("find", identifier, query_model=query_model)
+
+    def iter_get(self, identifier: Any, *, query_model: str):
+        """Yield C-GET responses from the configured peer."""
+        yield from self._iter_query("get", identifier, query_model=query_model)
+
+    def iter_move(self, identifier: Any, *, move_aet: str, query_model: str):
+        """Yield C-MOVE progress responses from the configured peer."""
+        yield from self._iter_query("move", identifier, query_model=query_model, move_aet=move_aet)
+
+    def _iter_query(
+        self,
+        operation: str,
+        identifier: Any,
+        *,
+        query_model: str,
+        move_aet: str | None = None,
+    ):
+        association: Any | None = None
+        try:
+            from pynetdicom import AE
+        except ImportError as exc:
+            raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
+
+        ae = AE(ae_title=str(self.config.calling_ae))
+        ae.maximum_pdu_size = self.config.max_pdu
+        ae.acse_timeout = self.config.timeout_seconds
+        ae.dimse_timeout = self.config.timeout_seconds
+        ae.network_timeout = self.config.timeout_seconds
+        ae.add_requested_context(query_model)
+        try:
+            association = ae.associate(
+                self.config.host,
+                self.config.port,
+                ae_title=str(self.config.called_ae),
+                max_pdu=self.config.max_pdu,
+            )
+            if not association.is_established:
+                yield 0xA700, None
+                return
+            if operation == "find":
+                responses = association.send_c_find(identifier, query_model)
+            elif operation == "get":
+                responses = association.send_c_get(identifier, query_model)
+            elif operation == "move":
+                assert move_aet is not None
+                responses = association.send_c_move(identifier, move_aet, query_model)
+            else:
+                raise ValueError(f"unsupported query operation: {operation}")
+            yield from responses
+        finally:
+            if association is not None and association.is_established:
+                association.release()
+
     def store_dataset(
         self,
         dataset: Any,
@@ -325,6 +381,24 @@ class AssociationAuditRecord:
 
 
 @dataclass(slots=True)
+class _PDUStats:
+    count: int = 0
+    bytes: int = 0
+    first_ns: int | None = None
+    last_ns: int | None = None
+    max_gap_ns: int = 0
+
+    def add(self, size: int, timestamp_ns: int) -> None:
+        if self.first_ns is None:
+            self.first_ns = timestamp_ns
+        if self.last_ns is not None:
+            self.max_gap_ns = max(self.max_gap_ns, timestamp_ns - self.last_ns)
+        self.last_ns = timestamp_ns
+        self.count += 1
+        self.bytes += size
+
+
+@dataclass(slots=True)
 class _AssociationState:
     association_id: str
     calling_ae: str
@@ -364,6 +438,7 @@ class DICOMListener:
         self.ae: Any | None = None
         self.server: Any | None = None
         self._states: dict[int, _AssociationState] = {}
+        self._pdu_stats: dict[str, _PDUStats] = {}
         self._lock = threading.Lock()
         self._started = False
         self._accepted_associations = 0
@@ -476,13 +551,12 @@ class DICOMListener:
             (evt.EVT_C_ECHO, self._on_c_echo),
             (evt.EVT_C_STORE, self._on_c_store),
         ]
-        if self.pdu_trace_sink is not None:
-            handlers.extend(
-                [
-                    (evt.EVT_PDU_RECV, self._on_pdu_received),
-                    (evt.EVT_PDU_SENT, self._on_pdu_sent),
-                ]
-            )
+        handlers.extend(
+            [
+                (evt.EVT_PDU_RECV, self._on_pdu_received),
+                (evt.EVT_PDU_SENT, self._on_pdu_sent),
+            ]
+        )
         return handlers
 
     def _on_requested(self, event: Any) -> None:
@@ -534,8 +608,6 @@ class DICOMListener:
         self._trace_pdu(event, "sent")
 
     def _trace_pdu(self, event: Any, direction: str) -> None:
-        if self.pdu_trace_sink is None:
-            return
         state = self._state_for(event.assoc)
         pdu = getattr(event, "pdu", None)
         raw = b""
@@ -544,17 +616,26 @@ class DICOMListener:
             raw = encoded if isinstance(encoded, bytes) else bytes(encoded)
         except Exception:  # noqa: BLE001 - malformed PDU still receives a trace row
             raw = b""
+        timestamp_ns = self.clock.monotonic_ns() if self.clock else 0
+        pdu_type = type(pdu).__name__ if pdu is not None else "Unknown"
+        if direction == "received" and (raw[:1] == b"\x04" or "P_DATA" in pdu_type.upper()):
+            with self._lock:
+                self._pdu_stats.setdefault(state.association_id, _PDUStats()).add(
+                    len(raw), timestamp_ns
+                )
+        if self.pdu_trace_sink is None:
+            return
         declared_length = int.from_bytes(raw[2:6], "big") if len(raw) >= 6 else None
         self.pdu_trace_sink(
             {
                 "association_id": state.association_id,
                 "direction": direction,
-                "pdu_type": type(pdu).__name__ if pdu is not None else "Unknown",
+                "pdu_type": pdu_type,
                 "length": len(raw),
                 "declared_length": declared_length,
                 "presentation_context_ids": _pdu_context_ids(pdu),
                 "pdv_boundaries": _pdu_boundaries(pdu),
-                "monotonic_ns": self.clock.monotonic_ns() if self.clock else 0,
+                "monotonic_ns": timestamp_ns,
             }
         )
 
@@ -605,6 +686,7 @@ class DICOMListener:
         if self.event_ingress is None:
             return
         state = self._state_for(association)
+        payload = {**payload, **self._summary_for(state.association_id)}
         event = EventEnvelope.create(
             event_name=event_name,
             event_version=1,
@@ -618,6 +700,24 @@ class DICOMListener:
             id_generator=self._id_generator(),
         )
         self.event_ingress.publish_from_thread(event)
+
+    def _summary_for(self, association_id: str) -> dict[str, object]:
+        stats = self._pdu_stats.get(association_id)
+        if stats is None:
+            return {
+                "pdu_count": 0,
+                "bytes": 0,
+                "first_monotonic_ns": None,
+                "last_monotonic_ns": None,
+                "max_inter_pdu_gap_ns": 0,
+            }
+        return {
+            "pdu_count": stats.count,
+            "bytes": stats.bytes,
+            "first_monotonic_ns": stats.first_ns,
+            "last_monotonic_ns": stats.last_ns,
+            "max_inter_pdu_gap_ns": stats.max_gap_ns,
+        }
 
     def _id_generator(self) -> AssociationIdGenerator:
         if self.id_generator is None:
@@ -784,7 +884,8 @@ def _c_store_payload(event: Any) -> dict[str, object]:
         "study_uid": _text(getattr(dataset, "StudyInstanceUID", "unknown")),
         "series_uid": _text(getattr(dataset, "SeriesInstanceUID", "unknown")),
         "transfer_syntax": _text(getattr(context, "transfer_syntax", "unknown")),
-        "bytes": encoded_size,
+        "dataset_bytes": encoded_size,
+        "bytes": 0,
         "pdu_count": 0,
         "first_monotonic_ns": None,
         "last_monotonic_ns": None,

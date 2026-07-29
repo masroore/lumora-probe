@@ -436,3 +436,108 @@ async def test_pdu_trace_is_written_beside_bus_and_not_published_as_events(
     assert rows
     assert all('"association_id"' in row for row in rows)
     assert all(event.event_name != "PDUReceived" for event in ingress.events)
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_inline_relay_forwards_c_find_responses_and_completion_summary(
+    free_port: int,
+) -> None:
+    from pydicom.dataset import Dataset
+    from pynetdicom import AE, evt
+    from pynetdicom.sop_class import PatientRootQueryRetrieveInformationModelFind
+
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+    from lumora_probe.associations.relay import DICOMRelay, RelayConfig, RelayMode
+
+    upstream_port = free_port + 1
+    model = str(PatientRootQueryRetrieveInformationModelFind)
+    upstream_ae = AE(ae_title="UPSTREAM")
+    upstream_ae.add_supported_context(model)
+
+    def on_find(event: object):
+        response = Dataset()
+        response.PatientName = "SYNTHETIC^FOUND"
+        yield 0xFF00, response
+        yield 0x0000, None
+
+    upstream_server = upstream_ae.start_server(
+        ("127.0.0.1", upstream_port),
+        block=False,
+        evt_handlers=[(evt.EVT_C_FIND, on_find)],
+    )
+    ingress = _RecordingIngress()
+    relay = DICOMRelay(
+        DICOMListenerConfig(port=free_port, ae_title="RELAY"),
+        RelayConfig(
+            mode=RelayMode.PASS_THROUGH,
+            upstream=DICOMSCUConfig(
+                host="127.0.0.1",
+                port=upstream_port,
+                calling_ae="RELAY-SCU",
+                called_ae="UPSTREAM",
+            ),
+        ),
+        event_ingress=ingress,
+        clock=SystemClock(),
+        id_generator=_ids(20),
+    )
+    await relay.start()
+    try:
+        identifier = Dataset()
+        identifier.QueryRetrieveLevel = "PATIENT"
+        responses = await asyncio.to_thread(
+            lambda: list(
+                DICOMSCUClient(
+                    DICOMSCUConfig(
+                        host="127.0.0.1",
+                        port=free_port,
+                        calling_ae="DOWNSTREAM",
+                        called_ae="RELAY",
+                    )
+                ).iter_find(identifier, query_model=model)
+            )
+        )
+        assert len(responses) == 2
+        assert responses[0][1].PatientName == "SYNTHETIC^FOUND"
+        assert [event.event_name for event in ingress.events if "Find" in event.event_name] == [
+            "CFindReceived",
+            "CFindCompleted",
+        ]
+        completed = next(event for event in ingress.events if event.event_name == "CFindCompleted")
+        assert completed.payload["query_response_count"] == 2
+    finally:
+        await relay.stop()
+        upstream_server.shutdown()
+        upstream_ae.shutdown()
+
+
+def test_unrecognized_dimse_is_recorded_without_abort() -> None:
+    from types import SimpleNamespace
+
+    from lumora_probe.associations.relay import DICOMRelay, RelayConfig, RelayMode
+
+    ingress = _RecordingIngress()
+    relay = DICOMRelay(
+        DICOMListenerConfig(port=11112),
+        RelayConfig(mode=RelayMode.PERMISSIVE_STANDALONE),
+        event_ingress=ingress,
+        clock=SystemClock(),
+        id_generator=_ids(4),
+    )
+    event = SimpleNamespace(
+        assoc=object(),
+        request=SimpleNamespace(
+            CommandField=0x0130,
+            AffectedSOPClassUID="1.2.3",
+            DataSet=b"malformed",
+        ),
+    )
+
+    status = relay._on_unrecognized_dimse(event)
+
+    assert status == 0x0122
+    observed = ingress.events[-1]
+    assert observed.event_name == "UnrecognizedDimseObserved"
+    assert observed.payload["aborted"] is False
+    assert observed.payload["dataset_present"] is True

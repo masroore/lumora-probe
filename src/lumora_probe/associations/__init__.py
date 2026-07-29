@@ -1,3 +1,3 @@
-"""Association lifecycle and DICOM peer coordination."""
+"""DICOM association lifecycle, relay, and protocol observation services."""
 
 __all__: tuple[str, ...] = ()
