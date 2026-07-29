@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -103,6 +104,8 @@ def _mount_filesystem_type(path: Path) -> str | None:
 
 
 def is_network_filesystem(path: Path) -> bool:
+    if os.name == "nt" and str(path).startswith(("\\", "//")):
+        return True
     filesystem_type = _mount_filesystem_type(path)
     if filesystem_type is None:
         return False

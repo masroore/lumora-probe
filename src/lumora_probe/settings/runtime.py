@@ -7,6 +7,7 @@ import tempfile
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from lumora_probe.core.errors import ConfigurationError, RestartRequiredError, SettingLockedError
 
 
-class SettingSource(str):
+class SettingSource(StrEnum):
     DEFAULT = "default"
     FILE = "file"
     ENV = "env"

@@ -74,9 +74,7 @@ def new_correlation_id() -> str:
 
 
 @contextmanager
-def correlation_context(
-    correlation_id: str | None = None, **values: Any
-) -> Generator[str, None, None]:
+def correlation_context(correlation_id: str | None = None, **values: Any) -> Generator[str]:
     """Bind a correlation ID and optional fields for the current async/thread context."""
 
     identifier = correlation_id or new_correlation_id()
