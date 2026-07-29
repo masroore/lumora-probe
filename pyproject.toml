@@ -16,6 +16,8 @@ classifiers = [
 dependencies = [
     "pydicom>=3.0,<4.0",
     "pynetdicom>=3.0,<4.0",
+    "pydantic-settings>=2.10,<3.0",
+    "structlog>=25.4,<26.0",
 ]
 
 [project.scripts]
