@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -74,6 +75,12 @@ class AssociationAuditSink(Protocol):
     def __call__(self, record: "AssociationAuditRecord") -> None: ...
 
 
+class CStoreSink(Protocol):
+    """Optional local persistence callback for a received C-STORE event."""
+
+    def __call__(self, event: Any) -> int: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DICOMListenerConfig:
     """Configuration for one non-privileged DICOM SCP listener."""
@@ -131,6 +138,16 @@ class DICOMSCUConfig:
             "called_ae",
             self.called_ae if isinstance(self.called_ae, AETitle) else AETitle(self.called_ae),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class DICOMStoreResult:
+    """Result of forwarding one C-STORE dataset."""
+
+    success: bool
+    status: int | None
+    duration_ns: int
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +219,85 @@ class DICOMSCUClient:
             if association is not None and association.is_established:
                 association.release()
 
+    def store_dataset(
+        self,
+        dataset: Any,
+        *,
+        abstract_syntax: str,
+        transfer_syntax: str,
+        file_meta: Any | None = None,
+    ) -> DICOMStoreResult:
+        """Forward a parsed C-STORE dataset synchronously from a pynetdicom thread."""
+        return self._store_sync(
+            dataset,
+            abstract_syntax=abstract_syntax,
+            transfer_syntax=transfer_syntax,
+            file_meta=file_meta,
+        )
+
+    def _store_sync(
+        self,
+        dataset: Any,
+        *,
+        abstract_syntax: str,
+        transfer_syntax: str,
+        file_meta: Any | None,
+    ) -> DICOMStoreResult:
+        started = self._monotonic_ns()
+        association: Any | None = None
+        try:
+            from pynetdicom import AE
+        except ImportError as exc:
+            raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
+
+        outbound = copy.deepcopy(dataset)
+        if file_meta is not None:
+            outbound.file_meta = copy.deepcopy(file_meta)
+        if not hasattr(outbound, "file_meta"):
+            raise ValueError("C-STORE forwarding requires file metadata")
+        outbound.file_meta.TransferSyntaxUID = transfer_syntax
+        outbound.file_meta.MediaStorageSOPClassUID = str(outbound.SOPClassUID)
+        outbound.file_meta.MediaStorageSOPInstanceUID = str(outbound.SOPInstanceUID)
+
+        ae = AE(ae_title=str(self.config.calling_ae))
+        ae.maximum_pdu_size = self.config.max_pdu
+        ae.acse_timeout = self.config.timeout_seconds
+        ae.dimse_timeout = self.config.timeout_seconds
+        ae.network_timeout = self.config.timeout_seconds
+        ae.add_requested_context(abstract_syntax, transfer_syntax)
+        try:
+            association = ae.associate(
+                self.config.host,
+                self.config.port,
+                ae_title=str(self.config.called_ae),
+                max_pdu=self.config.max_pdu,
+            )
+            if not association.is_established:
+                return DICOMStoreResult(
+                    success=False,
+                    status=None,
+                    duration_ns=self._monotonic_ns() - started,
+                    error="association was not established",
+                )
+            response = association.send_c_store(outbound)
+            status = _status_code(response)
+            return DICOMStoreResult(
+                success=status == DICOM_SUCCESS,
+                status=status,
+                duration_ns=self._monotonic_ns() - started,
+                error=None if status == DICOM_SUCCESS else f"C-STORE status 0x{status:04X}",
+            )
+        except Exception as exc:  # noqa: BLE001 - network boundary returns an explicit result
+            return DICOMStoreResult(
+                success=False,
+                status=None,
+                duration_ns=self._monotonic_ns() - started,
+                error=str(exc),
+            )
+        finally:
+            if association is not None and association.is_established:
+                association.release()
+
     def _monotonic_ns(self) -> int:
         return self.clock.monotonic_ns() if self.clock is not None else 0
 
@@ -247,12 +343,14 @@ class DICOMListener:
         *,
         audit_sink: AssociationAuditSink | None = None,
         event_ingress: AssociationEventIngress | None = None,
+        c_store_sink: CStoreSink | None = None,
         clock: AssociationClock | None = None,
         id_generator: AssociationIdGenerator | None = None,
     ) -> None:
         self.config = config or DICOMListenerConfig()
         self.audit_sink = audit_sink
         self.event_ingress = event_ingress
+        self.c_store_sink = c_store_sink
         self.clock = clock
         self.id_generator = id_generator
         self.ae: Any | None = None
@@ -368,6 +466,7 @@ class DICOMListener:
             (evt.EVT_RELEASED, self._on_released),
             (evt.EVT_ABORTED, self._on_aborted),
             (evt.EVT_C_ECHO, self._on_c_echo),
+            (evt.EVT_C_STORE, self._on_c_store),
         ]
 
     def _on_requested(self, event: Any) -> None:
@@ -426,6 +525,14 @@ class DICOMListener:
             },
         )
         return DICOM_SUCCESS
+
+    def _on_c_store(self, event: Any) -> int:
+        payload = _c_store_payload(event)
+        self._publish_dimse_event(event.assoc, "CStoreReceived", payload)
+        self._publish_dimse_event(event.assoc, "DatasetParsed", payload)
+        if self.c_store_sink is not None:
+            return self.c_store_sink(event)
+        return 0xA700
 
     def _state_for(self, association: Any) -> _AssociationState:
         with self._lock:
@@ -587,6 +694,37 @@ def _event_name_for_phase(phase: str) -> str:
         raise ValueError(f"unsupported association phase: {phase}") from exc
 
 
+def _c_store_payload(event: Any) -> dict[str, object]:
+    request = getattr(event, "request", None)
+    dataset = getattr(event, "dataset", None)
+    context = getattr(event, "context", None)
+    encoded_size = 0
+    try:
+        raw = event.encoded_dataset()
+        encoded_size = len(raw.getvalue() if hasattr(raw, "getvalue") else raw)
+    except Exception:  # noqa: BLE001 - malformed traffic is observed, not repaired
+        encoded_size = 0
+    return {
+        "dimse": "C-STORE",
+        "sop_class_uid": _text(
+            getattr(dataset, "SOPClassUID", getattr(request, "AffectedSOPClassUID", "unknown"))
+        ),
+        "sop_instance_uid": _text(
+            getattr(
+                dataset, "SOPInstanceUID", getattr(request, "AffectedSOPInstanceUID", "unknown")
+            )
+        ),
+        "study_uid": _text(getattr(dataset, "StudyInstanceUID", "unknown")),
+        "series_uid": _text(getattr(dataset, "SeriesInstanceUID", "unknown")),
+        "transfer_syntax": _text(getattr(context, "transfer_syntax", "unknown")),
+        "bytes": encoded_size,
+        "pdu_count": 0,
+        "first_monotonic_ns": None,
+        "last_monotonic_ns": None,
+        "max_inter_pdu_gap_ns": 0,
+    }
+
+
 def _status_code(response: Any) -> int:
     value = getattr(response, "Status", response)
     return int(value)
@@ -613,6 +751,7 @@ __all__ = [
     "DICOMSCUClient",
     "DICOMSCUConfig",
     "DICOMEchoResult",
+    "DICOMStoreResult",
     "DICOMListenerConfig",
     "DICOM_SUCCESS",
     "AssociationAuditRecord",
@@ -622,4 +761,5 @@ __all__ = [
     "LoggingAssociationAuditSink",
     "AssociationClock",
     "AssociationIdGenerator",
+    "CStoreSink",
 ]

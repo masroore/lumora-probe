@@ -10,7 +10,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .network import DICOMListener, DICOMSCUClient, DICOMSCUConfig, DICOM_SUCCESS
+from .network import (
+    DICOMListener,
+    DICOMSCUClient,
+    DICOMSCUConfig,
+    DICOM_SUCCESS,
+    _c_store_payload,
+)
 
 
 class RelayMode(StrEnum):
@@ -59,6 +65,47 @@ class DICOMRelay(DICOMListener):
     def __init__(self, config: Any, relay_config: RelayConfig, **kwargs: Any) -> None:
         super().__init__(config, **kwargs)
         self.relay_config = relay_config
+
+    def _on_c_store(self, event: Any) -> int:
+        payload = _c_store_payload(event)
+        upstream = self.relay_config.upstream
+        if upstream is None:
+            payload = {
+                **payload,
+                "relay_mode": self.relay_config.negotiation_label,
+                "upstream_forwarded": False,
+            }
+            self._publish_dimse_event(event.assoc, "CStoreReceived", payload)
+            self._publish_dimse_event(event.assoc, "DatasetParsed", payload)
+            return (
+                DICOM_SUCCESS
+                if self.relay_config.mode is RelayMode.PERMISSIVE_STANDALONE
+                else 0xA700
+            )
+
+        result = DICOMSCUClient(upstream, clock=self.clock).store_dataset(
+            event.dataset,
+            abstract_syntax=str(event.context.abstract_syntax),
+            transfer_syntax=str(event.context.transfer_syntax),
+            file_meta=getattr(event, "file_meta", None),
+        )
+        payload = {
+            **payload,
+            "relay_mode": self.relay_config.negotiation_label,
+            "upstream_forwarded": True,
+            "upstream_success": result.success,
+            "upstream_status": result.status,
+            "probe_hop_duration_ns": result.duration_ns,
+        }
+        self._publish_dimse_event(event.assoc, "CStoreReceived", payload)
+        self._publish_dimse_event(event.assoc, "DatasetParsed", payload)
+        if result.success:
+            self._publish_dimse_event(
+                event.assoc,
+                "InstancePersisted",
+                {**payload, "destination": "upstream"},
+            )
+        return DICOM_SUCCESS if result.success else 0xA700
 
     def _on_c_echo(self, event: Any) -> int:
         upstream = self.relay_config.upstream

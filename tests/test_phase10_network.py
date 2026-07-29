@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import concurrent.futures
 import socket
 import threading
@@ -325,6 +326,81 @@ async def test_inline_relay_forwards_c_echo_to_upstream_and_labels_mode(free_por
         assert echo.payload["relay_mode"] == "pass-through"
         assert echo.payload["upstream_forwarded"] is True
         assert echo.payload["upstream_success"] is True
+    finally:
+        await relay.stop()
+        await upstream.stop()
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_inline_relay_forwards_c_store_and_publishes_enrichment_events(
+    free_port: int,
+) -> None:
+    from pydicom.dataset import Dataset, FileMetaDataset
+    from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage
+
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+    from lumora_probe.associations.relay import DICOMRelay, RelayConfig, RelayMode
+
+    upstream_port = free_port + 1
+    received: list[str] = []
+
+    def store_sink(event: object) -> int:
+        received.append(str(event.dataset.SOPInstanceUID))
+        return 0x0000
+
+    upstream = DICOMListener(
+        DICOMListenerConfig(port=upstream_port, ae_title="UPSTREAM"),
+        c_store_sink=store_sink,
+    )
+    ingress = _RecordingIngress()
+    relay = DICOMRelay(
+        DICOMListenerConfig(port=free_port, ae_title="RELAY"),
+        RelayConfig(
+            mode=RelayMode.PASS_THROUGH,
+            upstream=DICOMSCUConfig(
+                host="127.0.0.1",
+                port=upstream_port,
+                calling_ae="RELAY-SCU",
+                called_ae="UPSTREAM",
+            ),
+        ),
+        event_ingress=ingress,
+        clock=SystemClock(),
+        id_generator=_ids(20),
+    )
+    dataset = Dataset()
+    dataset.SOPClassUID = SecondaryCaptureImageStorage
+    dataset.SOPInstanceUID = "1.2.826.0.1.3680043.10.543.10"
+    dataset.StudyInstanceUID = "1.2.826.0.1.3680043.10.543.11"
+    dataset.SeriesInstanceUID = "1.2.826.0.1.3680043.10.543.12"
+    dataset.PatientName = "SYNTHETIC^TEST"
+    dataset.file_meta = FileMetaDataset()
+    dataset.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    await upstream.start()
+    await relay.start()
+    try:
+        result = await asyncio.to_thread(
+            DICOMSCUClient(
+                DICOMSCUConfig(
+                    host="127.0.0.1",
+                    port=free_port,
+                    calling_ae="DOWNSTREAM",
+                    called_ae="RELAY",
+                )
+            ).store_dataset,
+            dataset,
+            abstract_syntax=str(SecondaryCaptureImageStorage),
+            transfer_syntax=str(ExplicitVRLittleEndian),
+            file_meta=dataset.file_meta,
+        )
+        assert result.success is True
+        assert len(received) == 1
+        assert received[0] == dataset.SOPInstanceUID
+        names = [event.event_name for event in ingress.events]
+        assert "CStoreReceived" in names
+        assert "DatasetParsed" in names
+        assert "InstancePersisted" in names
     finally:
         await relay.stop()
         await upstream.stop()
