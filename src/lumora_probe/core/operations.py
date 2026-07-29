@@ -94,11 +94,16 @@ class InMemoryJobRegistry:
         id_generator: IdGenerator | None = None,
         durable: SQLiteOperationRegistry | None = None,
         progress_publisher: JobProgressPublisher | None = None,
+        concurrency_limits: Mapping[str, int] | None = None,
     ) -> None:
         self.clock = clock if clock is not None else SystemClock()
         self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
         self.durable = durable
         self.progress_publisher = progress_publisher
+        self.concurrency_limits = dict(concurrency_limits or {})
+        if any(type(limit) is not int or limit < 1 for limit in self.concurrency_limits.values()):
+            raise ValueError("concurrency limits must be positive integers")
+        self._active_by_type: dict[str, int] = {}
         self._records: dict[str, JobRecord] = {}
         self._tokens: dict[str, CancellationToken] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -113,6 +118,10 @@ class InMemoryJobRegistry:
         """Start one job without blocking the caller."""
         if not job_type.strip():
             raise ValueError("job_type must be a non-empty string")
+        limit = self.concurrency_limits.get(job_type)
+        active = self._active_by_type.get(job_type, 0)
+        if limit is not None and active >= limit:
+            raise RuntimeError(f"concurrency limit reached for job type: {job_type}")
         operation_id = self.id_generator.new_id()
         record = JobRecord(
             operation_id=operation_id,
@@ -124,6 +133,7 @@ class InMemoryJobRegistry:
         token = CancellationToken()
         self._records[operation_id] = record
         self._tokens[operation_id] = token
+        self._active_by_type[job_type] = active + 1
         if self.durable is not None:
             await self.durable.start(
                 operation_id=operation_id,
@@ -200,6 +210,11 @@ class InMemoryJobRegistry:
                     outcome=record.outcome or record.state.value,
                     state=record.state.value,
                 )
+            active = self._active_by_type.get(record.job_type, 1) - 1
+            if active > 0:
+                self._active_by_type[record.job_type] = active
+            else:
+                self._active_by_type.pop(record.job_type, None)
 
     async def _progress(self, operation_id: str, progress: Mapping[str, Any]) -> None:
         record = self._records[operation_id]

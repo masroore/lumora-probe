@@ -155,3 +155,28 @@ async def test_in_memory_job_registry_publishes_progress_on_event_bus() -> None:
         "confirmed": 1,
         "total": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_in_memory_job_registry_refuses_over_limit_job_type() -> None:
+    registry = InMemoryJobRegistry(
+        id_generator=SeededIdGenerator([JOB_ID, PROGRESS_EVENT_ID]),
+        concurrency_limits={"protocol-replay": 1},
+    )
+    started = asyncio.Event()
+
+    async def worker(context):
+        started.set()
+        await context.cancellation.wait()
+        return "done"
+
+    await registry.start("protocol-replay", worker)
+    await started.wait()
+    with pytest.raises(RuntimeError, match="concurrency limit"):
+        await registry.start("protocol-replay", worker)
+
+    assert await registry.cancel(JOB_ID)
+    await registry.wait(JOB_ID)
+    replacement = await registry.start("protocol-replay", lambda _: asyncio.sleep(0))
+    assert replacement.operation_id == PROGRESS_EVENT_ID
+    await registry.wait(PROGRESS_EVENT_ID)
