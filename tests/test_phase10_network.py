@@ -175,3 +175,33 @@ async def test_association_audit_sink_logs_calling_ae_and_source_ip(free_port: i
             assert fields["association_id"]
     finally:
         await listener.stop()
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_optional_calling_ae_allowlist_is_off_by_default_and_enforced_when_set(
+    free_port: int,
+) -> None:
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+
+    denied_records = []
+    listener = DICOMListener(
+        DICOMListenerConfig(port=free_port, allowed_calling_aets=frozenset({"ALLOWED-SCU"})),
+        audit_sink=denied_records.append,
+        clock=SystemClock(),
+        id_generator=_ids(12),
+    )
+    await listener.start()
+    try:
+        denied = await DICOMSCUClient(
+            DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="DENIED-SCU")
+        ).echo()
+        assert denied.success is False
+        assert any(record.phase == "rejected" for record in denied_records)
+
+        accepted = await DICOMSCUClient(
+            DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="ALLOWED-SCU")
+        ).echo()
+        assert accepted.success is True
+    finally:
+        await listener.stop()
