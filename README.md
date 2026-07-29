@@ -165,3 +165,14 @@ python -m ruff format --check .
 ```
 
 CI runs these checks on CPython 3.13 for Ubuntu, macOS, and Windows.
+
+## Lumora Probe architecture package
+
+The broader Lumora Probe application is being implemented incrementally under
+`src/lumora_probe/`. Its module-first structure follows ADR-0012: each application slice
+owns `domain`, `service`, `repository`, `api`, and `contracts` boundaries. Import-linter
+contracts run with the development quality gates and prevent slices from reaching into
+another slice's internals.
+
+The Lite command-line tools remain separate packages. Their shared helpers stay in
+`lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
