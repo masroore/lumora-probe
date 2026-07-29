@@ -56,7 +56,7 @@
 
 ## Tests and verification
 
-- Full pytest suite: **309 passed, 1 skipped**.
+- Full pytest suite: **310 passed, 1 skipped**.
 - Ring capacity, age expiry, durable reload, events-only filtering, explicit sessions,
   promotion, PDU/object sinks, torn-line recovery, and active-manifest recovery are covered.
 - `lint-imports --no-cache`: 7 contracts kept, 0 broken.
