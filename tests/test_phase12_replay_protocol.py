@@ -160,6 +160,46 @@ async def test_protocol_replay_requires_explicit_allowlisted_target() -> None:
 
 
 @pytest.mark.asyncio
+async def test_protocol_replay_audit_sink_records_completed_run() -> None:
+    sender = FakeDatasetSender([DICOMStoreResult(success=True, status=0x0000, duration_ns=1)])
+    records: list[Any] = []
+    result = await ProtocolReplayService(
+        sender,
+        policy=policy(),
+        audit_sink=records.append,
+    ).replay(
+        [dataset(0, monotonic_ns=1)],
+        capture_fidelity="protocol",
+        replay_id="018f0d4e-7b6a-7000-8000-000000000201",
+        capture_id="018f0d4e-7b6a-7000-8000-000000000202",
+    )
+
+    assert result.count == 1
+    assert len(records) == 1
+    assert records[0].outcome == "completed"
+    assert records[0].replay_id == result.replay_id
+    assert records[0].capture_id == result.capture_id
+    assert records[0].confirmed_count == result.success_count
+
+
+@pytest.mark.asyncio
+async def test_protocol_replay_audit_sink_records_refusal() -> None:
+    records: list[Any] = []
+    target = NetworkEndpoint("127.0.0.1", 11112)
+
+    with pytest.raises(ReplayDomainError):
+        await ProtocolReplayService(
+            FakeDatasetSender([]),
+            policy=ProtocolReplayPolicy(allowed_targets=frozenset({target})),
+            audit_sink=records.append,
+        ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
+
+    assert len(records) == 1
+    assert records[0].outcome == "refused"
+    assert "target" in (records[0].error or "")
+
+
+@pytest.mark.asyncio
 async def test_protocol_replay_scu_parses_bytes_off_loop_and_derives_sop_class(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

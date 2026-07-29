@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from itertools import pairwise
 
 from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
+from lumora_probe.core.clock import Clock, SystemClock
 from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.events import EventEnvelope
@@ -16,9 +17,11 @@ from lumora_probe.shared.value_objects import NetworkEndpoint
 from .contracts import (
     EventPublisher,
     EventReplayResult,
+    ProtocolReplayAuditRecord,
     ProtocolReplayDataset,
     ProtocolReplayPolicy,
     ProtocolReplayResult,
+    ReplayAuditSink,
 )
 
 ReplaySleeper = Callable[[float], Awaitable[None]]
@@ -33,10 +36,16 @@ class ProtocolReplayService:
         *,
         policy: ProtocolReplayPolicy,
         sleeper: ReplaySleeper | None = None,
+        audit_sink: ReplayAuditSink | None = None,
+        clock: Clock | None = None,
+        id_generator: IdGenerator | None = None,
     ) -> None:
         self.sender = sender
         self.policy = policy
         self.sleeper = sleeper if sleeper is not None else asyncio.sleep
+        self.audit_sink = audit_sink
+        self.clock = clock if clock is not None else SystemClock()
+        self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
 
     async def replay(
         self,
@@ -45,41 +54,105 @@ class ProtocolReplayService:
         capture_fidelity: str,
         partial: bool = False,
         incomplete_aggregates: Iterable[str] = (),
+        replay_id: str | None = None,
+        capture_id: str | None = None,
         speed: float = 1.0,
     ) -> ProtocolReplayResult:
         """Send datasets in persisted order at original or scaled timing."""
-        _require_protocol_fidelity(capture_fidelity)
-        _require_complete_capture(partial, incomplete_aggregates)
-        target = _validate_protocol_policy(self.policy)
-        _validate_speed(speed)
-        source_datasets = tuple(datasets)
-        _validate_protocol_monotonic_order(source_datasets)
+        run_replay_id = replay_id or self.id_generator.new_id()
+        planned_count = 0
+        try:
+            _require_protocol_fidelity(capture_fidelity)
+            _require_complete_capture(partial, incomplete_aggregates)
+            target = _validate_protocol_policy(self.policy)
+            _validate_speed(speed)
+            source_datasets = tuple(datasets)
+            planned_count = len(source_datasets)
+            _validate_protocol_monotonic_order(source_datasets)
 
-        if self.policy.dry_run:
-            return ProtocolReplayResult(
-                results=(),
-                target=target,
-                dry_run=True,
-                planned_count=len(source_datasets),
-            )
-
-        results: list[DICOMStoreResult] = []
-        for previous, dataset in _with_previous_dataset(source_datasets):
-            if previous is not None:
-                delay_seconds = (dataset.monotonic_ns - previous.monotonic_ns) / 1_000_000_000
-                delay_seconds /= speed
-                if delay_seconds > 0:
-                    await self.sleeper(delay_seconds)
-            results.append(
-                await self.sender.send_dataset(
-                    dataset.raw_bytes, transfer_syntax=dataset.transfer_syntax
+            if self.policy.dry_run:
+                result = ProtocolReplayResult(
+                    results=(),
+                    replay_id=run_replay_id,
+                    capture_id=capture_id,
+                    target=target,
+                    dry_run=True,
+                    planned_count=planned_count,
                 )
+                self._audit(result, outcome="dry-run")
+                return result
+
+            results: list[DICOMStoreResult] = []
+            for previous, dataset in _with_previous_dataset(source_datasets):
+                if previous is not None:
+                    delay_seconds = (dataset.monotonic_ns - previous.monotonic_ns) / 1_000_000_000
+                    delay_seconds /= speed
+                    if delay_seconds > 0:
+                        await self.sleeper(delay_seconds)
+                results.append(
+                    await self.sender.send_dataset(
+                        dataset.raw_bytes, transfer_syntax=dataset.transfer_syntax
+                    )
+                )
+            result = ProtocolReplayResult(
+                results=tuple(results),
+                replay_id=run_replay_id,
+                capture_id=capture_id,
+                target=target,
+                dry_run=False,
+                planned_count=planned_count,
             )
-        return ProtocolReplayResult(
-            results=tuple(results),
-            target=target,
-            dry_run=False,
-            planned_count=len(source_datasets),
+            self._audit(result, outcome="completed")
+            return result
+        except Exception as exc:
+            self._audit_refusal(
+                replay_id=run_replay_id,
+                capture_id=capture_id,
+                planned_count=planned_count,
+                error=str(exc),
+            )
+            raise
+
+    def _audit(self, result: ProtocolReplayResult, *, outcome: str) -> None:
+        if self.audit_sink is None:
+            return
+        self.audit_sink(
+            ProtocolReplayAuditRecord(
+                replay_id=result.replay_id,
+                capture_id=result.capture_id,
+                target=result.target,
+                dry_run=result.dry_run,
+                outcome=outcome,
+                planned_count=result.planned_count,
+                confirmed_count=result.success_count,
+                failed_count=result.failure_count,
+                occurred_at=self.clock.now(),
+            )
+        )
+
+    def _audit_refusal(
+        self,
+        *,
+        replay_id: str,
+        capture_id: str | None,
+        planned_count: int,
+        error: str,
+    ) -> None:
+        if self.audit_sink is None:
+            return
+        self.audit_sink(
+            ProtocolReplayAuditRecord(
+                replay_id=replay_id,
+                capture_id=capture_id,
+                target=self.policy.target,
+                dry_run=self.policy.dry_run,
+                outcome="refused",
+                planned_count=planned_count,
+                confirmed_count=0,
+                failed_count=0,
+                occurred_at=self.clock.now(),
+                error=error,
+            )
         )
 
 

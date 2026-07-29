@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from lumora_probe.associations.contracts import DICOMStoreResult
@@ -50,10 +51,36 @@ class ProtocolReplayPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class ProtocolReplayAuditRecord:
+    """One immutable audit observation for a protocol replay run."""
+
+    replay_id: str
+    capture_id: str | None
+    target: NetworkEndpoint | None
+    dry_run: bool
+    outcome: str
+    planned_count: int
+    confirmed_count: int
+    failed_count: int
+    occurred_at: datetime
+    error: str | None = None
+
+
+class ReplayAuditSink(Protocol):
+    """Synchronous sink for protocol replay audit records."""
+
+    def __call__(self, record: ProtocolReplayAuditRecord) -> None:
+        """Persist or emit one audit record without blocking the event loop."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
 class ProtocolReplayResult:
     """C-STORE results produced by one protocol replay."""
 
     results: tuple[DICOMStoreResult, ...]
+    replay_id: str
+    capture_id: str | None
     target: NetworkEndpoint
     dry_run: bool
     planned_count: int
