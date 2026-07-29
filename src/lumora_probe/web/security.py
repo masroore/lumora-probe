@@ -33,6 +33,30 @@ class SecurityPolicy:
         self.trusted_proxies = frozenset(_normalise_host(host) for host in trusted_proxies)
         self.allowed_origins = frozenset(allowed_origins)
 
+    def validate_websocket(
+        self,
+        *,
+        host_header: str,
+        client_host: str,
+        origin: str | None,
+        forwarded_host: str | None = None,
+    ) -> str | None:
+        """Return a handshake failure reason, or ``None`` when it is trusted."""
+
+        effective_host = host_header
+        if _normalise_host(client_host) in self.trusted_proxies and forwarded_host:
+            effective_host = forwarded_host.split(",", 1)[0].strip()
+        host = _normalise_host(effective_host.split(":", 1)[0])
+        if host not in self.allowed_hosts:
+            return "The WebSocket Host is not allowed."
+        if (
+            origin is not None
+            and origin not in self.allowed_origins
+            and _origin_host(origin) != host
+        ):
+            return "The WebSocket Origin is not allowed."
+        return None
+
 
 class SecurityMiddleware(BaseHTTPMiddleware):
     """Apply all HTTP trust-boundary checks before route handlers execute."""
