@@ -36,9 +36,9 @@ artifacts = ["static/**", "assets/vendor/**"]
 include = ["static/**", "assets/vendor/**"]
 packages = [
     "src/lumora_probe",
-    "probe_lite",
-    "sender_lite",
-    "lumora_lite_common",
+    "src/probe_lite",
+    "src/sender_lite",
+    "src/lumora_lite_common",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]

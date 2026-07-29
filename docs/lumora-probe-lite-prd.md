@@ -268,7 +268,7 @@ not import from or share code with the parent `lumora/` package.
 Proposed layout:
 
 ```
-probe_lite/
+src/probe_lite/
   __init__.py
   __main__.py       # entry point: python -m probe_lite
   cli.py            # argument parsing

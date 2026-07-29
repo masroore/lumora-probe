@@ -59,16 +59,16 @@ An optional Echo Run must test DICOM Verification connectivity and exit without 
 
 Preserve these established patterns:
 
-- `probe_lite/config.py`: frozen slotted configuration dataclass, explicit validation, argparse entry point.
-- `probe_lite/log.py`: dependency-free stdout-only text/JSONL event logging.
-- `probe_lite/receiver.py`: direct `pynetdicom.AE` lifecycle, explicit association events, no global logging configuration.
-- `probe_lite/cli.py`: integer exit codes and portable signal handling.
+- `src/probe_lite/config.py`: frozen slotted configuration dataclass, explicit validation, argparse entry point.
+- `src/probe_lite/log.py`: dependency-free stdout-only text/JSONL event logging.
+- `src/probe_lite/receiver.py`: direct `pynetdicom.AE` lifecycle, explicit association events, no global logging configuration.
+- `src/probe_lite/cli.py`: integer exit codes and portable signal handling.
 - `tests/test_receiver.py`: in-process ProbeReceiver, generated DICOM fixtures, transfer-syntax round trips.
 - Root `pyproject.toml`: Hatchling, Ruff, Pytest, CPython 3.13, cross-platform package.
 
 Do not overwrite existing uncommitted changes in:
 
-- `probe_lite/__main__.py`
+- `src/probe_lite/__main__.py`
 - `pyproject.toml`
 - `uv.lock`
 
@@ -105,7 +105,7 @@ Use these names in modules, logs, tests, and documentation. Avoid overloaded ter
 Add this minimal package:
 
 ```text
-sender_lite/
+src/sender_lite/
 ├── __init__.py      # package description and version import/constant
 ├── __main__.py      # python -m sender_lite
 ├── cli.py           # orchestration, cancellation, exit-code mapping
@@ -236,7 +236,7 @@ All configuration failures:
 
 ### 8.1 Records
 
-Define immutable records in `sender_lite/catalog.py`.
+Define immutable records in `src/sender_lite/catalog.py`.
 
 `CatalogInstance` fields:
 
@@ -397,7 +397,7 @@ Do not fall back to “all storage contexts”; request only what the Study requ
 
 ### 10.1 Sender object
 
-Implement `Sender` in `sender_lite/sender.py` with explicit operations:
+Implement `Sender` in `src/sender_lite/sender.py` with explicit operations:
 
 - `echo() -> EchoResult`
 - `send_study(study: StudyBatch, cancel_event: threading.Event) -> StudyResult`
@@ -552,7 +552,7 @@ Implement `SenderLogger` using ProbeLogger's behavior, not Python global logging
 - no PHI fields.
 
 Do not refactor ProbeLogger into shared infrastructure in this phase. *(Superseded by
-ADR-0028: the logger engine now lives in `lumora_lite_common.logging`, with
+ADR-0028: the logger engine now lives in `src/lumora_lite_common.logging`, with
 `SenderLogger` and `ProbeLogger` as thin subclasses. The original no-sharing stance was
 reversed because the duplication was accidental cost, not intentional isolation.)*
 
@@ -666,9 +666,9 @@ Add `docs/sender_lite/README.md` only if a shorter operator guide is useful afte
 
 Files:
 
-- `sender_lite/__init__.py`
-- `sender_lite/__main__.py`
-- `sender_lite/config.py`
+- `src/sender_lite/__init__.py`
+- `src/sender_lite/__main__.py`
+- `src/sender_lite/config.py`
 - `tests/test_sender_config.py`
 
 Tasks:
@@ -696,7 +696,7 @@ Gate:
 
 Files:
 
-- `sender_lite/catalog.py`
+- `src/sender_lite/catalog.py`
 - `tests/test_sender_catalog.py`
 
 Tasks:
@@ -724,7 +724,7 @@ Gate:
 
 Files:
 
-- `sender_lite/log.py`
+- `src/sender_lite/log.py`
 - result records in owner modules
 - `tests/test_sender_logging.py`
 
@@ -746,7 +746,7 @@ Gate:
 
 Files:
 
-- `sender_lite/sender.py`
+- `src/sender_lite/sender.py`
 - `tests/test_sender_transport.py`
 
 Tasks:
@@ -777,7 +777,7 @@ Gate:
 
 Files:
 
-- `sender_lite/cli.py`
+- `src/sender_lite/cli.py`
 - `tests/test_sender_cli.py`
 
 Tasks:

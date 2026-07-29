@@ -7,7 +7,7 @@
 ## Context
 
 Probe Lite and Sender Lite were originally written as deliberately self-contained packages.
-The Sender Lite implementation plan and an inline note in `sender_lite/log.py` forbade
+The Sender Lite implementation plan and an inline note in `src/sender_lite/log.py` forbade
 introducing shared infrastructure between the two, so each package carried its own copy of
 several small, byte-identical helpers. As both tools matured, the duplication proved to be
 accidental cost rather than intentional isolation:
@@ -27,7 +27,7 @@ accidental cost rather than intentional isolation:
 
 This ADR authorizes extracting those overlaps into a single shared Python package,
 `lumora_lite_common`, and supersedes the contrary guidance in
-`docs/sender_lite/IMPLEMENTATION_PLAN.md` §14.1, §23, and the `sender_lite/log.py`
+`docs/sender_lite/IMPLEMENTATION_PLAN.md` §14.1, §23, and the `src/sender_lite/log.py`
 docstring.
 
 It does **not** alter PRD §1.2 / §TC-01: the Lite codebase still shares no source code

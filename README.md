@@ -149,7 +149,7 @@ arguments, Sender Lite loads `./sender-lite.toml` if present and errors otherwis
 
 ## Shared library
 
-Both tools share a small internal package, `lumora_lite_common`, which holds the
+Both tools share a small internal package, `src/lumora_lite_common`, which holds the
 genuinely duplicated helpers: the event-logger engine (an `EventLogger` base class that
 `ProbeLogger` and `SenderLogger` extend), portable signal install/restore, config leaf
 validators (port, max PDU, log format, AE title), and DICOM UID validation. See
@@ -175,4 +175,4 @@ contracts run with the development quality gates and prevent slices from reachin
 another slice's internals.
 
 The Lite command-line tools remain separate packages. Their shared helpers stay in
-`lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
+`src/lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
