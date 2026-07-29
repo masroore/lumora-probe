@@ -9,6 +9,7 @@ import pytest
 from lumora_probe.captures.format import (
     CaptureFidelity,
     CaptureManifest,
+    CapturePackage,
     CapturePackageWriter,
     pack_capture,
 )
@@ -112,8 +113,28 @@ async def test_torn_trailing_event_line_is_discarded_during_rebuild(tmp_path: Pa
         handle.write(b'{"event_name":"torn"')
 
     await repository.rebuild(paths.captures)
+    assert (capture_path / "events.jsonl").read_bytes().endswith(b"\n")
+    assert CapturePackage.open(capture_path).manifest.state == "interrupted"
+    assert CapturePackage.open(capture_path).manifest.interruption_reason == (
+        "torn trailing event record discarded"
+    )
     with repository.databases.index.connection(read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM event_window").fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_active_capture_is_marked_interrupted_on_rebuild(tmp_path: Path) -> None:
+    paths, repository = repository_for(tmp_path)
+    manifest = make_manifest(BASE_ID, datetime(2026, 7, 29, tzinfo=UTC)).model_copy(
+        update={"state": "running"}
+    )
+    writer = CapturePackageWriter(paths.captures, manifest)
+    writer.append_event({"event_name": "AssociationStarted", "event_version": 1})
+
+    await repository.rebuild(paths.captures)
+    recovered = CapturePackage.open(writer.capture_path).manifest
+    assert recovered.state == "interrupted"
+    assert recovered.interruption_reason == "capture was active during process restart"
 
 
 @pytest.mark.asyncio

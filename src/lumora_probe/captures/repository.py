@@ -12,12 +12,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from lumora_probe.core.clock import Clock, SystemClock
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
 
 from .format import (
     CaptureFormatError,
     CaptureObject,
     CapturePackage,
+    CapturePackageWriter,
+    FsyncPolicy,
     unpack_capture,
 )
 
@@ -126,8 +129,11 @@ class CaptureRepository:
     def __init__(
         self,
         databases: StorageDatabases,
+        *,
+        clock: Clock | None = None,
     ) -> None:
         self.databases = databases
+        self.clock = clock or SystemClock()
 
     async def index(
         self, package: CapturePackage, *, source_root: Path | None = None
@@ -210,8 +216,13 @@ class CaptureRepository:
         await asyncio.to_thread(self.databases.index.initialise)
         records = []
         for package, source_root in packages:
+            package = await self.recover_package(package)
             records.append(await self.index(package, source_root=source_root))
         return tuple(records)
+
+    async def recover_package(self, package: CapturePackage) -> CapturePackage:
+        """Discard a torn trailing event and mark an active package interrupted."""
+        return await asyncio.to_thread(self._recover_package, package)
 
     async def retention_candidates(self, policy: RetentionPolicy) -> tuple[str, ...]:
         return policy.select(await self.list_captures())
@@ -237,7 +248,7 @@ class CaptureRepository:
             fidelity=manifest.fidelity.value,
             partial=manifest.partial,
             promoted_from_buffer=manifest.promoted_from_buffer,
-            interruption_reason=None,
+            interruption_reason=manifest.interruption_reason,
             manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
             indexed_at=manifest.created_at,
             objects=manifest.objects,
@@ -292,6 +303,36 @@ class CaptureRepository:
                         event["_raw_json"],
                     ),
                 )
+
+    def _recover_package(self, package: CapturePackage) -> CapturePackage:
+        events_path = package.path / "events.jsonl"
+        raw = events_path.read_bytes() if events_path.is_file() else b""
+        complete_length, torn = _complete_event_length(raw)
+        if torn:
+            events_path.write_bytes(raw[:complete_length])
+
+        manifest = package.manifest
+        active = manifest.state in {"created", "running", "stopping"}
+        if not torn and not active:
+            return package
+        reason = (
+            "torn trailing event record discarded"
+            if torn
+            else "capture was active during process restart"
+        )
+        interrupted = manifest.model_copy(
+            update={
+                "state": "interrupted",
+                "completed_at": self.clock.now(),
+                "interruption_reason": reason,
+            }
+        )
+        CapturePackageWriter(
+            package.path.parent,
+            interrupted,
+            fsync_policy=FsyncPolicy.ALWAYS,
+        )
+        return CapturePackage.open(package.path)
 
 
 def discover_capture_packages(
@@ -362,6 +403,31 @@ def _read_complete_events(path: Path) -> Iterator[dict[str, object]]:
             )
         event["_raw_json"] = raw.decode("utf-8")
         yield event
+
+
+def _complete_event_length(raw: bytes) -> tuple[int, bool]:
+    """Return the durable prefix length and whether the tail was torn."""
+    if not raw:
+        return 0, False
+    offset = 0
+    lines = raw.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if not line.endswith((b"\n", b"\r")):
+            return offset, True
+        candidate = line.rstrip(b"\r\n")
+        try:
+            json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            if index == len(lines) - 1:
+                return offset, True
+            raise CaptureFormatError(
+                code="LUMORA-CAPTURE-FMT-014",
+                message="Invalid event JSON is not trailing",
+                remediation="Restore the capture from a sealed copy before rebuilding the index.",
+                context={"line": index + 1},
+            ) from exc
+        offset += len(line)
+    return offset, False
 
 
 def _parse_datetime(value: object) -> datetime:
