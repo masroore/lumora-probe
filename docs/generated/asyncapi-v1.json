@@ -1,0 +1,365 @@
+{
+  "asyncapi": "3.0.0",
+  "channels": {
+    "eventStream": {
+      "address": "/api/v1/events/stream",
+      "description": "Canonical JSON event batches for consumers.",
+      "messages": {
+        "events": {
+          "$ref": "#/components/messages/EventBatch"
+        },
+        "protocolError": {
+          "$ref": "#/components/messages/ProtocolError"
+        },
+        "ready": {
+          "$ref": "#/components/messages/Ready"
+        }
+      }
+    },
+    "uiStream": {
+      "address": "/ws/ui",
+      "description": "Server-rendered HTMX fragments for mounted views.",
+      "messages": {
+        "fragments": {
+          "$ref": "#/components/messages/FragmentBatch"
+        },
+        "protocolError": {
+          "$ref": "#/components/messages/ProtocolError"
+        },
+        "ready": {
+          "$ref": "#/components/messages/Ready"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "EventBatch": {
+        "payload": {
+          "properties": {
+            "dropped_count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "dropped_sequences": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "events": {
+              "items": {
+                "$ref": "#/components/schemas/EventEnvelope"
+              },
+              "type": "array"
+            },
+            "replayed": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "events"
+            },
+            "version": {
+              "const": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "events",
+            "dropped_count"
+          ],
+          "type": "object"
+        }
+      },
+      "FragmentBatch": {
+        "payload": {
+          "properties": {
+            "dropped_count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "dropped_sequences": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "fragments": {
+              "items": {
+                "$ref": "#/components/schemas/Fragment"
+              },
+              "type": "array"
+            },
+            "page": {
+              "type": "string"
+            },
+            "type": {
+              "const": "fragments"
+            },
+            "version": {
+              "const": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "page",
+            "fragments",
+            "dropped_count"
+          ],
+          "type": "object"
+        }
+      },
+      "ProtocolError": {
+        "payload": {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "remediation": {
+              "type": "string"
+            },
+            "type": {
+              "const": "error"
+            },
+            "version": {
+              "const": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "code",
+            "message"
+          ],
+          "type": "object"
+        }
+      },
+      "Ready": {
+        "payload": {
+          "properties": {
+            "client_id": {
+              "type": "string"
+            },
+            "resume": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "ready"
+            },
+            "version": {
+              "const": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "client_id",
+            "resume"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "schemas": {
+      "EventEnvelope": {
+        "$defs": {
+          "EventOrigin": {
+            "description": "Whether an event was observed by the server or asserted by the browser.",
+            "enum": [
+              "observed",
+              "client-asserted"
+            ],
+            "title": "EventOrigin",
+            "type": "string"
+          },
+          "EventSeverity": {
+            "description": "Operator-facing event severity.",
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "EventSeverity",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Immutable, versioned wire envelope shared by all event producers.",
+        "properties": {
+          "aggregate_id": {
+            "title": "Aggregate Id",
+            "type": "string"
+          },
+          "aggregate_type": {
+            "title": "Aggregate Type",
+            "type": "string"
+          },
+          "causation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Causation Id"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_name": {
+            "title": "Event Name",
+            "type": "string"
+          },
+          "event_version": {
+            "minimum": 1,
+            "title": "Event Version",
+            "type": "integer"
+          },
+          "monotonic_ns": {
+            "minimum": 0,
+            "title": "Monotonic Ns",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/$defs/EventOrigin"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "producer": {
+            "title": "Producer",
+            "type": "string"
+          },
+          "replay_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replay Id"
+          },
+          "replay_of_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Replay Of Event Id"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sequence"
+          },
+          "severity": {
+            "$ref": "#/$defs/EventSeverity",
+            "default": "info"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_name",
+          "event_version",
+          "occurred_at",
+          "correlation_id",
+          "aggregate_type",
+          "aggregate_id",
+          "producer",
+          "payload",
+          "origin",
+          "monotonic_ns"
+        ],
+        "title": "EventEnvelope",
+        "type": "object"
+      },
+      "Fragment": {
+        "properties": {
+          "html": {
+            "type": "string"
+          },
+          "panel": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "panel",
+          "target",
+          "html"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "WebSocket contracts for canonical events and mounted UI fragments.",
+    "title": "Lumora Probe live streams",
+    "version": "1.0.0"
+  },
+  "operations": {
+    "consumeEvents": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/eventStream"
+      }
+    },
+    "consumeFragments": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/uiStream"
+      }
+    }
+  },
+  "servers": {
+    "local": {
+      "description": "Loopback development endpoint; deployment TLS is external.",
+      "host": "localhost",
+      "pathname": "/",
+      "protocol": "ws"
+    }
+  }
+}
