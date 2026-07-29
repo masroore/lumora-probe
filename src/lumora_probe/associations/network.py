@@ -55,7 +55,7 @@ class LoggingAssociationAuditSink:
     def __init__(self, logger: AssociationLogger) -> None:
         self.logger = logger
 
-    def __call__(self, record: "AssociationAuditRecord") -> None:
+    def __call__(self, record: AssociationAuditRecord) -> None:
         self.logger.info(
             f"association_{record.phase}",
             association_id=record.association_id,
@@ -73,7 +73,7 @@ class LoggingAssociationAuditSink:
 class AssociationAuditSink(Protocol):
     """Non-blocking callback for association lifecycle observations."""
 
-    def __call__(self, record: "AssociationAuditRecord") -> None: ...
+    def __call__(self, record: AssociationAuditRecord) -> None: ...
 
 
 class CStoreSink(Protocol):
@@ -184,9 +184,7 @@ class DICOMSCUClient:
         try:
             from pynetdicom import AE
 
-            Verification: Any = getattr(
-                importlib.import_module("pynetdicom.sop_class"), "Verification"
-            )
+            Verification: Any = importlib.import_module("pynetdicom.sop_class").Verification
         except ImportError as exc:
             raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
 
@@ -522,8 +520,8 @@ class DICOMListener:
                 AllStoragePresentationContexts,
                 QueryRetrievePresentationContexts,
                 VerificationPresentationContexts,
+                _config,
             )
-            from pynetdicom import _config
         except ImportError as exc:
             raise RuntimeError(
                 "pynetdicom and pydicom are required for the DICOM listener"
@@ -923,20 +921,20 @@ def _text(value: Any) -> str:
 __all__ = [
     "DEFAULT_DICOM_PORT",
     "DEFAULT_MAX_PDU",
-    "DICOMListener",
-    "DICOMSCUClient",
-    "DICOMSCUConfig",
-    "DICOMEchoResult",
-    "DICOMStoreResult",
-    "DICOMListenerConfig",
     "DICOM_SUCCESS",
     "AssociationAuditRecord",
     "AssociationAuditSink",
-    "AssociationEventIngress",
-    "AssociationLogger",
-    "LoggingAssociationAuditSink",
     "AssociationClock",
+    "AssociationEventIngress",
     "AssociationIdGenerator",
+    "AssociationLogger",
     "CStoreSink",
+    "DICOMEchoResult",
+    "DICOMListener",
+    "DICOMListenerConfig",
+    "DICOMSCUClient",
+    "DICOMSCUConfig",
+    "DICOMStoreResult",
+    "LoggingAssociationAuditSink",
     "PDUTraceSink",
 ]

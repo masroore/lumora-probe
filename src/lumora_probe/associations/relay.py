@@ -8,13 +8,13 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from .network import (
+    DICOM_SUCCESS,
     DICOMListener,
     DICOMSCUClient,
     DICOMSCUConfig,
-    DICOM_SUCCESS,
     c_store_payload,
 )
 
@@ -119,11 +119,12 @@ class DICOMRelay(DICOMListener):
         if upstream is None:
             yield 0xA700, None
             return
-        count = 0
-        for status, dataset in DICOMSCUClient(upstream, clock=self.clock).iter_get(
-            event.identifier, query_model=str(event.context.abstract_syntax)
+        for count, (status, dataset) in enumerate(
+            DICOMSCUClient(upstream, clock=self.clock).iter_get(
+                event.identifier, query_model=str(event.context.abstract_syntax)
+            ),
+            start=1,
         ):
-            count += 1
             yield status, dataset
 
     def _on_c_move(self, event: Any):
@@ -139,12 +140,11 @@ class DICOMRelay(DICOMListener):
         if upstream is None:
             yield 0xA700, None
             return
-        for status, identifier in DICOMSCUClient(upstream, clock=self.clock).iter_move(
+        yield from DICOMSCUClient(upstream, clock=self.clock).iter_move(
             event.identifier,
             move_aet=str(move_destination),
             query_model=str(event.context.abstract_syntax),
-        ):
-            yield status, identifier
+        )
 
     def _on_unrecognized_dimse(self, event: Any) -> int:
         request = getattr(event, "request", None)
@@ -353,7 +353,7 @@ class PDUTraceWriter:
             self._handle.flush()
             self._handle.close()
 
-    def __enter__(self) -> PDUTraceWriter:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:

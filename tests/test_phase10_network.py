@@ -6,8 +6,9 @@ import asyncio
 import concurrent.futures
 import socket
 import threading
-from pathlib import Path
 from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 
 from lumora_probe.associations.network import (
@@ -16,6 +17,7 @@ from lumora_probe.associations.network import (
 )
 from lumora_probe.core.clock import SystemClock
 from lumora_probe.core.ids import SeededUUIDv7Generator
+from lumora_probe.shared.errors import DomainInvariantError
 
 
 @pytest.fixture
@@ -74,7 +76,7 @@ def test_listener_rejects_invalid_or_privileged_port(port: int) -> None:
 
 
 def test_listener_config_validates_ae_titles() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(DomainInvariantError):
         DICOMListenerConfig(ae_title="too-long-ae-title-123")
 
 
