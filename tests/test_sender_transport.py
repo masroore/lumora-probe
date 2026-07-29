@@ -1076,6 +1076,12 @@ def _make_json_logger() -> SenderLogger:
     return logger
 
 
+def _make_json_logger_and_events() -> tuple[SenderLogger, object]:
+    """Return a JSON logger and its parsed-event accessor."""
+    logger = _make_json_logger()
+    return logger, logger._events  # type: ignore[attr-defined]
+
+
 def _send_success_study(
     config: Config, logger: SenderLogger, tmp_path: Path
 ) -> tuple[Sender, StudyBatch, threading.Event]:
