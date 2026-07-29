@@ -56,8 +56,7 @@
 
 ## Tests and verification
 
-- Full pytest suite: 306 passed, 1 skipped before the final Phase 11 test additions; final gate
-  rerun is recorded below.
+- Full pytest suite: **309 passed, 1 skipped**.
 - Ring capacity, age expiry, durable reload, events-only filtering, explicit sessions,
   promotion, PDU/object sinks, torn-line recovery, and active-manifest recovery are covered.
 - `lint-imports --no-cache`: 7 contracts kept, 0 broken.
@@ -65,6 +64,10 @@
 - Representative synthetic workload: 5,000 domain events plus 16,000 PDU records for 500
   instances; 21,000 retained records used 520,380 bytes locally. Ratified thresholds are in
   ADR-0030.
+- Ruff check and format check: passed.
+- BasedPyright (`core`, `shared`): 0 errors, warnings, or notes.
+- Import-linter: 7 contracts kept, 0 broken.
+- Asset drift check and wheel/source distribution build: passed after `npm ci`.
 
 ## Known limitations
 
