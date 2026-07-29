@@ -80,9 +80,11 @@ class InMemoryJobRegistry:
         *,
         clock: Clock | None = None,
         id_generator: IdGenerator | None = None,
+        durable: SQLiteOperationRegistry | None = None,
     ) -> None:
         self.clock = clock if clock is not None else SystemClock()
         self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
+        self.durable = durable
         self._records: dict[str, JobRecord] = {}
         self._tokens: dict[str, CancellationToken] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -108,6 +110,13 @@ class InMemoryJobRegistry:
         token = CancellationToken()
         self._records[operation_id] = record
         self._tokens[operation_id] = token
+        if self.durable is not None:
+            await self.durable.start(
+                operation_id=operation_id,
+                job_type=job_type,
+                parameters=record.parameters,
+                started_at=record.started_at.isoformat(),
+            )
         self._tasks[operation_id] = asyncio.create_task(self._run(record, token, worker))
         snapshot = self._snapshot(record)
         assert snapshot is not None
@@ -144,10 +153,16 @@ class InMemoryJobRegistry:
                 record.interruption_reason = reason
                 record.completed_at = self.clock.now()
                 count += 1
+                if self.durable is not None:
+                    await self.durable.interrupt(operation_id=operation_id, reason=reason)
         return count
 
     async def _run(self, record: JobRecord, token: CancellationToken, worker: JobWorker) -> None:
-        context = JobContext(record.operation_id, token, self._progress)
+        context = JobContext(
+            record.operation_id,
+            token,
+            lambda progress: self._progress(record.operation_id, progress),
+        )
         try:
             outcome = await worker(context)
             if record.state is JobState.INTERRUPTED:
@@ -164,13 +179,19 @@ class InMemoryJobRegistry:
         finally:
             if record.completed_at is None:
                 record.completed_at = self.clock.now()
+            if self.durable is not None and record.state is not JobState.INTERRUPTED:
+                await self.durable.complete(
+                    record.operation_id,
+                    completed_at=record.completed_at.isoformat(),
+                    outcome=record.outcome or record.state.value,
+                    state=record.state.value,
+                )
 
-    async def _progress(self, progress: Mapping[str, Any]) -> None:
-        operation_id = asyncio.current_task()
-        for record in self._records.values():
-            if self._tasks.get(record.operation_id) is operation_id:
-                record.progress = dict(progress)
-                return
+    async def _progress(self, operation_id: str, progress: Mapping[str, Any]) -> None:
+        record = self._records[operation_id]
+        record.progress = dict(progress)
+        if self.durable is not None:
+            await self.durable.update_progress(operation_id, progress)
 
     @staticmethod
     def _snapshot(record: JobRecord | None) -> JobRecord | None:
@@ -227,11 +248,17 @@ class SQLiteOperationRegistry:
             (json.dumps(dict(progress), sort_keys=True), operation_id),
         )
 
-    async def complete(self, operation_id: str, *, completed_at: str, outcome: str) -> None:
+    async def complete(
+        self,
+        operation_id: str,
+        *,
+        completed_at: str,
+        outcome: str,
+        state: str = "completed",
+    ) -> None:
         await self.databases.app.execute_write(
-            "UPDATE jobs SET state = 'completed', completed_at = ?, outcome = ? "
-            "WHERE operation_id = ?",
-            (completed_at, outcome, operation_id),
+            "UPDATE jobs SET state = ?, completed_at = ?, outcome = ? WHERE operation_id = ?",
+            (state, completed_at, outcome, operation_id),
         )
 
     async def mark_running_interrupted(self, *, reason: str) -> int:
@@ -239,6 +266,14 @@ class SQLiteOperationRegistry:
             "UPDATE jobs SET state = 'interrupted', interruption_reason = ? "
             "WHERE state = 'running'",
             (reason,),
+        )
+
+    async def interrupt(self, *, operation_id: str, reason: str) -> None:
+        """Mark one running operation interrupted during an in-memory sweep."""
+        await self.databases.app.execute_write(
+            "UPDATE jobs SET state = 'interrupted', interruption_reason = ? "
+            "WHERE operation_id = ? AND state = 'running'",
+            (reason, operation_id),
         )
 
 

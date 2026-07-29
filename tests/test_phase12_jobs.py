@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
-from lumora_probe.core.operations import InMemoryJobRegistry, JobState
+from lumora_probe.core.config import StartupConfig
+from lumora_probe.core.operations import InMemoryJobRegistry, JobState, SQLiteOperationRegistry
+from lumora_probe.core.paths import DataPaths
+from lumora_probe.core.storage import StorageDatabases
 from tests.doubles.ids import SeededIdGenerator
 
 JOB_ID = "018f0d4e-7b6a-7000-8000-000000000301"
+
+
+def databases(tmp_path: Path) -> StorageDatabases:
+    paths = DataPaths.from_config(StartupConfig(data_dir=tmp_path / "data"))
+    paths.initialise(network_detector=lambda _: False)
+    result = StorageDatabases.from_paths(paths, network_detector=lambda _: False)
+    result.initialise()
+    return result
 
 
 @pytest.mark.asyncio
@@ -75,3 +87,31 @@ async def test_in_memory_job_registry_interrupts_running_jobs() -> None:
     assert result is not None
     assert result.state is JobState.INTERRUPTED
     assert result.interruption_reason == "process restarted"
+
+
+@pytest.mark.asyncio
+async def test_in_memory_job_registry_persists_durable_audit_and_checkpoints(
+    tmp_path: Path,
+) -> None:
+    durable = SQLiteOperationRegistry(databases(tmp_path))
+    registry = InMemoryJobRegistry(
+        id_generator=SeededIdGenerator([JOB_ID]),
+        durable=durable,
+    )
+
+    async def worker(context):
+        await context.report_progress({"confirmed": 2, "total": 2})
+        return "confirmed=2"
+
+    await registry.start("protocol-replay", worker, parameters={"capture_id": "capture-1"})
+    result = await registry.wait(JOB_ID)
+    durable_record = await durable.get(JOB_ID)
+
+    assert result is not None
+    assert result.state is JobState.COMPLETED
+    assert durable_record is not None
+    assert durable_record["job_type"] == "protocol-replay"
+    assert durable_record["parameters"] == {"capture_id": "capture-1"}
+    assert durable_record["state"] == "completed"
+    assert durable_record["progress"] == {"confirmed": 2, "total": 2}
+    assert durable_record["outcome"] == "confirmed=2"
