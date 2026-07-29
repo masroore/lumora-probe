@@ -133,3 +133,45 @@ async def test_association_callbacks_use_thread_safe_event_ingress(free_port: in
         assert all(name != threading.current_thread().name for name in ingress.thread_names)
     finally:
         await listener.stop()
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_association_audit_sink_logs_calling_ae_and_source_ip(free_port: int) -> None:
+    from lumora_probe.associations.network import (
+        DICOMSCUClient,
+        DICOMSCUConfig,
+        LoggingAssociationAuditSink,
+    )
+
+    class Logger:
+        def __init__(self) -> None:
+            self.entries: list[tuple[str, dict[str, object]]] = []
+
+        def info(self, event: str, **values: object) -> None:
+            self.entries.append((event, values))
+
+    logger = Logger()
+    listener = DICOMListener(
+        DICOMListenerConfig(port=free_port),
+        audit_sink=LoggingAssociationAuditSink(logger),
+        clock=SystemClock(),
+        id_generator=_ids(8),
+    )
+    await listener.start()
+    try:
+        result = await DICOMSCUClient(
+            DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="AUDIT-SCU")
+        ).echo()
+        assert result.success is True
+        assert [event for event, _ in logger.entries] == [
+            "association_requested",
+            "association_accepted",
+            "association_released",
+        ]
+        for _, fields in logger.entries:
+            assert fields["calling_ae"] == "AUDIT-SCU"
+            assert fields["source_ip"] == "127.0.0.1"
+            assert fields["association_id"]
+    finally:
+        await listener.stop()

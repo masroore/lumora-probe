@@ -41,6 +41,33 @@ class AssociationEventIngress(Protocol):
     ) -> concurrent.futures.Future[EventEnvelope]: ...
 
 
+class AssociationLogger(Protocol):
+    """Minimal structured logger required by the audit adapter."""
+
+    def info(self, event: str, **values: object) -> object: ...
+
+
+class LoggingAssociationAuditSink:
+    """Emit one structured audit record for every association lifecycle phase."""
+
+    def __init__(self, logger: AssociationLogger) -> None:
+        self.logger = logger
+
+    def __call__(self, record: "AssociationAuditRecord") -> None:
+        self.logger.info(
+            f"association_{record.phase}",
+            association_id=record.association_id,
+            calling_ae=record.calling_ae,
+            called_ae=record.called_ae,
+            source_ip=record.source_host,
+            source_port=record.source_port,
+            occurred_at=record.occurred_at.isoformat(),
+            monotonic_ns=record.monotonic_ns,
+            accepted_contexts=record.accepted_contexts,
+            reason=record.reason,
+        )
+
+
 class AssociationAuditSink(Protocol):
     """Non-blocking callback for association lifecycle observations."""
 
@@ -559,6 +586,8 @@ __all__ = [
     "AssociationAuditRecord",
     "AssociationAuditSink",
     "AssociationEventIngress",
+    "AssociationLogger",
+    "LoggingAssociationAuditSink",
     "AssociationClock",
     "AssociationIdGenerator",
 ]
