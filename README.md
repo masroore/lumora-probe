@@ -147,9 +147,16 @@ arguments, Sender Lite loads `./sender-lite.toml` if present and errors otherwis
 | `2` | invalid CLI/TOML configuration or usage |
 | `130` | interrupted/cancelled before completion |
 
-## Verify locally
+## Shared library
 
-Run the same checks used by CI:
+Both tools share a small internal package, `lumora_lite_common`, which holds the
+genuinely duplicated helpers: the event-logger engine (an `EventLogger` base class that
+`ProbeLogger` and `SenderLogger` extend), portable signal install/restore, config leaf
+validators (port, max PDU, log format, AE title), and DICOM UID validation. See
+ADR-0028 for the scope and the pragmatic-OOP boundary. This is internal to the Lite
+tools and does not share code with the parent `lumora/` project.
+
+## Verify locally
 
 ```console
 python -m pytest -q

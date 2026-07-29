@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import signal
 import sys
 import threading
 import time
 from typing import Any
+
+from lumora_lite_common.signals import install_signal_handlers, restore_signal_handlers
 
 from .catalog import REASON_CONFLICT, CatalogError, build_catalog
 from .config import parse_args
@@ -20,42 +21,17 @@ def _install_signal_handlers(cancel_event: threading.Event, logger: SenderLogger
     First signal sets the cancel event and logs ``cancellation_requested``.
     Subsequent signals raise ``SystemExit(130)`` for immediate termination.
     """
-    if threading.current_thread() is not threading.main_thread():
-        return {}
-
     call_count = {"n": 0}
 
-    def request_cancel(signum: int, _frame: object) -> None:
+    def request_cancel(_signum: int, name: object) -> None:
         call_count["n"] += 1
-        try:
-            name = signal.Signals(signum).name
-        except (AttributeError, ValueError):
-            name = str(signum)
         if call_count["n"] == 1:
             logger.warning("cancellation_requested", signal=name)
             cancel_event.set()
         else:
             raise SystemExit(130)
 
-    previous_handlers: dict[int, Any] = {}
-    for signal_name in ("SIGINT", "SIGTERM", "SIGBREAK"):
-        signal_number = getattr(signal, signal_name, None)
-        if signal_number is None:
-            continue
-        try:
-            previous_handlers[signal_number] = signal.getsignal(signal_number)
-            signal.signal(signal_number, request_cancel)
-        except (OSError, ValueError):
-            previous_handlers.pop(signal_number, None)
-    return previous_handlers
-
-
-def _restore_signal_handlers(previous_handlers: dict[int, Any]) -> None:
-    for signal_number, handler in previous_handlers.items():
-        try:
-            signal.signal(signal_number, handler)
-        except (OSError, ValueError):
-            pass
+    return install_signal_handlers(request_cancel)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -107,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         run_failed_error = str(exc)
         exit_code = 1
     finally:
-        _restore_signal_handlers(previous_handlers)
+        restore_signal_handlers(previous_handlers)
         _emit_final_summary(logger, exit_code, run_failed_reason, run_failed_error, run_started)
 
     return exit_code
@@ -124,7 +100,15 @@ def _run_echo(sender: Sender, logger: SenderLogger, config: Any) -> int:
         status=status_hex,
         duration=result.duration,
     )
-    return 0 if result.success else 1
+    exit_code = 0 if result.success else 1
+    logger.event(
+        "run_completed",
+        "INFO" if exit_code == 0 else "ERROR",
+        mode="echo",
+        duration=result.duration,
+        exit_code=exit_code,
+    )
+    return exit_code
 
 
 def _run_send(
@@ -174,10 +158,11 @@ def _run_send(
 
     study_results = []
     studies = catalog.studies
+    total_studies = len(studies)
     for idx, study in enumerate(studies):
         if cancel_event.is_set():
             break
-        result = sender.send_study(study, cancel_event)
+        result = sender.send_study(study, cancel_event, ordinal=idx + 1, total=total_studies)
         study_results.append(result)
         if idx < len(studies) - 1 and not cancel_event.is_set():
             next_study_uid = studies[idx + 1].study_uid

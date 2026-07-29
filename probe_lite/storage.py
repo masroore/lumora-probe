@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-UID_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
+from lumora_lite_common.uids import is_valid_uid
 
 
 class StorageError(Exception):
@@ -69,6 +68,11 @@ class Storage:
 
 
 def _safe_uid(value: str) -> str:
-    if not value or len(value) > 64 or not UID_PATTERN.fullmatch(value):
+    """Return ``value`` if it is a valid DICOM UID, else raise ``InvalidDatasetError``.
+
+    The shape/length rule is shared via :func:`lumora_lite_common.uids.is_valid_uid`;
+    this wrapper preserves Probe Lite's exception type. See ADR-0028.
+    """
+    if not value or not is_valid_uid(value):
         raise InvalidDatasetError(f"invalid DICOM UID: {value!r}")
     return value

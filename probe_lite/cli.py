@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import signal
 import sys
 import threading
 from typing import Any
+
+from lumora_lite_common.signals import install_signal_handlers, restore_signal_handlers
 
 from .config import parse_args
 from .log import ProbeLogger
@@ -15,42 +16,15 @@ from .receiver import ProbeReceiver
 def _install_signal_handlers(stop_event: threading.Event, logger: ProbeLogger) -> dict[int, Any]:
     """Install portable shutdown handlers and return the previous handlers.
 
-    CPython only permits signal registration from the main thread, and the set of
-    installable signals differs by platform. Probe Lite treats both constraints as
-    capabilities instead of assuming POSIX signal behavior.
+    The install/restore scaffolding is shared; only Probe Lite's single-shot
+    "set the stop event" callback is defined here. See ADR-0028.
     """
-    if threading.current_thread() is not threading.main_thread():
-        return {}
 
-    def request_stop(signum: int, _frame: object) -> None:
-        try:
-            name = signal.Signals(signum).name
-        except (AttributeError, ValueError):
-            name = str(signum)
+    def request_stop(_signum: int, name: object) -> None:
         logger.info("shutdown_requested", signal=name)
         stop_event.set()
 
-    previous_handlers: dict[int, Any] = {}
-    for signal_name in ("SIGINT", "SIGTERM", "SIGBREAK"):
-        signal_number = getattr(signal, signal_name, None)
-        if signal_number is None:
-            continue
-        try:
-            previous_handlers[signal_number] = signal.getsignal(signal_number)
-            signal.signal(signal_number, request_stop)
-        except (OSError, ValueError):
-            # Some signals are exposed by a platform but cannot be installed.
-            previous_handlers.pop(signal_number, None)
-    return previous_handlers
-
-
-def _restore_signal_handlers(previous_handlers: dict[int, Any]) -> None:
-    for signal_number, handler in previous_handlers.items():
-        try:
-            signal.signal(signal_number, handler)
-        except (OSError, ValueError):
-            # Restoration should not mask the receiver's shutdown result.
-            pass
+    return install_signal_handlers(request_stop)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,5 +53,5 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("startup_failed", error=str(exc))
         return 1
     finally:
-        _restore_signal_handlers(previous_handlers)
+        restore_signal_handlers(previous_handlers)
     return 0

@@ -59,6 +59,7 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | ADR | Decision |
 |-----|----------|
 | [0027](ADR-0027-sender-study-association-boundary.md) | Sender Lite uses one exact-fidelity association per Study |
+| [0028](ADR-0028-lite-shared-common-library.md) | Shared `lumora_lite_common` for logger, signals, validators, UIDs |
 
 ## Recorded deviations from the baseline
 

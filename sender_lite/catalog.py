@@ -15,6 +15,8 @@ from pathlib import Path
 from pydicom import dcmread
 from pydicom.uid import UID
 
+from lumora_lite_common import uids as _uids
+
 
 class CatalogError(Exception):
     """A fatal catalog build failure (e.g. invalid input root)."""
@@ -103,31 +105,19 @@ class Catalog:
 def _validate_uid(value: object) -> tuple[str | None, str | None]:
     """Return (uid_str, error_reason) for a UID-valued dataset attribute.
 
-    A None return for error means the UID is valid.
+    Delegates shape/length/validity to :func:`lumora_lite_common.uids.validate_uid`
+    and maps its generic reason categories onto Sender Lite's reason codes. A
+    ``None`` reason means the UID is valid. See ADR-0028.
     """
-    if value is None:
-        return None, REASON_MISSING_UID
-    # pydicom DataElement: unwrap .value
-    if hasattr(value, "value"):
-        value = value.value
-    # Detect multi-valued (pydicom MultiValue)
-    if isinstance(value, list) or type(value).__name__ == "MultiValue":
-        return None, REASON_MULTI_VALUED_UID
-    try:
-        text = str(value)
-    except (TypeError, ValueError):
-        return None, REASON_INVALID_UID
-    if not text:
-        return None, REASON_MISSING_UID
-    try:
-        uid = UID(text)
-    except (TypeError, ValueError):
-        return None, REASON_INVALID_UID
-    if not uid.is_valid:
-        return None, REASON_INVALID_UID
-    if len(uid) > 64:
-        return None, REASON_INVALID_UID
-    return str(uid), None
+    _reason_map = {
+        _uids.REASON_MISSING: REASON_MISSING_UID,
+        _uids.REASON_MULTI_VALUED: REASON_MULTI_VALUED_UID,
+        _uids.REASON_INVALID: REASON_INVALID_UID,
+    }
+    uid, reason = _uids.validate_uid(value)
+    if reason is None:
+        return uid, None
+    return None, _reason_map.get(reason, REASON_INVALID_UID)
 
 
 def _parse_instance_number(value: object) -> int | None:

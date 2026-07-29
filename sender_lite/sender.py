@@ -80,6 +80,11 @@ class Sender:
         self.config = config
         self.logger = logger
 
+    @property
+    def peer(self) -> str:
+        """Engineering peer identifier (host:port) for association correlation."""
+        return f"{self.config.host}:{self.config.port}"
+
     # ------------------------------------------------------------------ echo
     def echo(self) -> EchoResult:
         """Run a single C-ECHO against the configured peer."""
@@ -142,15 +147,30 @@ class Sender:
                     assoc.release()
 
     # ------------------------------------------------------------- send_study
-    def send_study(self, study: StudyBatch, cancel_event: threading.Event) -> StudyResult:
+    def send_study(
+        self,
+        study: StudyBatch,
+        cancel_event: threading.Event,
+        ordinal: int | None = None,
+        total: int | None = None,
+    ) -> StudyResult:
         """Send one Study Batch over a single association."""
         started = time.monotonic()
         instances = study.instances
-        self.logger.info(
-            "study_started",
-            study_uid=study.study_uid,
-            instance_count=len(instances),
-        )
+        series_count = len(study.series)
+        bytes_total = study.total_bytes
+        context_count = len(study.presentation_requirements)
+        study_started_fields: dict[str, object] = {
+            "study_uid": study.study_uid,
+            "series_count": series_count,
+            "instance_count": len(instances),
+            "bytes": bytes_total,
+            "context_count": context_count,
+        }
+        if ordinal is not None and total is not None:
+            study_started_fields["ordinal"] = ordinal
+            study_started_fields["total"] = total
+        self.logger.info("study_started", **study_started_fields)
 
         # Preflight: >128 contexts -> fail all without network
         pairs = sorted(study.presentation_requirements, key=lambda p: (p[0], p[1]))
@@ -218,6 +238,8 @@ class Sender:
                 self.logger.error(
                     "association_rejected",
                     study_uid=study.study_uid,
+                    peer=self.peer,
+                    phase="establish",
                     reason=reason,
                 )
                 failed = tuple(
@@ -231,19 +253,49 @@ class Sender:
             self.logger.info(
                 "association_accepted",
                 study_uid=study.study_uid,
+                peer=self.peer,
                 accepted=len(accepted),
+                rejected=len(rejected_pairs),
             )
+            if self.config.verbose:
+                self.logger.info(
+                    "association_negotiation",
+                    study_uid=study.study_uid,
+                    peer=self.peer,
+                    requested=len(pairs),
+                    accepted=len(accepted),
+                    rejected=len(rejected_pairs),
+                )
+            # Count affected instances per presentation-context pair (plan §14.2).
+            affected_per_pair: dict[tuple[str, str], int] = {}
+            for inst in instances:
+                key = (inst.sop_class_uid, inst.transfer_syntax_uid)
+                affected_per_pair[key] = affected_per_pair.get(key, 0) + 1
             for sop_class, transfer_syntax in rejected_pairs:
+                pair_key = (sop_class, transfer_syntax)
                 self.logger.warning(
                     "presentation_context_rejected",
                     study_uid=study.study_uid,
                     sop_class_uid=sop_class,
                     transfer_syntax_uid=transfer_syntax,
+                    affected_instance_count=affected_per_pair.get(pair_key, 0),
                 )
 
             results: list[InstanceResult] = []
             message_id = 1
             association_usable = True
+
+            def _instance_fields(inst: CatalogInstance) -> dict[str, object]:
+                """Common correlation fields for instance events (plan §14.2)."""
+                return {
+                    "study_uid": study.study_uid,
+                    "series_uid": inst.series_uid,
+                    "sop_instance_uid": inst.sop_instance_uid,
+                    "sop_class_uid": inst.sop_class_uid,
+                    "transfer_syntax_uid": inst.transfer_syntax_uid,
+                    "path": inst.path,
+                    "bytes": inst.size_bytes,
+                }
 
             for inst in instances:
                 key = (inst.sop_class_uid, inst.transfer_syntax_uid)
@@ -275,8 +327,7 @@ class Sender:
                 if reval_failure is not None:
                     self.logger.error(
                         "instance_failed",
-                        study_uid=study.study_uid,
-                        sop_instance_uid=inst.sop_instance_uid,
+                        **_instance_fields(inst),
                         reason=reval_failure,
                     )
                     results.append(
@@ -305,14 +356,16 @@ class Sender:
                             self.logger.error(
                                 "association_aborted",
                                 study_uid=study.study_uid,
+                                peer=self.peer,
+                                phase="store",
                                 reason="association_lost",
                             )
                         continue
                     if status_code == 0x0000:
                         self.logger.info(
                             "instance_sent",
-                            study_uid=study.study_uid,
-                            sop_instance_uid=inst.sop_instance_uid,
+                            **_instance_fields(inst),
+                            status=f"0x{status_code:04X}",
                             duration=round(duration, 3),
                         )
                         results.append(
@@ -331,8 +384,7 @@ class Sender:
                     elif 0xB000 <= status_code <= 0xBFFF:
                         self.logger.warning(
                             "instance_warning",
-                            study_uid=study.study_uid,
-                            sop_instance_uid=inst.sop_instance_uid,
+                            **_instance_fields(inst),
                             status=f"0x{status_code:04X}",
                             duration=round(duration, 3),
                         )
@@ -352,9 +404,10 @@ class Sender:
                     else:
                         self.logger.error(
                             "instance_failed",
-                            study_uid=study.study_uid,
-                            sop_instance_uid=inst.sop_instance_uid,
+                            **_instance_fields(inst),
                             status=f"0x{status_code:04X}",
+                            duration=round(duration, 3),
+                            reason=f"status 0x{status_code:04X}",
                         )
                         results.append(
                             InstanceResult(
@@ -374,15 +427,17 @@ class Sender:
                             self.logger.error(
                                 "association_aborted",
                                 study_uid=study.study_uid,
+                                peer=self.peer,
+                                phase="store",
                                 reason="association_lost",
                             )
                 except Exception as exc:  # noqa: BLE001  -- per-instance failure continuation per plan §10.7
                     duration = time.monotonic() - inst_started
                     self.logger.error(
                         "instance_failed",
-                        study_uid=study.study_uid,
-                        sop_instance_uid=inst.sop_instance_uid,
-                        error=str(exc),
+                        **_instance_fields(inst),
+                        duration=round(duration, 3),
+                        reason=str(exc),
                     )
                     results.append(_failed_instance(inst, reason=str(exc), duration=duration))
                     if not _assoc_usable(assoc):
@@ -390,6 +445,8 @@ class Sender:
                         self.logger.error(
                             "association_aborted",
                             study_uid=study.study_uid,
+                            peer=self.peer,
+                            phase="store",
                             reason="association_lost",
                         )
 
@@ -401,6 +458,8 @@ class Sender:
                 self.logger.error(
                     "association_aborted",
                     study_uid=study.study_uid,
+                    peer=self.peer,
+                    phase="teardown",
                     reason="cancelled" if cancel_event.is_set() else "unusable",
                 )
             else:

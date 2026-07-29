@@ -153,6 +153,8 @@ def test_echo_success_returns_0(
     assert exit_code == 0
     output = capsys.readouterr().out
     assert "echo_completed" in output or "Echo completed" in output
+    # §14.2: run_completed is the universal terminal summary, emitted after echo too.
+    assert "run_completed" in output or "Run completed" in output
 
 
 def test_echo_failure_returns_1(
@@ -168,6 +170,7 @@ def test_echo_failure_returns_1(
     assert exit_code == 1
     output = capsys.readouterr().out
     assert "echo_completed" in output or "Echo completed" in output
+    assert "run_completed" in output or "Run completed" in output
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +310,9 @@ def test_cancellation_returns_130(
     study = _make_study(STUDY_UID_1, [inst])
     catalog = _make_catalog(studies=(study,), scanned_count=1)
 
-    def set_cancel_on_send(study_arg: StudyBatch, cancel_event: threading.Event) -> StudyResult:
+    def set_cancel_on_send(
+        study_arg: StudyBatch, cancel_event: threading.Event, **kwargs: object
+    ) -> StudyResult:
         cancel_event.set()
         return _study_result(cancelled=1)
 

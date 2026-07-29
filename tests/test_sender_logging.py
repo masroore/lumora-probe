@@ -107,9 +107,44 @@ def test_text_each_event_is_one_line() -> None:
 def test_json_events_exclude_phi_fields(phi_field: str) -> None:
     output = io.StringIO()
     logger = SenderLogger("json", output)
-    logger.info("instance_sent", sop_instance_uid="1.2.3", size_bytes=10)
-    logger.warning("instance_warning", sop_instance_uid="1.2.3", status=0x0001)
-    logger.error("instance_failed", sop_instance_uid="1.2.3", reason="status", status=0xA700)
+    # Exercise the full §14.2 instance-event field sets; none of these are PHI.
+    logger.info(
+        "instance_sent",
+        study_uid="1.2.3",
+        series_uid="1.2.3.4",
+        sop_instance_uid="1.2.3.4.5",
+        sop_class_uid="1.2.840.10008.5.1.4.1.1.2",
+        transfer_syntax_uid="1.2.840.10008.1.2",
+        path="/tmp/foo.dcm",
+        bytes=1024,
+        status="0x0000",
+        duration=12.0,
+    )
+    logger.warning(
+        "instance_warning",
+        study_uid="1.2.3",
+        series_uid="1.2.3.4",
+        sop_instance_uid="1.2.3.4.5",
+        sop_class_uid="1.2.840.10008.5.1.4.1.1.2",
+        transfer_syntax_uid="1.2.840.10008.1.2",
+        path="/tmp/foo.dcm",
+        bytes=1024,
+        status="0xB000",
+        duration=12.0,
+    )
+    logger.error(
+        "instance_failed",
+        study_uid="1.2.3",
+        series_uid="1.2.3.4",
+        sop_instance_uid="1.2.3.4.5",
+        sop_class_uid="1.2.840.10008.5.1.4.1.1.2",
+        transfer_syntax_uid="1.2.840.10008.1.2",
+        path="/tmp/foo.dcm",
+        bytes=1024,
+        reason="status",
+        status="0xA700",
+        duration=12.0,
+    )
 
     for line in output.getvalue().splitlines():
         if not line:

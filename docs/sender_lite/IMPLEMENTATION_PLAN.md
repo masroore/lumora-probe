@@ -551,7 +551,10 @@ Implement `SenderLogger` using ProbeLogger's behavior, not Python global logging
 - `json.dumps(..., default=str)` for paths and UIDs;
 - no PHI fields.
 
-Do not refactor ProbeLogger into shared infrastructure in this phase.
+Do not refactor ProbeLogger into shared infrastructure in this phase. *(Superseded by
+ADR-0028: the logger engine now lives in `lumora_lite_common.logging`, with
+`SenderLogger` and `ProbeLogger` as thin subclasses. The original no-sharing stance was
+reversed because the duplication was accidental cost, not intentional isolation.)*
 
 ### 14.2 Required events
 
@@ -985,14 +988,17 @@ Expected:
 
 - Read `CONTEXT.md`, ADR-0027, this plan, `README.md`, `pyproject.toml`, and `docs/probe_lite/README.md` first.
 - Inspect current git diff before editing.
-- Follow Probe Lite patterns; do not refactor Probe Lite unless a failing Sender integration proves it necessary.
+- Follow Probe Lite patterns; do not refactor Probe Lite unless a failing Sender integration proves it necessary. *(Partially superseded by ADR-0028: the genuinely duplicated helpers — logger engine, signal install/restore, config validators, UID checks — now live in `lumora_lite_common`. Probe Lite's SCP/storage/catalog concerns remain untouched.)*
 - Write tests alongside each phase, not after all production files.
 - Keep associations and sends sequential.
 - Never add implicit C-ECHO, retries, transcoding, persistent state, concurrency, or environment variables.
 - Never choose one duplicate SOP file arbitrarily.
 - Never split one Study across associations.
 - Never suppress individual failure detail from the final result.
-- Prefer deletion/simple local duplication over new shared abstractions.
+- Prefer deletion/simple local duplication over new shared abstractions. *(Superseded by
+  ADR-0028 for the four accidental duplications identified there; the general principle
+  still holds — only genuine, byte-identical overlap justified extraction, and only the
+  logger became a class hierarchy.)*
 - Stop and request clarification if implementation would violate an accepted criterion.
 
 ## 24. Library API checkpoints

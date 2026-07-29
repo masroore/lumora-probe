@@ -19,7 +19,7 @@ def test_signal_handlers_are_portable_and_restorable() -> None:
         handler(signal.SIGINT, None)
         assert stop_event.is_set()
     finally:
-        cli._restore_signal_handlers(previous)
+        cli.restore_signal_handlers(previous)
 
 
 def test_signal_registration_is_skipped_outside_main_thread() -> None:

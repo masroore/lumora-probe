@@ -7,6 +7,13 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from lumora_lite_common.config_validators import (
+    validate_ae_title,
+    validate_log_format,
+    validate_max_pdu,
+    validate_port,
+)
+
 DEFAULT_PORT = 11112
 DEFAULT_AE_TITLE = "PROBE_LITE"
 DEFAULT_OUTPUT = Path("./received")
@@ -52,27 +59,13 @@ def _parse_accept_ae(value: str | None) -> frozenset[str] | None:
 
 
 def _validate(config: Config) -> Config:
-    if not 1 <= config.port <= 65535:
-        raise ValueError("port must be between 1 and 65535")
-    if not 1 <= config.max_pdu <= 16_777_215:
-        raise ValueError("max-pdu must be between 1 and 16777215")
-    if config.log_format not in {"text", "json"}:
-        raise ValueError("format must be text or json")
-    for name, value in (("AE title", config.ae_title),):
-        try:
-            encoded = value.encode("ascii")
-        except UnicodeEncodeError as exc:
-            raise ValueError(f"{name} must contain only ASCII characters") from exc
-        if not 1 <= len(encoded) <= 16:
-            raise ValueError(f"{name} must be 1 to 16 ASCII characters")
+    validate_port(config.port)
+    validate_max_pdu(config.max_pdu)
+    validate_log_format(config.log_format)
+    validate_ae_title(config.ae_title, "AE title")
     if config.accept_ae:
         for title in config.accept_ae:
-            try:
-                encoded = title.encode("ascii")
-            except UnicodeEncodeError as exc:
-                raise ValueError("accepted AE titles must contain only ASCII characters") from exc
-            if not 1 <= len(encoded) <= 16:
-                raise ValueError("accepted AE titles must be 1 to 16 ASCII characters")
+            validate_ae_title(title, "accepted AE titles")
     return config
 
 
