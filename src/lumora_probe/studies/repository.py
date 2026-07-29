@@ -263,10 +263,4 @@ def _is_contained(path: Path, root: Path) -> bool:
     return True
 
 
-__all__ = [
-    "CascadeResult",
-    "InstanceProjection",
-    "SeriesProjection",
-    "StudyProjection",
-    "StudyProjectionRepository",
-]
+__all__: tuple[str, ...] = ()
