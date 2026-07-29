@@ -1,0 +1,671 @@
+# Instincts generated from https://github.com/masroore/lumora-probe
+# Generated: 2026-07-29T16:13:27.004Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: lumora-probe-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, docs, test, fix, chore
+
+## Evidence
+
+- 66 commits analyzed
+- Detected conventional commit pattern
+- Examples: chore(lint): make repo-wide ruff check clean, feat(repository): add Lumora Probe package slices
+
+---
+id: lumora-probe-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Commit Length
+
+## Action
+
+Keep commit messages concise (~46 characters)
+
+## Evidence
+
+- Average commit message length: 46 chars
+- Based on 66 commits
+
+---
+id: lumora-probe-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: lumora-probe-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: lumora-probe-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: lumora-probe-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: lumora-probe-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: lumora-probe-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~14x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: lumora-probe-workflow-add-new-domain-slice
+trigger: "when doing add new domain slice"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Add New Domain Slice
+
+## Action
+
+Follow the add-new-domain-slice workflow:
+1. Create new directory under src/lumora_probe/<slice>/
+2. Add __init__.py, api.py, contracts.py, domain.py, repository.py, service.py to the new slice
+3. Update pyproject.toml if necessary
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: src/lumora_probe/*/__init__.py, src/lumora_probe/*/api.py, src/lumora_probe/*/contracts.py
+
+---
+id: lumora-probe-workflow-feature-implementation-with-tests-and-docs
+trigger: "when doing feature implementation with tests and docs"
+confidence: 0.8
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Feature Implementation With Tests And Docs
+
+## Action
+
+Follow the feature-implementation-with-tests-and-docs workflow:
+1. Implement feature in src/lumora_probe/*/*.py
+2. Add or update relevant test files in tests/
+3. Add or update documentation in docs/ or docs/adr/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~6x per month
+- Files: src/lumora_probe/*/*.py, tests/test_*.py, docs/**/*.md
+
+---
+id: lumora-probe-workflow-add-or-update-generated-catalog-or-openapi
+trigger: "when doing add or update generated catalog or openapi"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Add Or Update Generated Catalog Or Openapi
+
+## Action
+
+Follow the add-or-update-generated-catalog-or-openapi workflow:
+1. Generate new catalog or OpenAPI JSON in docs/generated/
+2. Update or add generator script in scripts/
+3. Add or update related test in tests/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: docs/generated/*.json, scripts/generate_*.py, tests/test_*.py
+
+---
+id: lumora-probe-workflow-add-or-update-core-infrastructure-component
+trigger: "when doing add or update core infrastructure component"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Add Or Update Core Infrastructure Component
+
+## Action
+
+Follow the add-or-update-core-infrastructure-component workflow:
+1. Implement or modify component in src/lumora_probe/core/*.py
+2. Add or update test in tests/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: src/lumora_probe/core/*.py, tests/test_*.py
+
+---
+id: lumora-probe-workflow-add-or-update-test-fixtures-and-harnesses
+trigger: "when doing add or update test fixtures and harnesses"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Add Or Update Test Fixtures And Harnesses
+
+## Action
+
+Follow the add-or-update-test-fixtures-and-harnesses workflow:
+1. Add or update fixture generator script in scripts/
+2. Add or update fixture data in tests/fixtures/
+3. Add or update test harness in tests/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: scripts/generate_*.py, tests/fixtures/**/*, tests/golden/**/*
+
+---
+id: lumora-probe-workflow-update-repository-quality-or-ci-tooling
+trigger: "when doing update repository quality or ci tooling"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/masroore/lumora-probe
+---
+
+# Lumora Probe Workflow Update Repository Quality Or Ci Tooling
+
+## Action
+
+Follow the update-repository-quality-or-ci-tooling workflow:
+1. Update pyproject.toml or other config files
+2. Update .github/workflows/*.yml
+3. Update or add linting/formatting configs
+4. Update tests if necessary
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: pyproject.toml, .github/workflows/*.yml, .importlinter
+
+---
+id: lumora-probe-instinct-file-naming
+trigger: "When creating a new Python file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in src/lumora_probe/*/*.py
+- Naming conventions: files: snake_case
+
+---
+id: lumora-probe-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Naming conventions: functions: camelCase
+
+---
+id: lumora-probe-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Naming conventions: classes: PascalCase
+
+---
+id: lumora-probe-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Naming conventions: constants: SCREAMING_SNAKE_CASE
+
+---
+id: lumora-probe-instinct-import-style
+trigger: "When importing modules within the package"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- importStyle: relative
+- Pattern in src/lumora_probe/*/*.py
+
+---
+id: lumora-probe-instinct-export-style
+trigger: "When exporting symbols from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- exportStyle: named
+
+---
+id: lumora-probe-instinct-test-location
+trigger: "When adding tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Test Location
+
+## Action
+
+Place test files in the separate tests/ directory, not alongside source files
+
+## Evidence
+
+- testLocation: separate
+- Pattern in tests/test_*.py
+
+---
+id: lumora-probe-instinct-test-naming
+trigger: "When naming a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Test Naming
+
+## Action
+
+Prefix the filename with test_ (e.g., test_feature.py)
+
+## Evidence
+
+- Pattern in tests/test_*.py
+
+---
+id: lumora-probe-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- testTypes: unit
+- Pattern in tests/test_*.py
+
+---
+id: lumora-probe-instinct-test-framework
+trigger: "When setting up a new test"
+confidence: 0.3
+domain: testing
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Test Framework
+
+## Action
+
+Check for a Python test framework (e.g., pytest), but confirm since framework is unknown
+
+## Evidence
+
+- testing.framework: unknown
+
+---
+id: lumora-probe-instinct-git-commit-format
+trigger: "When making a commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Git Commit Format
+
+## Action
+
+Use Conventional Commits format: <type>(<scope>): <description>
+
+## Evidence
+
+- Pattern in commit: chore(lint): make repo-wide ruff check clean
+- Pattern in commit: feat(repository): add Lumora Probe package slices
+- commits.type: conventional
+
+---
+id: lumora-probe-instinct-git-commit-prefix
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Git Commit Prefix
+
+## Action
+
+Start the message with one of: feat, fix, chore, docs, test, ci
+
+## Evidence
+
+- commits.prefixes: [feat, docs, test, fix, chore, ci]
+- Pattern in commit: test(architecture): enforce module import boundaries
+
+---
+id: lumora-probe-instinct-add-new-domain-slice
+trigger: "When introducing a new logical domain or feature area"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Add New Domain Slice
+
+## Action
+
+Create a new directory under src/lumora_probe/<slice>/ and add __init__.py, api.py, contracts.py, domain.py, repository.py, service.py; update pyproject.toml if needed
+
+## Evidence
+
+- Workflow: add-new-domain-slice
+- Pattern in files: src/lumora_probe/*/api.py, ...
+- Commit: Add __init__.py, api.py, contracts.py, domain.py, repository.py, service.py to the new slice
+
+---
+id: lumora-probe-instinct-feature-implementation-with-tests-and-docs
+trigger: "When adding a new feature or major enhancement"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Feature Implementation With Tests And Docs
+
+## Action
+
+Implement the feature in src/lumora_probe/*/*.py, add or update relevant tests in tests/, and update documentation in docs/
+
+## Evidence
+
+- Workflow: feature-implementation-with-tests-and-docs
+- Commit sequence: Implement feature, Add tests, Update documentation
+
+---
+id: lumora-probe-instinct-add-or-update-generated-catalog-or-openapi
+trigger: "When updating the event catalog or OpenAPI schema after API/event changes"
+confidence: 0.88
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Add Or Update Generated Catalog Or Openapi
+
+## Action
+
+Generate new catalog/OpenAPI JSON in docs/generated/, update/add generator script in scripts/, and add/update related tests in tests/
+
+## Evidence
+
+- Workflow: add-or-update-generated-catalog-or-openapi
+- Files: docs/generated/*.json, scripts/generate_*.py, tests/test_*.py
+
+---
+id: lumora-probe-instinct-add-or-update-core-infrastructure-component
+trigger: "When adding or modifying a core infrastructure component"
+confidence: 0.87
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Add Or Update Core Infrastructure Component
+
+## Action
+
+Implement or modify the component in src/lumora_probe/core/*.py and add/update corresponding tests in tests/
+
+## Evidence
+
+- Workflow: add-or-update-core-infrastructure-component
+- Files: src/lumora_probe/core/*.py, tests/test_*.py
+
+---
+id: lumora-probe-instinct-add-or-update-test-fixtures-and-harnesses
+trigger: "When introducing new test data or fixture generation utilities"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Add Or Update Test Fixtures And Harnesses
+
+## Action
+
+Add/update fixture generator script in scripts/, fixture data in tests/fixtures/, and test harness in tests/
+
+## Evidence
+
+- Workflow: add-or-update-test-fixtures-and-harnesses
+- Files: scripts/generate_*.py, tests/fixtures/**/*, tests/golden/**/*, tests/test_*.py
+
+---
+id: lumora-probe-instinct-update-repository-quality-or-ci-tooling
+trigger: "When enforcing or improving code quality or CI pipelines"
+confidence: 0.86
+domain: workflow
+source: repo-analysis
+source_repo: masroore/lumora-probe
+---
+
+# Lumora Probe Instinct Update Repository Quality Or Ci Tooling
+
+## Action
+
+Update pyproject.toml or other config files, .github/workflows/*.yml, linting/formatting configs, and update tests if necessary
+
+## Evidence
+
+- Workflow: update-repository-quality-or-ci-tooling
+- Files: pyproject.toml, .github/workflows/*.yml, .importlinter, tests/test_*.py
+
