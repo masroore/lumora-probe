@@ -18,6 +18,7 @@ from lumora_probe.core.logging import new_correlation_id
 from .capture_routes import create_capture_router
 from .contracts import ErrorResponse
 from .resources import ResourceStore
+from .study_routes import create_projection_routers
 
 API_PREFIX = "/api/v1"
 
@@ -61,7 +62,11 @@ async def lumora_error_handler(request: Request, error: Exception) -> JSONRespon
     )
 
 
-def create_app(*, capture_store: ResourceStore | None = None) -> FastAPI:
+def create_app(
+    *,
+    capture_store: ResourceStore | None = None,
+    projection_store: ResourceStore | None = None,
+) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
     application = FastAPI(
@@ -72,6 +77,8 @@ def create_app(*, capture_store: ResourceStore | None = None) -> FastAPI:
     application.add_exception_handler(LumoraError, lumora_error_handler)
     application.include_router(api_v1_router)
     application.include_router(create_capture_router(capture_store), prefix=API_PREFIX)
+    for router in create_projection_routers(projection_store):
+        application.include_router(router, prefix=API_PREFIX)
     return application
 
 
