@@ -15,6 +15,7 @@ from lumora_probe.core.errors import (
 )
 from lumora_probe.core.logging import new_correlation_id
 
+from .association_routes import create_association_router
 from .capture_routes import create_capture_router
 from .contracts import ErrorResponse
 from .resources import ResourceStore
@@ -66,6 +67,7 @@ def create_app(
     *,
     capture_store: ResourceStore | None = None,
     projection_store: ResourceStore | None = None,
+    association_store: ResourceStore | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -79,6 +81,7 @@ def create_app(
     application.include_router(create_capture_router(capture_store), prefix=API_PREFIX)
     for router in create_projection_routers(projection_store):
         application.include_router(router, prefix=API_PREFIX)
+    application.include_router(create_association_router(association_store), prefix=API_PREFIX)
     return application
 
 
