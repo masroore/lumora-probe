@@ -36,6 +36,7 @@ packages = [
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.0,<3.0",
     "pytest>=9.0",
     "ruff>=0.12",
 ]
