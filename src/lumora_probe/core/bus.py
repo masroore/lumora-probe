@@ -130,6 +130,7 @@ class EventSubscription:
             self._queue.get_nowait()
             self._queue.task_done()
             self._events_dropped += 1
+            self._bus.record_events_dropped(self, event)
         self._queue.put_nowait(event)
 
     async def deliver(self, event: EventEnvelope, budget_seconds: float) -> None:
@@ -393,6 +394,22 @@ class EventBus:
                     "event_id": event.event_id,
                 },
                 severity=EventSeverity.ERROR,
+                causation_id=event.event_id,
+            )
+        )
+
+    def record_events_dropped(self, subscription: EventSubscription, event: EventEnvelope) -> None:
+        self._diagnostics.append(
+            self._diagnostic_event(
+                "EventsDropped",
+                {
+                    "source": "event-bus",
+                    "subscription_id": subscription.subscription_id,
+                    "dropped_count": subscription.events_dropped,
+                    "dropped_event_id": event.event_id,
+                    "dropped_sequence": event.sequence,
+                },
+                severity=EventSeverity.WARNING,
                 causation_id=event.event_id,
             )
         )

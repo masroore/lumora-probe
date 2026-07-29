@@ -86,6 +86,8 @@ async def test_ui_channel_drops_oldest_and_exposes_exact_gap_count() -> None:
     assert delivered == [4, 5]
     assert subscription.events_dropped == 3
     assert 5 - len(delivered) == subscription.events_dropped
+    assert bus.diagnostics[-1].event_name == "EventsDropped"
+    assert bus.diagnostics[-1].payload["dropped_count"] == 3
 
 
 @pytest.mark.asyncio
