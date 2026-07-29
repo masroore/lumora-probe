@@ -2,14 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: documentation-only
+## Status: implementation through Phase 12
 
-There is no implementation yet. The repo is `pyproject.toml`, a placeholder `main.py`,
-and ~11.7k lines of specification under `docs/`. Per `docs/planning/08-implementation-order.md`
-§6, work starts at Phase 01 Stage 1, task **T-01-01-02** (write ADR-0027 to settle which
-document is the authoritative PRD — `02-product-requirements-document.md` and
-`Lumora-Probe-PRD.md` both exist and conflict). Do not start writing feature code before
-that is resolved.
+Implementation is active through Phase 12 (Replay Engine). Phase completion reports in
+`docs/planning/phase-*-completion-report.md` and task reports are the current status record.
+Do not start Phase 13 until the Phase 12 acceptance report is reviewed and accepted.
 
 ## What the product is
 
