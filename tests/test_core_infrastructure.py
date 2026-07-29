@@ -235,3 +235,25 @@ def test_logging_redacts_sensitive_values() -> None:
     result = redact_sensitive(None, "info", {"password": "secret", "nested": {"token": "x"}})
     assert result["password"] == "[REDACTED]"
     assert result["nested"] == {"token": "[REDACTED]"}
+
+
+def test_dicom_bind_host_is_independent_and_has_network_gate(tmp_path: Path) -> None:
+    config, sources = load_startup_config(
+        environ={
+            "LUMORA_DATA_DIR": str(tmp_path / "data"),
+            "LUMORA_DICOM_BIND_HOST": "127.0.0.2",
+        },
+        cwd=tmp_path,
+    )
+    assert config.bind_host == "127.0.0.1"
+    assert config.dicom_bind_host == "127.0.0.2"
+    assert sources["dicom_bind_host"] is ConfigSource.ENV
+
+    with pytest.raises(NetworkExposureError, match="dicom_bind_host"):
+        load_startup_config(
+            environ={
+                "LUMORA_DATA_DIR": str(tmp_path / "data"),
+                "LUMORA_DICOM_BIND_HOST": "0.0.0.0",
+            },
+            cwd=tmp_path,
+        )

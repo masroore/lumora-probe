@@ -36,6 +36,7 @@ class StartupConfig(BaseSettings):
     captures_root: Path | None = None
     additional_capture_roots: tuple[Path, ...] = ()
     bind_host: str = "127.0.0.1"
+    dicom_bind_host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
     dicom_port: int = Field(default=11112, ge=1, le=65535)
     allow_unauthenticated_network: bool = False
@@ -43,7 +44,7 @@ class StartupConfig(BaseSettings):
     shutdown_grace_seconds: float = Field(default=10.0, gt=0, le=300)
     read_only: bool = False
 
-    @field_validator("bind_host")
+    @field_validator("bind_host", "dicom_bind_host")
     @classmethod
     def validate_bind_host(cls, value: str) -> str:
         candidate = value.strip()
@@ -84,6 +85,7 @@ _ENV_NAMES: dict[str, str] = {
     "captures_root": "LUMORA_CAPTURES_ROOT",
     "additional_capture_roots": "LUMORA_ADDITIONAL_CAPTURE_ROOTS",
     "bind_host": "LUMORA_BIND_HOST",
+    "dicom_bind_host": "LUMORA_DICOM_BIND_HOST",
     "port": "LUMORA_PORT",
     "dicom_port": "LUMORA_DICOM_PORT",
     "allow_unauthenticated_network": "LUMORA_ALLOW_UNAUTHENTICATED_NETWORK",
@@ -212,20 +214,22 @@ def _normalise_file_key(key: str) -> str:
 
 
 def _validate_network_gate(config: StartupConfig, sources: Mapping[str, ConfigSource]) -> None:
-    try:
-        address = ipaddress.ip_address(config.bind_host)
-        is_loopback = address.is_loopback
-    except ValueError:
-        is_loopback = config.bind_host.lower() in {"localhost", "localhost.localdomain"}
-    if not is_loopback and not config.allow_unauthenticated_network:
-        source = sources.get("bind_host", ConfigSource.DEFAULT)
-        raise NetworkExposureError(
-            code="LUMORA-CORE-NETWORK-001",
-            message=f"Refusing non-loopback bind {config.bind_host!r} without acknowledgment",
-            remediation="Bind to 127.0.0.1 or set allow_unauthenticated_network=true / "
-            "LUMORA_ALLOW_UNAUTHENTICATED_NETWORK=true / --trust-network.",
-            context={"bind_host": config.bind_host, "source": source.value},
-        )
+    for field_name in ("bind_host", "dicom_bind_host"):
+        host = getattr(config, field_name)
+        try:
+            address = ipaddress.ip_address(host)
+            is_loopback = address.is_loopback
+        except ValueError:
+            is_loopback = host.lower() in {"localhost", "localhost.localdomain"}
+        if not is_loopback and not config.allow_unauthenticated_network:
+            source = sources.get(field_name, ConfigSource.DEFAULT)
+            raise NetworkExposureError(
+                code="LUMORA-CORE-NETWORK-001",
+                message=f"Refusing non-loopback {field_name} {host!r} without acknowledgment",
+                remediation="Bind to 127.0.0.1 or set allow_unauthenticated_network=true / "
+                "LUMORA_ALLOW_UNAUTHENTICATED_NETWORK=true / --trust-network.",
+                context={field_name: host, "source": source.value},
+            )
 
 
 def load_startup_config(
