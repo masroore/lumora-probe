@@ -404,3 +404,35 @@ async def test_inline_relay_forwards_c_store_and_publishes_enrichment_events(
     finally:
         await relay.stop()
         await upstream.stop()
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_pdu_trace_is_written_beside_bus_and_not_published_as_events(
+    free_port: int, tmp_path: Path
+) -> None:
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+    from lumora_probe.associations.relay import PDUTraceWriter
+
+    ingress = _RecordingIngress()
+    with PDUTraceWriter(tmp_path / "pdus.jsonl") as writer:
+        listener = DICOMListener(
+            DICOMListenerConfig(port=free_port),
+            event_ingress=ingress,
+            pdu_trace_sink=writer,
+            clock=SystemClock(),
+            id_generator=_ids(20),
+        )
+        await listener.start()
+        try:
+            result = await DICOMSCUClient(
+                DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="TRACE-SCU")
+            ).echo()
+            assert result.success is True
+        finally:
+            await listener.stop()
+
+    rows = (tmp_path / "pdus.jsonl").read_text(encoding="utf-8").splitlines()
+    assert rows
+    assert all('"association_id"' in row for row in rows)
+    assert all(event.event_name != "PDUReceived" for event in ingress.events)

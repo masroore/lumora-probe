@@ -240,9 +240,15 @@ class PDUTraceWriter:
         self._handle = self.path.open("ab")
 
     def append(self, record: PDUTraceRecord) -> None:
-        self._handle.write(json.dumps(record.as_dict(), separators=(",", ":")).encode("utf-8"))
+        self.append_mapping(record.as_dict())
+
+    def append_mapping(self, record: Mapping[str, object]) -> None:
+        self._handle.write(json.dumps(dict(record), separators=(",", ":")).encode("utf-8"))
         self._handle.write(b"\n")
         self._handle.flush()
+
+    def __call__(self, record: Mapping[str, object]) -> None:
+        self.append_mapping(record)
 
     def flush(self) -> None:
         self._handle.flush()

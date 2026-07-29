@@ -6,7 +6,7 @@ import asyncio
 import concurrent.futures
 import copy
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -79,6 +79,12 @@ class CStoreSink(Protocol):
     """Optional local persistence callback for a received C-STORE event."""
 
     def __call__(self, event: Any) -> int: ...
+
+
+class PDUTraceSink(Protocol):
+    """Off-bus sink for compact protocol trace rows."""
+
+    def __call__(self, record: Mapping[str, object]) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +350,7 @@ class DICOMListener:
         audit_sink: AssociationAuditSink | None = None,
         event_ingress: AssociationEventIngress | None = None,
         c_store_sink: CStoreSink | None = None,
+        pdu_trace_sink: PDUTraceSink | None = None,
         clock: AssociationClock | None = None,
         id_generator: AssociationIdGenerator | None = None,
     ) -> None:
@@ -351,6 +358,7 @@ class DICOMListener:
         self.audit_sink = audit_sink
         self.event_ingress = event_ingress
         self.c_store_sink = c_store_sink
+        self.pdu_trace_sink = pdu_trace_sink
         self.clock = clock
         self.id_generator = id_generator
         self.ae: Any | None = None
@@ -459,7 +467,7 @@ class DICOMListener:
     def _handlers(self) -> list[tuple[Any, Callable[..., Any]]]:
         from pynetdicom import evt
 
-        return [
+        handlers: list[tuple[Any, Callable[..., Any]]] = [
             (evt.EVT_REQUESTED, self._on_requested),
             (evt.EVT_ACCEPTED, self._on_accepted),
             (evt.EVT_REJECTED, self._on_rejected),
@@ -468,6 +476,14 @@ class DICOMListener:
             (evt.EVT_C_ECHO, self._on_c_echo),
             (evt.EVT_C_STORE, self._on_c_store),
         ]
+        if self.pdu_trace_sink is not None:
+            handlers.extend(
+                [
+                    (evt.EVT_PDU_RECV, self._on_pdu_received),
+                    (evt.EVT_PDU_SENT, self._on_pdu_sent),
+                ]
+            )
+        return handlers
 
     def _on_requested(self, event: Any) -> None:
         association = event.assoc
@@ -510,6 +526,37 @@ class DICOMListener:
         reason = str(getattr(getattr(association, "dul", None), "abort_source", "unknown"))
         self._emit(state, "aborted", reason=reason)
         self._forget(association)
+
+    def _on_pdu_received(self, event: Any) -> None:
+        self._trace_pdu(event, "received")
+
+    def _on_pdu_sent(self, event: Any) -> None:
+        self._trace_pdu(event, "sent")
+
+    def _trace_pdu(self, event: Any, direction: str) -> None:
+        if self.pdu_trace_sink is None:
+            return
+        state = self._state_for(event.assoc)
+        pdu = getattr(event, "pdu", None)
+        raw = b""
+        try:
+            encoded = pdu.encode() if pdu is not None else b""
+            raw = encoded if isinstance(encoded, bytes) else bytes(encoded)
+        except Exception:  # noqa: BLE001 - malformed PDU still receives a trace row
+            raw = b""
+        declared_length = int.from_bytes(raw[2:6], "big") if len(raw) >= 6 else None
+        self.pdu_trace_sink(
+            {
+                "association_id": state.association_id,
+                "direction": direction,
+                "pdu_type": type(pdu).__name__ if pdu is not None else "Unknown",
+                "length": len(raw),
+                "declared_length": declared_length,
+                "presentation_context_ids": _pdu_context_ids(pdu),
+                "pdv_boundaries": _pdu_boundaries(pdu),
+                "monotonic_ns": self.clock.monotonic_ns() if self.clock else 0,
+            }
+        )
 
     def _on_c_echo(self, event: Any) -> int:
         self._publish_dimse_event(
@@ -694,6 +741,26 @@ def _event_name_for_phase(phase: str) -> str:
         raise ValueError(f"unsupported association phase: {phase}") from exc
 
 
+def _pdu_context_ids(pdu: Any) -> tuple[int, ...]:
+    values: list[int] = []
+    for item in getattr(pdu, "presentation_data_values", ()) or ():
+        value = getattr(item, "presentation_context_id", None)
+        if type(value) is int:
+            values.append(value)
+    return tuple(values)
+
+
+def _pdu_boundaries(pdu: Any) -> tuple[tuple[int, int], ...]:
+    values: list[tuple[int, int]] = []
+    offset = 0
+    for item in getattr(pdu, "presentation_data_values", ()) or ():
+        value = getattr(item, "presentation_data_value", b"")
+        raw = value if isinstance(value, bytes) else bytes(value)
+        values.append((offset, len(raw)))
+        offset += len(raw)
+    return tuple(values)
+
+
 def _c_store_payload(event: Any) -> dict[str, object]:
     request = getattr(event, "request", None)
     dataset = getattr(event, "dataset", None)
@@ -762,4 +829,5 @@ __all__ = [
     "AssociationClock",
     "AssociationIdGenerator",
     "CStoreSink",
+    "PDUTraceSink",
 ]
