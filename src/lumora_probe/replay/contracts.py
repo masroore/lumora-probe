@@ -7,6 +7,7 @@ from typing import Protocol
 
 from lumora_probe.associations.contracts import DICOMStoreResult
 from lumora_probe.shared.events import EventEnvelope
+from lumora_probe.shared.value_objects import NetworkEndpoint
 
 
 class EventPublisher(Protocol):
@@ -40,15 +41,32 @@ class ProtocolReplayDataset:
 
 
 @dataclass(frozen=True, slots=True)
+class ProtocolReplayPolicy:
+    """Explicit target, allowlist, and write mode for one protocol replay."""
+
+    target: NetworkEndpoint | None = None
+    allowed_targets: frozenset[NetworkEndpoint] = frozenset()
+    dry_run: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class ProtocolReplayResult:
     """C-STORE results produced by one protocol replay."""
 
     results: tuple[DICOMStoreResult, ...]
+    target: NetworkEndpoint
+    dry_run: bool
+    planned_count: int
 
     @property
     def count(self) -> int:
         """Return the number of datasets attempted during replay."""
         return len(self.results)
+
+    @property
+    def planned(self) -> int:
+        """Return the number of datasets planned, including dry-run datasets."""
+        return self.planned_count
 
     @property
     def success_count(self) -> int:

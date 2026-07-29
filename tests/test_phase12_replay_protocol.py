@@ -12,9 +12,10 @@ from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian
 
 from lumora_probe.associations.contracts import DICOMSCUConfig, DICOMStoreResult
 from lumora_probe.associations.network import DICOMSCUClient
-from lumora_probe.replay.contracts import ProtocolReplayDataset
+from lumora_probe.replay.contracts import ProtocolReplayDataset, ProtocolReplayPolicy
 from lumora_probe.replay.service import ProtocolReplayService
 from lumora_probe.shared.errors import ReplayDomainError
+from lumora_probe.shared.value_objects import NetworkEndpoint
 
 
 class FakeDatasetSender:
@@ -25,6 +26,11 @@ class FakeDatasetSender:
     async def send_dataset(self, data: bytes, *, transfer_syntax: str) -> DICOMStoreResult:
         self.calls.append((data, transfer_syntax))
         return next(self.results)
+
+
+def policy(*, dry_run: bool = False):
+    target = NetworkEndpoint("127.0.0.1", 11112)
+    return ProtocolReplayPolicy(target=target, allowed_targets=frozenset({target}), dry_run=dry_run)
 
 
 def dataset(index: int, *, monotonic_ns: int) -> ProtocolReplayDataset:
@@ -49,7 +55,7 @@ async def test_protocol_replay_sends_order_and_reconstructs_monotonic_timing() -
     async def sleeper(delay: float) -> None:
         sleeps.append(delay)
 
-    result = await ProtocolReplayService(sender, sleeper=sleeper).replay(
+    result = await ProtocolReplayService(sender, policy=policy(), sleeper=sleeper).replay(
         [
             dataset(0, monotonic_ns=100),
             dataset(1, monotonic_ns=2_100),
@@ -64,6 +70,7 @@ async def test_protocol_replay_sends_order_and_reconstructs_monotonic_timing() -
     assert result.count == 3
     assert result.success_count == 2
     assert result.failure_count == 1
+    assert result.planned == 3
 
 
 @pytest.mark.asyncio
@@ -71,7 +78,7 @@ async def test_protocol_replay_rejects_non_monotonic_input_before_network_send()
     sender = FakeDatasetSender([])
 
     with pytest.raises(ReplayDomainError, match="not monotonic"):
-        await ProtocolReplayService(sender).replay(
+        await ProtocolReplayService(sender, policy=policy()).replay(
             [dataset(0, monotonic_ns=2), dataset(1, monotonic_ns=1)],
             capture_fidelity="protocol",
         )
@@ -87,7 +94,7 @@ async def test_protocol_replay_refuses_capture_without_protocol_stream(
     sender = FakeDatasetSender([])
 
     with pytest.raises(ReplayDomainError, match="pdus.jsonl"):
-        await ProtocolReplayService(sender).replay(
+        await ProtocolReplayService(sender, policy=policy()).replay(
             [dataset(0, monotonic_ns=1)],
             capture_fidelity=capture_fidelity,
         )
@@ -100,12 +107,54 @@ async def test_protocol_replay_refuses_partial_promoted_window_before_network_se
     sender = FakeDatasetSender([])
 
     with pytest.raises(ReplayDomainError, match="partial capture"):
-        await ProtocolReplayService(sender).replay(
+        await ProtocolReplayService(sender, policy=policy()).replay(
             [dataset(0, monotonic_ns=1)],
             capture_fidelity="protocol",
             partial=True,
             incomplete_aggregates=("association-1",),
         )
+
+    assert sender.calls == []
+
+
+@pytest.mark.asyncio
+async def test_protocol_replay_dry_run_does_not_send_to_target() -> None:
+    sender = FakeDatasetSender([])
+    target = NetworkEndpoint("127.0.0.1", 11112)
+    result = await ProtocolReplayService(
+        sender,
+        policy=ProtocolReplayPolicy(
+            target=target, allowed_targets=frozenset({target}), dry_run=True
+        ),
+    ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
+
+    assert result.dry_run
+    assert result.planned == 1
+    assert result.count == 0
+    assert sender.calls == []
+
+
+@pytest.mark.asyncio
+async def test_protocol_replay_requires_explicit_allowlisted_target() -> None:
+    sender = FakeDatasetSender([])
+    target = NetworkEndpoint("127.0.0.1", 11112)
+
+    with pytest.raises(ReplayDomainError, match="explicitly configured target"):
+        await ProtocolReplayService(
+            sender,
+            policy=ProtocolReplayPolicy(allowed_targets=frozenset({target})),
+        ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
+
+    other = NetworkEndpoint("127.0.0.1", 11113)
+    with pytest.raises(ReplayDomainError, match="not allowlisted"):
+        await ProtocolReplayService(
+            sender,
+            policy=ProtocolReplayPolicy(
+                target=other,
+                allowed_targets=frozenset({target}),
+                dry_run=False,
+            ),
+        ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
 
     assert sender.calls == []
 

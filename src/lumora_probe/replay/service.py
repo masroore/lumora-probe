@@ -11,11 +11,13 @@ from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreRe
 from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.events import EventEnvelope
+from lumora_probe.shared.value_objects import NetworkEndpoint
 
 from .contracts import (
     EventPublisher,
     EventReplayResult,
     ProtocolReplayDataset,
+    ProtocolReplayPolicy,
     ProtocolReplayResult,
 )
 
@@ -29,9 +31,11 @@ class ProtocolReplayService:
         self,
         sender: DICOMDatasetSender,
         *,
+        policy: ProtocolReplayPolicy,
         sleeper: ReplaySleeper | None = None,
     ) -> None:
         self.sender = sender
+        self.policy = policy
         self.sleeper = sleeper if sleeper is not None else asyncio.sleep
 
     async def replay(
@@ -46,9 +50,18 @@ class ProtocolReplayService:
         """Send datasets in persisted order at original or scaled timing."""
         _require_protocol_fidelity(capture_fidelity)
         _require_complete_capture(partial, incomplete_aggregates)
+        target = _validate_protocol_policy(self.policy)
         _validate_speed(speed)
         source_datasets = tuple(datasets)
         _validate_protocol_monotonic_order(source_datasets)
+
+        if self.policy.dry_run:
+            return ProtocolReplayResult(
+                results=(),
+                target=target,
+                dry_run=True,
+                planned_count=len(source_datasets),
+            )
 
         results: list[DICOMStoreResult] = []
         for previous, dataset in _with_previous_dataset(source_datasets):
@@ -62,7 +75,12 @@ class ProtocolReplayService:
                     dataset.raw_bytes, transfer_syntax=dataset.transfer_syntax
                 )
             )
-        return ProtocolReplayResult(tuple(results))
+        return ProtocolReplayResult(
+            results=tuple(results),
+            target=target,
+            dry_run=False,
+            planned_count=len(source_datasets),
+        )
 
 
 class EventReplayService:
@@ -154,6 +172,30 @@ def _require_complete_capture(partial: bool, incomplete_aggregates: Iterable[str
             remediation="Promote a window containing the complete association negotiation.",
             context={"partial": True, "incomplete_aggregates": incomplete},
         )
+
+
+def _validate_protocol_policy(policy: ProtocolReplayPolicy) -> NetworkEndpoint:
+    if policy.target is None:
+        raise ReplayDomainError(
+            code="LUMORA-REPLAY-GUARD-001",
+            message="Protocol replay requires an explicitly configured target",
+            remediation="Configure the target for this replay; never inherit it from the capture.",
+            context={"target": None},
+        )
+    if not isinstance(policy.dry_run, bool):
+        raise TypeError("protocol replay dry_run must be a boolean")
+    assert policy.target is not None
+    if policy.target not in policy.allowed_targets:
+        raise ReplayDomainError(
+            code="LUMORA-REPLAY-GUARD-002",
+            message=f"Protocol replay target {policy.target} is not allowlisted",
+            remediation="Add the explicit target to the protocol replay allowlist.",
+            context={
+                "target": str(policy.target),
+                "allowlist": tuple(str(target) for target in policy.allowed_targets),
+            },
+        )
+    return policy.target
 
 
 def _validate_monotonic_order(events: tuple[EventEnvelope, ...]) -> None:
