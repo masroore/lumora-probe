@@ -96,6 +96,21 @@ async def test_protocol_replay_refuses_capture_without_protocol_stream(
 
 
 @pytest.mark.asyncio
+async def test_protocol_replay_refuses_partial_promoted_window_before_network_send() -> None:
+    sender = FakeDatasetSender([])
+
+    with pytest.raises(ReplayDomainError, match="partial capture"):
+        await ProtocolReplayService(sender).replay(
+            [dataset(0, monotonic_ns=1)],
+            capture_fidelity="protocol",
+            partial=True,
+            incomplete_aggregates=("association-1",),
+        )
+
+    assert sender.calls == []
+
+
+@pytest.mark.asyncio
 async def test_protocol_replay_scu_parses_bytes_off_loop_and_derives_sop_class(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

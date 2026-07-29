@@ -39,10 +39,13 @@ class ProtocolReplayService:
         datasets: Iterable[ProtocolReplayDataset],
         *,
         capture_fidelity: str,
+        partial: bool = False,
+        incomplete_aggregates: Iterable[str] = (),
         speed: float = 1.0,
     ) -> ProtocolReplayResult:
         """Send datasets in persisted order at original or scaled timing."""
         _require_protocol_fidelity(capture_fidelity)
+        _require_complete_capture(partial, incomplete_aggregates)
         _validate_speed(speed)
         source_datasets = tuple(datasets)
         _validate_protocol_monotonic_order(source_datasets)
@@ -122,6 +125,20 @@ def _require_protocol_fidelity(capture_fidelity: str) -> None:
                 "capture_fidelity": capture_fidelity,
                 "required_stream": "pdus.jsonl",
             },
+        )
+
+
+def _require_complete_capture(partial: bool, incomplete_aggregates: Iterable[str]) -> None:
+    if not isinstance(partial, bool):
+        raise TypeError("partial must be a boolean")
+    incomplete = tuple(str(value) for value in incomplete_aggregates)
+    if partial:
+        detail = ", ".join(incomplete) if incomplete else "unspecified aggregate"
+        raise ReplayDomainError(
+            code="LUMORA-REPLAY-FID-002",
+            message=f"Protocol replay is unavailable for a partial capture ({detail})",
+            remediation="Promote a window containing the complete association negotiation.",
+            context={"partial": True, "incomplete_aggregates": incomplete},
         )
 
 
