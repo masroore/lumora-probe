@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import cast
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from lumora_probe.core.clock import Clock, SystemClock
 from lumora_probe.core.errors import (
     ConfigurationError,
     LumoraError,
@@ -17,12 +17,16 @@ from lumora_probe.core.errors import (
     SettingLockedError,
     VersionMismatchError,
 )
-from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
-from lumora_probe.core.logging import new_correlation_id
 
 from .association_routes import create_association_router
 from .capture_routes import create_capture_router
-from .client_event_routes import ClientEventPublisher, RateLimiter, create_client_event_router
+from .client_event_routes import (
+    ClientEventPublisher,
+    RateLimiter,
+    WebEventClock,
+    WebIdGenerator,
+    create_client_event_router,
+)
 from .contracts import ErrorResponse
 from .event_routes import create_event_router
 from .health_routes import HealthProvider, create_health_router
@@ -67,7 +71,7 @@ async def lumora_error_handler(request: Request, error: Exception) -> JSONRespon
     if not isinstance(error, LumoraError):
         raise error
 
-    correlation_id = request.headers.get("X-Correlation-ID") or new_correlation_id()
+    correlation_id = request.headers.get("X-Correlation-ID") or secrets.token_hex(16)
     response = ErrorResponse.from_error(
         error,
         correlation_id=correlation_id,
@@ -84,7 +88,7 @@ async def http_exception_handler(request: Request, error: Exception) -> JSONResp
     """Normalize route-level HTTP failures into the public error contract."""
 
     http_error = cast(HTTPException, error)
-    correlation_id = request.headers.get("X-Correlation-ID") or new_correlation_id()
+    correlation_id = request.headers.get("X-Correlation-ID") or secrets.token_hex(16)
     response = ErrorResponse(
         status=http_error.status_code,
         code=f"LUMORA-WEB-HTTP-{http_error.status_code}",
@@ -104,7 +108,7 @@ async def validation_exception_handler(request: Request, error: Exception) -> JS
     """Normalize Pydantic request validation failures into the public error contract."""
 
     validation_error = cast(RequestValidationError, error)
-    correlation_id = request.headers.get("X-Correlation-ID") or new_correlation_id()
+    correlation_id = request.headers.get("X-Correlation-ID") or secrets.token_hex(16)
     response = ErrorResponse(
         status=422,
         code="LUMORA-WEB-VALIDATION-001",
@@ -131,8 +135,8 @@ def create_app(
     health_provider: HealthProvider | None = None,
     security_policy: SecurityPolicy | None = None,
     event_publisher: ClientEventPublisher | None = None,
-    event_clock: Clock | None = None,
-    event_id_generator: IdGenerator | None = None,
+    event_clock: WebEventClock | None = None,
+    event_id_generator: WebIdGenerator | None = None,
     client_event_rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
@@ -158,8 +162,8 @@ def create_app(
     application.include_router(
         create_client_event_router(
             publisher=event_publisher,
-            clock=event_clock or SystemClock(),
-            id_generator=event_id_generator or UUIDv7Generator(),
+            clock=event_clock,
+            id_generator=event_id_generator,
             rate_limiter=client_event_rate_limiter,
         ),
         prefix=API_PREFIX,

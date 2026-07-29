@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Iterable
 from urllib.parse import urlsplit
 
@@ -9,8 +10,6 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
-
-from lumora_probe.core.logging import new_correlation_id
 
 from .contracts import ErrorResponse
 
@@ -112,7 +111,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 def _error_response(
     *, status: int, code: str, message: str, remediation: str, context: dict[str, object]
 ) -> JSONResponse:
-    correlation_id = new_correlation_id()
+    correlation_id = secrets.token_hex(16)
     error = ErrorResponse(
         status=status,
         code=code,

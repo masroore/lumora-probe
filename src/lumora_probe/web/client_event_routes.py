@@ -5,19 +5,17 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from lumora_probe.core.clock import Clock
 from lumora_probe.core.errors import LumoraError
-from lumora_probe.core.ids import IdGenerator
 from lumora_probe.shared.events import (
     DEFAULT_EVENT_REGISTRY,
     EventCategory,
     EventEnvelope,
-    EventIdGenerator,
     EventOrigin,
     EventPayloadRegistry,
     EventSeverity,
@@ -36,6 +34,20 @@ class ClientEventRequest(BaseModel):
     aggregate_id: str
     severity: EventSeverity = EventSeverity.INFO
     payload: dict[str, Any]
+
+
+class WebEventClock(Protocol):
+    """Injected wall and monotonic clock for event creation."""
+
+    def now(self) -> datetime: ...
+
+    def monotonic_ns(self) -> int: ...
+
+
+class WebIdGenerator(Protocol):
+    """Injected UUIDv7 identity source for event creation."""
+
+    def new_id(self) -> str: ...
 
 
 class ClientEventPublisher(Protocol):
@@ -72,8 +84,8 @@ class RateLimiter:
 def create_client_event_router(
     *,
     publisher: ClientEventPublisher | None,
-    clock: Clock,
-    id_generator: IdGenerator | EventIdGenerator,
+    clock: WebEventClock | None,
+    id_generator: WebIdGenerator | None,
     registry: EventPayloadRegistry = DEFAULT_EVENT_REGISTRY,
     rate_limiter: RateLimiter | None = None,
 ) -> APIRouter:
@@ -87,7 +99,7 @@ def create_client_event_router(
         request: Request,
         event_request: ClientEventRequest,
     ) -> dict[str, Any]:
-        if publisher is None:
+        if publisher is None or clock is None or id_generator is None:
             raise LumoraError(
                 code="LUMORA-WEB-EVENTS-001",
                 message="The event bus is not available.",
