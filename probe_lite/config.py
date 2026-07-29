@@ -16,7 +16,7 @@ from lumora_lite_common.config_validators import (
 
 DEFAULT_PORT = 11112
 DEFAULT_AE_TITLE = "PROBE_LITE"
-DEFAULT_OUTPUT = Path("./received")
+DEFAULT_OUTPUT = Path("storage/inbox")
 DEFAULT_MAX_PDU = 16382
 
 
@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Instance storage directory (env: PROBE_LITE_OUTPUT; default: ./received)",
+        help="Instance storage directory (env: PROBE_LITE_OUTPUT; default: storage/inbox)",
     )
     parser.add_argument(
         "--accept-ae",

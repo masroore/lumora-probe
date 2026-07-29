@@ -26,6 +26,7 @@ DEFAULT_DIMSE_TIMEOUT = 30.0
 DEFAULT_MAX_PDU = 16382
 DEFAULT_LOG_FORMAT = "text"
 
+DEFAULT_INPUT = Path("storage/outbox")
 DEFAULT_CONFIG_NAME = "sender-lite.toml"
 
 _TOML_FIELDS = frozenset(
@@ -49,7 +50,7 @@ _TOML_FIELDS = frozenset(
 class Config:
     """Resolved runtime configuration."""
 
-    input: Path | None = None
+    input: Path | None = DEFAULT_INPUT
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     calling_ae: str = DEFAULT_CALLING_AE
@@ -104,7 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
         description=("One-shot DICOM C-STORE sender. No security. Use on trusted networks only."),
     )
     parser.add_argument("--config", type=Path, default=None, help="Path to TOML configuration file")
-    parser.add_argument("-i", "--input", type=Path, default=None, help="Input DICOM directory")
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=Path,
+        default=None,
+        help=f"Input DICOM directory (default: {DEFAULT_INPUT})",
+    )
     parser.add_argument("--host", default=None, help=f"Remote host (default: {DEFAULT_HOST})")
     parser.add_argument(
         "-p", "--port", type=int, default=None, help=f"Remote port (default: {DEFAULT_PORT})"
@@ -317,6 +324,8 @@ def resolve_config(
         elif input_src == "cli" and not candidate.is_absolute():
             candidate = cwd / candidate
         input_path = candidate
+    elif not namespace.echo:
+        input_path = DEFAULT_INPUT
 
     config = Config(
         input=input_path,
