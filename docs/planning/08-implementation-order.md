@@ -264,8 +264,9 @@ undo by accident.
 
 # 6. Entry point
 
-Nothing is built yet. Start at **Stage 1, T-01-01-02** — ADR-0027, the authoritative PRD.
-T-01-01-01 (this review) and T-01-01-04 (phase reconciliation) are already delivered.
+Phase 12 (Replay Engine) is complete. The implementation has progressed through the approved
+Phase 12 task set; see `docs/planning/phase-12-completion-report.md` and its task reports.
+Do not start Phase 13 until the Phase 12 acceptance report is reviewed and accepted.
 
 ---
 
