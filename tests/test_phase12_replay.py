@@ -11,12 +11,20 @@ from lumora_probe.core.bus import EventBus, SubscriberChannel
 from lumora_probe.replay.service import EventReplayService
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
+from tests.doubles.ids import SeededIdGenerator
 
 UUIDS = (
     "018f0d4e-7b6a-7000-8000-000000000001",
     "018f0d4e-7b6a-7000-8000-000000000002",
     "018f0d4e-7b6a-7000-8000-000000000003",
     "018f0d4e-7b6a-7000-8000-000000000004",
+)
+REPLAY_IDS = (
+    "018f0d4e-7b6a-7000-8000-000000000101",
+    "018f0d4e-7b6a-7000-8000-000000000102",
+    "018f0d4e-7b6a-7000-8000-000000000103",
+    "018f0d4e-7b6a-7000-8000-000000000104",
+    "018f0d4e-7b6a-7000-8000-000000000105",
 )
 
 
@@ -57,7 +65,11 @@ async def test_event_replay_republishes_persisted_order_without_mutating_payload
         make_event(1, monotonic_ns=2_100, payload={"dataset": "second"}),
         make_event(2, monotonic_ns=5_100, payload={"dataset": "third"}),
     )
-    result = await EventReplayService(bus, sleeper=sleeper).replay(
+    result = await EventReplayService(
+        bus,
+        sleeper=sleeper,
+        id_generator=SeededIdGenerator(REPLAY_IDS),
+    ).replay(
         source,
         capture_id="replay-capture",
     )
@@ -66,7 +78,14 @@ async def test_event_replay_republishes_persisted_order_without_mutating_payload
     await bus.stop()
 
     assert result.count == 3
-    assert [event.event_id for event in result.events] == [event.event_id for event in source]
+    assert result.replay_id == REPLAY_IDS[0]
+    assert result.correlation_id == REPLAY_IDS[1]
+    assert [event.event_id for event in result.events] == list(REPLAY_IDS[2:])
+    assert [event.replay_id for event in result.events] == [REPLAY_IDS[0]] * 3
+    assert [event.replay_of_event_id for event in result.events] == [
+        event.event_id for event in source
+    ]
+    assert [event.correlation_id for event in result.events] == [REPLAY_IDS[1]] * 3
     assert [event.sequence for event in delivered] == [1, 2, 3]
     assert [event.payload for event in delivered] == [event.payload for event in source]
     assert sleeps == [2e-6, 3e-6]

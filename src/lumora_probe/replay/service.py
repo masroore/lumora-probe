@@ -7,12 +7,12 @@ import math
 from collections.abc import Awaitable, Callable, Iterable
 from itertools import pairwise
 
-from lumora_probe.associations.contracts import DICOMStoreResult
+from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
+from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.events import EventEnvelope
 
 from .contracts import (
-    DICOMDatasetSender,
     EventPublisher,
     EventReplayResult,
     ProtocolReplayDataset,
@@ -80,21 +80,26 @@ class EventReplayService:
         publisher: EventPublisher,
         *,
         sleeper: ReplaySleeper | None = None,
+        id_generator: IdGenerator | None = None,
     ) -> None:
         self.publisher = publisher
         self.sleeper = sleeper if sleeper is not None else asyncio.sleep
+        self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
 
     async def replay(
         self,
         events: Iterable[EventEnvelope],
         *,
         capture_id: str | None = None,
+        replay_id: str | None = None,
         speed: float = 1.0,
     ) -> EventReplayResult:
         """Replay envelopes into the bus at original or scaled timing."""
         _validate_speed(speed)
         source_events = tuple(events)
         _validate_monotonic_order(source_events)
+        run_replay_id = replay_id or self.id_generator.new_id()
+        replay_correlation_id = self.id_generator.new_id()
 
         published: list[EventEnvelope] = []
         for previous, event in _with_previous(source_events):
@@ -103,8 +108,17 @@ class EventReplayService:
                 delay_seconds /= speed
                 if delay_seconds > 0:
                     await self.sleeper(delay_seconds)
-            published.append(await self.publisher.publish(event, capture_id=capture_id))
-        return EventReplayResult(tuple(published))
+            replay_event = event.model_copy(
+                update={
+                    "event_id": self.id_generator.new_id(),
+                    "correlation_id": replay_correlation_id,
+                    "replay_id": run_replay_id,
+                    "replay_of_event_id": event.event_id,
+                    "sequence": None,
+                }
+            )
+            published.append(await self.publisher.publish(replay_event, capture_id=capture_id))
+        return EventReplayResult(tuple(published), run_replay_id, replay_correlation_id)
 
 
 def _validate_speed(speed: float) -> None:

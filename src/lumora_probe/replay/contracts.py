@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
+from lumora_probe.associations.contracts import DICOMStoreResult
 from lumora_probe.shared.events import EventEnvelope
 
 
@@ -66,6 +66,8 @@ class EventReplayResult:
     """Published events produced by one offline event replay."""
 
     events: tuple[EventEnvelope, ...]
+    replay_id: str
+    correlation_id: str
 
     @property
     def count(self) -> int:
