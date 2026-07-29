@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import socket
 import threading
+from pathlib import Path
 from collections.abc import Iterator
 import pytest
 
@@ -205,3 +206,69 @@ async def test_optional_calling_ae_allowlist_is_off_by_default_and_enforced_when
         assert accepted.success is True
     finally:
         await listener.stop()
+
+
+def test_pass_through_negotiator_mirrors_only_upstream_accepted_contexts() -> None:
+    from lumora_probe.associations.relay import PassThroughNegotiator
+
+    plans = PassThroughNegotiator().mirror(
+        [
+            {
+                "context_id": 1,
+                "abstract_syntax": "1.2.3",
+                "transfer_syntaxes": ["1.2.840.10008.1.2"],
+            },
+            {
+                "context_id": 3,
+                "abstract_syntax": "9.8.7",
+                "transfer_syntaxes": ["1.2.840.10008.1.2.1"],
+            },
+        ],
+        requested_abstract_syntaxes=["1.2.3"],
+    )
+    assert plans[0].abstract_syntax == "1.2.3"
+    assert plans[0].transfer_syntaxes == ("1.2.840.10008.1.2",)
+
+
+def test_byte_faithful_relay_preserves_malformed_bytes_and_records_diagnostic(
+    tmp_path: Path,
+) -> None:
+    from lumora_probe.associations.relay import ByteFaithfulRelay, PDUTraceWriter
+
+    diagnostics: list[tuple[str, dict[str, object]]] = []
+    payload = b"\x04\x00\x00\x00\x00\x04bad"
+    with PDUTraceWriter(tmp_path / "pdus.jsonl") as writer:
+        relay = ByteFaithfulRelay(
+            trace_writer=writer,
+            trace_clock=lambda: 42,
+            diagnostic_sink=lambda name, fields: diagnostics.append((name, dict(fields))),
+        )
+        sent: list[bytes] = []
+        forwarded = relay.forward(
+            payload,
+            association_id="assoc-1",
+            direction="downstream-to-upstream",
+            send=sent.append,
+        )
+
+    assert forwarded == payload
+    assert sent == [payload]
+    assert diagnostics == [
+        (
+            "malformed-pdu",
+            {"association_id": "assoc-1", "direction": "downstream-to-upstream", "length": 9},
+        )
+    ]
+    assert '"pdu_type":"P-DATA-TF"' in (tmp_path / "pdus.jsonl").read_text()
+
+
+def test_relay_requires_explicit_mode_for_standalone_capture() -> None:
+    from lumora_probe.associations.relay import RelayConfig, RelayMode
+
+    config = RelayConfig(mode=RelayMode.PASS_THROUGH)
+    assert config.negotiation_label == "pass-through-upstream-unavailable"
+    with pytest.raises(RuntimeError, match="choose permissive-standalone"):
+        config.require_upstream()
+
+    standalone = RelayConfig(mode=RelayMode.PERMISSIVE_STANDALONE)
+    assert standalone.negotiation_label == "permissive-standalone"
