@@ -1,0 +1,14 @@
+<div id="panel-timeline" data-page="{{ page }}" hx-swap-oob="outerHTML">
+  <h2>Timeline</h2>
+  <ol>
+  {% for event in events %}
+    <li data-event-id="{{ event.event_id }}">
+      <span>{{ event.sequence if event.sequence is not none else "-" }}</span>
+      <span>{{ event.event_name }}</span>
+      <span>{{ event.severity }}</span>
+    </li>
+  {% else %}
+    <li>No timeline events.</li>
+  {% endfor %}
+  </ol>
+</div>

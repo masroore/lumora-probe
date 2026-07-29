@@ -1,0 +1,15 @@
+<div id="panel-status" data-page="{{ page }}" hx-swap-oob="outerHTML">
+  <h2>Status</h2>
+  <ul>
+  {% for row in rows %}
+    <li data-aggregate-id="{{ row.aggregate_id }}">
+      <span>{{ row.aggregate_id }}</span>
+      <span>{{ row.event_name }}</span>
+      <span>{{ row.severity }}</span>
+      <span>{{ row.sequence if row.sequence is not none else "-" }}</span>
+    </li>
+  {% else %}
+    <li>No status events.</li>
+  {% endfor %}
+  </ul>
+</div>

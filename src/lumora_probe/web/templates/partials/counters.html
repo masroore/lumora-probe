@@ -1,0 +1,10 @@
+<div id="panel-counters" data-page="{{ page }}" hx-swap-oob="outerHTML">
+  <h2>Counters</h2>
+  <dl>
+  {% for name, value in counters.items() %}
+    <div><dt>{{ name }}</dt><dd>{{ value }}</dd></div>
+  {% else %}
+    <div><dt>events</dt><dd>0</dd></div>
+  {% endfor %}
+  </dl>
+</div>
