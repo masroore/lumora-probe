@@ -365,6 +365,7 @@ def build_default_event_registry() -> EventPayloadRegistry:
         EventCategory.REPLAY: (
             "ReplayStarted",
             "ReplayPaused",
+            "ReplayProgressed",
             "ReplayCompleted",
             "ReplayFinished",
         ),

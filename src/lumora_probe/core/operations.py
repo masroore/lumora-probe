@@ -8,7 +8,9 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
+
+from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
 from .clock import Clock, SystemClock
 from .ids import IdGenerator, UUIDv7Generator
@@ -60,6 +62,16 @@ class JobRecord:
 JobWorker = Callable[["JobContext"], Awaitable[str | None]]
 
 
+class JobProgressPublisher(Protocol):
+    """Minimal event-bus publisher used for job progress."""
+
+    async def publish(
+        self, event: EventEnvelope, *, capture_id: str | None = None
+    ) -> EventEnvelope:
+        """Publish one progress event on the loop-owned bus."""
+        ...
+
+
 @dataclass(slots=True)
 class JobContext:
     """Execution context exposing cooperative cancellation and progress reporting."""
@@ -81,10 +93,12 @@ class InMemoryJobRegistry:
         clock: Clock | None = None,
         id_generator: IdGenerator | None = None,
         durable: SQLiteOperationRegistry | None = None,
+        progress_publisher: JobProgressPublisher | None = None,
     ) -> None:
         self.clock = clock if clock is not None else SystemClock()
         self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
         self.durable = durable
+        self.progress_publisher = progress_publisher
         self._records: dict[str, JobRecord] = {}
         self._tokens: dict[str, CancellationToken] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -192,6 +206,24 @@ class InMemoryJobRegistry:
         record.progress = dict(progress)
         if self.durable is not None:
             await self.durable.update_progress(operation_id, progress)
+        if self.progress_publisher is not None:
+            event = EventEnvelope.create(
+                event_name="ReplayProgressed",
+                event_version=1,
+                correlation_id=operation_id,
+                aggregate_type="Operation",
+                aggregate_id=operation_id,
+                producer="job-registry",
+                payload={
+                    "operation_id": operation_id,
+                    "job_type": record.job_type,
+                    **record.progress,
+                },
+                origin=EventOrigin.OBSERVED,
+                clock=self.clock,
+                id_generator=self.id_generator,
+            )
+            await self.progress_publisher.publish(event)
 
     @staticmethod
     def _snapshot(record: JobRecord | None) -> JobRecord | None:

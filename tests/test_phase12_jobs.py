@@ -11,9 +11,22 @@ from lumora_probe.core.config import StartupConfig
 from lumora_probe.core.operations import InMemoryJobRegistry, JobState, SQLiteOperationRegistry
 from lumora_probe.core.paths import DataPaths
 from lumora_probe.core.storage import StorageDatabases
+from lumora_probe.shared.events import EventEnvelope
 from tests.doubles.ids import SeededIdGenerator
 
 JOB_ID = "018f0d4e-7b6a-7000-8000-000000000301"
+PROGRESS_EVENT_ID = "018f0d4e-7b6a-7000-8000-000000000302"
+
+
+class FakeProgressPublisher:
+    def __init__(self) -> None:
+        self.events: list[EventEnvelope] = []
+
+    async def publish(
+        self, event: EventEnvelope, *, capture_id: str | None = None
+    ) -> EventEnvelope:
+        self.events.append(event)
+        return event
 
 
 def databases(tmp_path: Path) -> StorageDatabases:
@@ -115,3 +128,30 @@ async def test_in_memory_job_registry_persists_durable_audit_and_checkpoints(
     assert durable_record["state"] == "completed"
     assert durable_record["progress"] == {"confirmed": 2, "total": 2}
     assert durable_record["outcome"] == "confirmed=2"
+
+
+@pytest.mark.asyncio
+async def test_in_memory_job_registry_publishes_progress_on_event_bus() -> None:
+    publisher = FakeProgressPublisher()
+    registry = InMemoryJobRegistry(
+        id_generator=SeededIdGenerator([JOB_ID, PROGRESS_EVENT_ID]),
+        progress_publisher=publisher,
+    )
+
+    async def worker(context):
+        await context.report_progress({"confirmed": 1, "total": 1})
+        return "confirmed=1"
+
+    await registry.start("protocol-replay", worker)
+    await registry.wait(JOB_ID)
+
+    assert len(publisher.events) == 1
+    event = publisher.events[0]
+    assert event.event_name == "ReplayProgressed"
+    assert event.aggregate_id == JOB_ID
+    assert event.payload == {
+        "operation_id": JOB_ID,
+        "job_type": "protocol-replay",
+        "confirmed": 1,
+        "total": 1,
+    }
