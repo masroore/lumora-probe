@@ -1,0 +1,394 @@
+"""Pynetdicom endpoint foundation for the DICOM association plane."""
+
+from __future__ import annotations
+
+import threading
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Protocol
+
+from lumora_probe.core.lifecycle import ServiceHealth
+from lumora_probe.shared.value_objects import AETitle
+
+DICOM_SUCCESS = 0x0000
+DEFAULT_DICOM_PORT = 11112
+DEFAULT_MAX_PDU = 16_382
+
+
+class AssociationClock(Protocol):
+    """Injected wall and monotonic time source for association observations."""
+
+    def now(self) -> datetime: ...
+
+    def monotonic_ns(self) -> int: ...
+
+
+class AssociationIdGenerator(Protocol):
+    """Injected UUIDv7 identity source for association observations."""
+
+    def new_id(self) -> str: ...
+
+
+class AssociationAuditSink(Protocol):
+    """Non-blocking callback for association lifecycle observations."""
+
+    def __call__(self, record: "AssociationAuditRecord") -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DICOMListenerConfig:
+    """Configuration for one non-privileged DICOM SCP listener."""
+
+    bind_host: str = "127.0.0.1"
+    port: int = DEFAULT_DICOM_PORT
+    ae_title: AETitle | str = "LUMORA"
+    max_pdu: int = DEFAULT_MAX_PDU
+    allowed_calling_aets: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not self.bind_host.strip() or any(character.isspace() for character in self.bind_host):
+            raise ValueError("bind_host must be a non-empty host without whitespace")
+        if (
+            type(self.port) is not int
+            or isinstance(self.port, bool)
+            or not 1024 <= self.port <= 65535
+        ):
+            raise ValueError("port must be a non-privileged TCP port between 1024 and 65535")
+        if type(self.max_pdu) is not int or not 4_096 <= self.max_pdu <= 131_072:
+            raise ValueError("max_pdu must be between 4096 and 131072")
+        title = self.ae_title if isinstance(self.ae_title, AETitle) else AETitle(self.ae_title)
+        object.__setattr__(self, "ae_title", title)
+        normalized = frozenset(_normalize_ae_title(value) for value in self.allowed_calling_aets)
+        object.__setattr__(self, "allowed_calling_aets", normalized)
+
+
+@dataclass(frozen=True, slots=True)
+class AssociationAuditRecord:
+    """Compact lifecycle observation emitted for every accepted association attempt."""
+
+    association_id: str
+    phase: str
+    calling_ae: str
+    called_ae: str
+    source_host: str
+    source_port: int | None
+    occurred_at: datetime
+    monotonic_ns: int
+    accepted_contexts: tuple[dict[str, object], ...] = ()
+    reason: str | None = None
+
+
+@dataclass(slots=True)
+class _AssociationState:
+    association_id: str
+    calling_ae: str
+    called_ae: str
+    source_host: str
+    source_port: int | None
+
+
+class DICOMListener:
+    """Threaded pynetdicom SCP with an injected, transport-neutral audit sink.
+
+    The listener owns no asyncio loop and never publishes directly to the event bus. The
+    sink is deliberately synchronous and must only enqueue work or hand it to the bus's
+    thread-safe ingress.
+    """
+
+    name = "dicom-listener"
+
+    def __init__(
+        self,
+        config: DICOMListenerConfig | None = None,
+        *,
+        audit_sink: AssociationAuditSink | None = None,
+        clock: AssociationClock | None = None,
+        id_generator: AssociationIdGenerator | None = None,
+    ) -> None:
+        self.config = config or DICOMListenerConfig()
+        self.audit_sink = audit_sink
+        self.clock = clock
+        self.id_generator = id_generator
+        self.ae: Any | None = None
+        self.server: Any | None = None
+        self._states: dict[int, _AssociationState] = {}
+        self._lock = threading.Lock()
+        self._started = False
+        self._accepted_associations = 0
+
+    @property
+    def started(self) -> bool:
+        return self._started
+
+    @property
+    def accepted_associations(self) -> int:
+        return self._accepted_associations
+
+    async def start(self) -> None:
+        """Start the SCP without blocking the owning asyncio loop."""
+        if self._started:
+            return
+        self.ae = self._build_ae()
+        try:
+            self.server = self.ae.start_server(
+                (self.config.bind_host, self.config.port),
+                block=False,
+                evt_handlers=self._handlers(),
+            )
+        except Exception:
+            self.ae = None
+            self.server = None
+            raise
+        self._started = True
+
+    async def stop(self) -> None:
+        """Stop accepting associations and close the pynetdicom server."""
+        server = self.server
+        self.server = None
+        if server is not None:
+            server.shutdown()
+        if self.ae is not None:
+            self.ae.shutdown()
+        self.ae = None
+        with self._lock:
+            self._states.clear()
+        self._started = False
+
+    async def stop_accepting(self) -> None:
+        """Stop new associations before lifecycle drain begins."""
+        server = self.server
+        self.server = None
+        if server is not None:
+            server.shutdown()
+
+    async def drain(self) -> None:
+        """Allow pynetdicom association threads to complete their current work."""
+        if self.ae is None:
+            return
+        for association in tuple(self.ae.active_associations):
+            association.join(timeout=0.1)
+
+    async def flush(self) -> None:
+        """Listener has no durable buffers; capture services provide flushing."""
+
+    async def health(self) -> ServiceHealth:
+        alive = self._started and self.ae is not None and self.server is not None
+        return ServiceHealth(
+            name=self.name,
+            ready=alive,
+            alive=alive,
+            detail=f"{self.config.bind_host}:{self.config.port}" if alive else "listener stopped",
+        )
+
+    def _build_ae(self) -> Any:
+        try:
+            from pynetdicom import (
+                AE,
+                ALL_TRANSFER_SYNTAXES,
+                AllStoragePresentationContexts,
+                QueryRetrievePresentationContexts,
+                VerificationPresentationContexts,
+            )
+            from pynetdicom import _config
+        except ImportError as exc:
+            raise RuntimeError(
+                "pynetdicom and pydicom are required for the DICOM listener"
+            ) from exc
+
+        _config.LOG_HANDLER_LEVEL = "none"
+        _config.UNRESTRICTED_STORAGE_SERVICE = True
+        _config.STORE_RECV_CHUNKED_DATASET = True
+
+        ae = AE(ae_title=str(self.config.ae_title))
+        ae.maximum_pdu_size = self.config.max_pdu
+        ae.supported_contexts = []
+        for context in (
+            *AllStoragePresentationContexts,
+            *QueryRetrievePresentationContexts,
+            *VerificationPresentationContexts,
+        ):
+            ae.add_supported_context(str(context.abstract_syntax), ALL_TRANSFER_SYNTAXES)
+        if self.config.allowed_calling_aets:
+            ae.require_calling_aet = sorted(self.config.allowed_calling_aets)
+        return ae
+
+    def _handlers(self) -> list[tuple[Any, Callable[..., Any]]]:
+        from pynetdicom import evt
+
+        return [
+            (evt.EVT_REQUESTED, self._on_requested),
+            (evt.EVT_ACCEPTED, self._on_accepted),
+            (evt.EVT_REJECTED, self._on_rejected),
+            (evt.EVT_RELEASED, self._on_released),
+            (evt.EVT_ABORTED, self._on_aborted),
+            (evt.EVT_C_ECHO, self._on_c_echo),
+        ]
+
+    def _on_requested(self, event: Any) -> None:
+        association = event.assoc
+        calling_ae = _calling_ae(association)
+        called_ae = _called_ae(association)
+        source_host, source_port = _source_endpoint(association)
+        state = _AssociationState(
+            association_id=self._new_association_id(),
+            calling_ae=calling_ae,
+            called_ae=called_ae,
+            source_host=source_host,
+            source_port=source_port,
+        )
+        with self._lock:
+            self._states[id(association)] = state
+        self._emit(state, "requested")
+
+    def _on_accepted(self, event: Any) -> None:
+        association = event.assoc
+        state = self._state_for(association)
+        with self._lock:
+            self._accepted_associations += 1
+        self._emit(state, "accepted", accepted_contexts=_contexts(association))
+
+    def _on_rejected(self, event: Any) -> None:
+        association = event.assoc
+        state = self._state_for(association)
+        self._emit(state, "rejected", reason="association rejected")
+        self._forget(association)
+
+    def _on_released(self, event: Any) -> None:
+        association = event.assoc
+        state = self._state_for(association)
+        self._emit(state, "released")
+        self._forget(association)
+
+    def _on_aborted(self, event: Any) -> None:
+        association = event.assoc
+        state = self._state_for(association)
+        reason = str(getattr(getattr(association, "dul", None), "abort_source", "unknown"))
+        self._emit(state, "aborted", reason=reason)
+        self._forget(association)
+
+    def _on_c_echo(self, event: Any) -> int:
+        return DICOM_SUCCESS
+
+    def _state_for(self, association: Any) -> _AssociationState:
+        with self._lock:
+            state = self._states.get(id(association))
+        if state is not None:
+            return state
+        source_host, source_port = _source_endpoint(association)
+        return _AssociationState(
+            association_id=self._new_association_id(),
+            calling_ae=_calling_ae(association),
+            called_ae=_called_ae(association),
+            source_host=source_host,
+            source_port=source_port,
+        )
+
+    def _forget(self, association: Any) -> None:
+        with self._lock:
+            self._states.pop(id(association), None)
+
+    def _clock(self) -> AssociationClock:
+        if self.clock is None:
+            raise RuntimeError("audit sink requires an injected association clock")
+        return self.clock
+
+    def _new_association_id(self) -> str:
+        if self.id_generator is None:
+            if self.audit_sink is not None:
+                raise RuntimeError("audit sink requires an injected association ID generator")
+            return "association-" + str(id(self))
+        return self.id_generator.new_id()
+
+    def _emit(
+        self,
+        state: _AssociationState,
+        phase: str,
+        *,
+        accepted_contexts: tuple[dict[str, object], ...] = (),
+        reason: str | None = None,
+    ) -> None:
+        if self.audit_sink is None:
+            return
+        self.audit_sink(
+            AssociationAuditRecord(
+                association_id=state.association_id,
+                phase=phase,
+                calling_ae=state.calling_ae,
+                called_ae=state.called_ae,
+                source_host=state.source_host,
+                source_port=state.source_port,
+                occurred_at=self._clock().now(),
+                monotonic_ns=self._clock().monotonic_ns(),
+                accepted_contexts=accepted_contexts,
+                reason=reason,
+            )
+        )
+
+
+def _service_user(association: Any, name: str) -> Any:
+    return getattr(association, name, None) or getattr(association, "requestor", None)
+
+
+def _calling_ae(association: Any) -> str:
+    requestor = _service_user(association, "requestor")
+    value = getattr(requestor, "ae_title", None)
+    if not value:
+        value = getattr(getattr(requestor, "primitive", None), "calling_ae_title", "unknown")
+    return _text(value)
+
+
+def _called_ae(association: Any) -> str:
+    acceptor = _service_user(association, "acceptor")
+    return _text(getattr(acceptor, "ae_title", "unknown"))
+
+
+def _source_endpoint(association: Any) -> tuple[str, int | None]:
+    remote = getattr(association, "remote", None)
+    if isinstance(remote, dict):
+        return _text(remote.get("address", "unknown")), _port(remote.get("port"))
+    requestor = getattr(association, "requestor", None)
+    return _text(getattr(requestor, "address", "unknown")), _port(getattr(requestor, "port", None))
+
+
+def _contexts(association: Any) -> tuple[dict[str, object], ...]:
+    values: list[dict[str, object]] = []
+    for context in getattr(association, "accepted_contexts", ()):
+        syntaxes = getattr(context, "transfer_syntax", ())
+        if isinstance(syntaxes, (str, bytes)):
+            syntaxes = (syntaxes,)
+        values.append(
+            {
+                "context_id": getattr(context, "context_id", None),
+                "abstract_syntax": _text(getattr(context, "abstract_syntax", "unknown")),
+                "transfer_syntaxes": tuple(_text(value) for value in syntaxes),
+            }
+        )
+    return tuple(values)
+
+
+def _normalize_ae_title(value: str) -> str:
+    return str(AETitle(value))
+
+
+def _port(value: Any) -> int | None:
+    return value if type(value) is int and not isinstance(value, bool) else None
+
+
+def _text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("ascii", errors="replace").strip()
+    return str(value)
+
+
+__all__ = [
+    "DEFAULT_DICOM_PORT",
+    "DEFAULT_MAX_PDU",
+    "DICOMListener",
+    "DICOMListenerConfig",
+    "DICOM_SUCCESS",
+    "AssociationAuditRecord",
+    "AssociationAuditSink",
+    "AssociationClock",
+    "AssociationIdGenerator",
+]
