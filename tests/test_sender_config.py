@@ -85,7 +85,7 @@ def test_cli_overrides_toml(tmp_path: Path) -> None:
     input_dir.mkdir()
     _write_toml(
         tmp_path / "sender-lite.toml",
-        f'input = "./dicom"\nhost = "10.0.0.1"\nport = 2000\nverbose = true\n',
+        'input = "./dicom"\nhost = "10.0.0.1"\nport = 2000\nverbose = true\n',
     )
     config = parse_args(
         ["--host", "192.168.1.1", "--port", "3000"],
@@ -168,9 +168,12 @@ def test_invalid_cli_values_rejected(
         parse_args(argv, cwd=tmp_path)
 
 
-def test_missing_input_for_sender_run_errors(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="input is required"):
-        parse_args(["--host", "127.0.0.1"], cwd=tmp_path)
+def test_default_input_used_when_no_input_provided(tmp_path: Path) -> None:
+    """When no --input or TOML input is given, DEFAULT_INPUT is used."""
+    from sender_lite.config import DEFAULT_INPUT
+
+    config = parse_args(["--host", "127.0.0.1"], cwd=tmp_path)
+    assert config.input == DEFAULT_INPUT
 
 
 def test_help_bypasses_validation() -> None:

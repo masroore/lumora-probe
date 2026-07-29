@@ -1,0 +1,151 @@
+[importlinter]
+root_package = lumora_probe
+include_external_packages = true
+
+[importlinter:core_boundary]
+name = Core does not import application slices
+type = forbidden
+source_modules =
+    lumora_probe.core
+forbidden_modules =
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+    lumora_probe.web
+
+[importlinter:shared_boundary]
+name = Shared depends only on core
+type = forbidden
+source_modules =
+    lumora_probe.shared
+forbidden_modules =
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+    lumora_probe.web
+
+[importlinter:web_boundary]
+name = Application slices do not import web
+type = forbidden
+source_modules =
+    lumora_probe.core
+    lumora_probe.shared
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+forbidden_modules =
+    lumora_probe.web
+
+[importlinter:slice_public_api]
+name = Slices do not import another slice's internals
+type = forbidden
+source_modules =
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+    lumora_probe.web
+forbidden_modules =
+    lumora_probe.associations.domain
+    lumora_probe.associations.service
+    lumora_probe.associations.repository
+    lumora_probe.associations.api
+    lumora_probe.captures.domain
+    lumora_probe.captures.service
+    lumora_probe.captures.repository
+    lumora_probe.captures.api
+    lumora_probe.replay.domain
+    lumora_probe.replay.service
+    lumora_probe.replay.repository
+    lumora_probe.replay.api
+    lumora_probe.studies.domain
+    lumora_probe.studies.service
+    lumora_probe.studies.repository
+    lumora_probe.studies.api
+    lumora_probe.analysis.domain
+    lumora_probe.analysis.service
+    lumora_probe.analysis.repository
+    lumora_probe.analysis.api
+    lumora_probe.reports.domain
+    lumora_probe.reports.service
+    lumora_probe.reports.repository
+    lumora_probe.reports.api
+    lumora_probe.plugins.domain
+    lumora_probe.plugins.service
+    lumora_probe.plugins.repository
+    lumora_probe.plugins.api
+    lumora_probe.settings.domain
+    lumora_probe.settings.service
+    lumora_probe.settings.repository
+    lumora_probe.settings.api
+    lumora_probe.web.domain
+    lumora_probe.web.service
+    lumora_probe.web.repository
+    lumora_probe.web.api
+
+[importlinter:domain_purity]
+name = Domain modules do not import web frameworks
+type = forbidden
+source_modules =
+    lumora_probe.*.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    jinja2
+
+[importlinter:plugin_boundary]
+name = Plugin internals are not imported by the application
+type = forbidden
+source_modules =
+    lumora_probe.core
+    lumora_probe.shared
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.settings
+    lumora_probe.web
+forbidden_modules =
+    lumora_probe.plugins.domain
+    lumora_probe.plugins.service
+    lumora_probe.plugins.repository
+    lumora_probe.plugins.api
+
+[importlinter:time_identity_boundary]
+name = Non-core Lumora modules do not import time or uuid directly
+type = forbidden
+source_modules =
+    lumora_probe.shared
+    lumora_probe.associations
+    lumora_probe.captures
+    lumora_probe.replay
+    lumora_probe.studies
+    lumora_probe.analysis
+    lumora_probe.reports
+    lumora_probe.plugins
+    lumora_probe.settings
+    lumora_probe.web
+forbidden_modules =
+    time
+    uuid

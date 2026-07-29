@@ -28,21 +28,21 @@ TS_IMPLICIT = "1.2.840.10008.1.2"
 
 
 def _make_config(**overrides: object) -> Config:
-    defaults = dict(
-        input=None,
-        host="127.0.0.1",
-        port=11112,
-        calling_ae="SENDER_LITE",
-        called_ae="PROBE_LITE",
-        study_delay=0.0,
-        connect_timeout=5.0,
-        dimse_timeout=5.0,
-        max_pdu=16382,
-        log_format="text",
-        verbose=False,
-        echo=False,
-        config_path=None,
-    )
+    defaults = {
+        "input": None,
+        "host": "127.0.0.1",
+        "port": 11112,
+        "calling_ae": "SENDER_LITE",
+        "called_ae": "PROBE_LITE",
+        "study_delay": 0.0,
+        "connect_timeout": 5.0,
+        "dimse_timeout": 5.0,
+        "max_pdu": 16382,
+        "log_format": "text",
+        "verbose": False,
+        "echo": False,
+        "config_path": None,
+    }
     defaults.update(overrides)
     return Config(**defaults)
 
@@ -900,7 +900,7 @@ def test_integration_one_study_one_instance(tmp_path: Path) -> None:
         # Create DICOM file
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm")
+        _make_dicom_file(input_dir / "test.dcm")
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()
@@ -987,7 +987,7 @@ def test_integration_transfer_syntax_preserved_implicit(tmp_path: Path) -> None:
     try:
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_IMPLICIT)
+        _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_IMPLICIT)
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()
@@ -1030,7 +1030,7 @@ def test_integration_transfer_syntax_preserved_explicit(tmp_path: Path) -> None:
     try:
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        dicom_path = _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_EXPLICIT)
+        _make_dicom_file(input_dir / "test.dcm", transfer_syntax=TS_EXPLICIT)
 
         sender_config = _make_config(host="127.0.0.1", port=port, input=input_dir)
         logger = _make_logger()
@@ -1053,3 +1053,186 @@ def test_integration_transfer_syntax_preserved_explicit(tmp_path: Path) -> None:
         assert str(stored_ds.file_meta.TransferSyntaxUID) == TS_EXPLICIT
     finally:
         receiver.stop()
+
+
+# ---------------------------------------------------------------------------
+# §14.2 event field conformance (plan section 14.2 "Required fields")
+# ---------------------------------------------------------------------------
+
+
+def _make_json_logger() -> SenderLogger:
+    """Return a JSON logger whose stream can be parsed via ``logger._events()``."""
+    import io
+    import json
+
+    stream = io.StringIO()
+    logger = SenderLogger(log_format="json", stream=stream)
+
+    def events() -> list[dict[str, object]]:
+        return [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+
+    # Attach a callable to retrieve parsed events.
+    logger._events = events  # type: ignore[attr-defined]
+    return logger
+
+
+def _send_success_study(
+    config: Config, logger: SenderLogger, tmp_path: Path
+) -> tuple[Sender, StudyBatch, threading.Event]:
+    inst_path = tmp_path / "inst.dcm"
+    inst_path.write_bytes(b"fake")
+    inst = _make_instance(inst_path, sop_instance_uid="1.2.3.4.5.1")
+    study = _make_study([inst])
+    cancel = threading.Event()
+
+    fake_assoc = FakeAssociation(
+        established=True,
+        accepted_contexts=[FakeContext(SOP_CLASS, TS_EXPLICIT)],
+        c_store_status=0x0000,
+    )
+    fake_ae = FakeAE(fake_assoc)
+    with (
+        patch("sender_lite.sender.pynetdicom") as mock_pn,
+        patch("sender_lite.sender.dcmread") as mock_dcmread,
+    ):
+        mock_pn.AE.return_value = fake_ae
+        mock_pn.build_context = lambda sc, ts: FakeContext(sc, ts)
+        mock_dcmread.return_value = SimpleNamespace(
+            StudyInstanceUID=STUDY_UID,
+            SeriesInstanceUID=SERIES_UID,
+            SOPInstanceUID="1.2.3.4.5.1",
+            SOPClassUID=SOP_CLASS,
+            file_meta=SimpleNamespace(TransferSyntaxUID=TS_EXPLICIT),
+        )
+        sender = Sender(config, logger)
+        sender.send_study(study, cancel, ordinal=1, total=1)
+    return sender, study, cancel
+
+
+def test_study_started_includes_required_fields(tmp_path: Path) -> None:
+    logger = _make_json_logger()
+    _send_success_study(_make_config(), logger, tmp_path)
+    events = logger._events()  # type: ignore[attr-defined]
+    started = next(e for e in events if e["event"] == "study_started")
+    # §14.2: Study UID, Series, Instances, bytes, context count, ordinal/total
+    assert started["study_uid"] == STUDY_UID
+    assert started["series_count"] == 1
+    assert started["instance_count"] == 1
+    assert started["bytes"] == 100
+    assert started["context_count"] == 1
+    assert started["ordinal"] == 1
+    assert started["total"] == 1
+
+
+def test_instance_sent_includes_required_correlation_fields(tmp_path: Path) -> None:
+    logger = _make_json_logger()
+    _send_success_study(_make_config(), logger, tmp_path)
+    events = logger._events()  # type: ignore[attr-defined]
+    sent = next(e for e in events if e["event"] == "instance_sent")
+    # §14.2: Study/Series/SOP UIDs, SOP Class UID, transfer syntax, path, bytes, status, duration
+    assert sent["study_uid"] == STUDY_UID
+    assert sent["series_uid"] == SERIES_UID
+    assert sent["sop_instance_uid"] == "1.2.3.4.5.1"
+    assert sent["sop_class_uid"] == SOP_CLASS
+    assert sent["transfer_syntax_uid"] == TS_EXPLICIT
+    assert "path" in sent
+    assert sent["bytes"] == 100
+    assert sent["status"] == "0x0000"
+    assert "duration" in sent
+
+
+def test_association_accepted_includes_peer_and_rejected_count(tmp_path: Path) -> None:
+    logger = _make_json_logger()
+    _send_success_study(_make_config(), logger, tmp_path)
+    events = logger._events()  # type: ignore[attr-defined]
+    accepted = next(e for e in events if e["event"] == "association_accepted")
+    # §14.2: Study UID, peer, accepted/rejected context counts
+    assert accepted["study_uid"] == STUDY_UID
+    assert accepted["peer"] == "127.0.0.1:11112"
+    assert accepted["accepted"] == 1
+    assert accepted["rejected"] == 0
+
+
+def test_verbose_emits_association_negotiation(tmp_path: Path) -> None:
+    logger = _make_json_logger()
+    _send_success_study(_make_config(verbose=True), logger, tmp_path)
+    events = logger._events()  # type: ignore[attr-defined]
+    negotiation = [e for e in events if e["event"] == "association_negotiation"]
+    assert len(negotiation) == 1
+    neg = negotiation[0]
+    assert neg["peer"] == "127.0.0.1:11112"
+    assert neg["requested"] == 1
+    assert neg["accepted"] == 1
+    assert neg["rejected"] == 0
+
+
+def test_non_verbose_omits_association_negotiation(tmp_path: Path) -> None:
+    logger = _make_json_logger()
+    _send_success_study(_make_config(verbose=False), logger, tmp_path)
+    events = logger._events()  # type: ignore[attr-defined]
+    assert not any(e["event"] == "association_negotiation" for e in events)
+
+
+def test_association_rejected_includes_peer_and_phase() -> None:
+    import io
+    import json
+
+    stream = io.StringIO()
+    logger = SenderLogger(log_format="json", stream=stream)
+    config = _make_config()
+    sender = Sender(config, logger)
+
+    inst_path = Path("/tmp/__sender_lite_conf_rej__.dcm")
+    study = _make_study([_make_instance(inst_path)])
+    cancel = threading.Event()
+
+    # Association that fails to establish.
+    fake_assoc = FakeAssociation(established=False)
+    fake_ae = FakeAE(fake_assoc)
+    with patch("sender_lite.sender.pynetdicom") as mock_pn:
+        mock_pn.AE.return_value = fake_ae
+        mock_pn.build_context = lambda sc, ts: FakeContext(sc, ts)
+        sender.send_study(study, cancel)
+
+    events = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    rejected = next(e for e in events if e["event"] == "association_rejected")
+    assert rejected["peer"] == "127.0.0.1:11112"
+    assert rejected["phase"] == "establish"
+    assert "reason" in rejected
+
+
+def test_presentation_context_rejected_includes_affected_count() -> None:
+    import io
+    import json
+
+    stream = io.StringIO()
+    logger = SenderLogger(log_format="json", stream=stream)
+    config = _make_config()
+    sender = Sender(config, logger)
+
+    inst_path = Path("/tmp/__sender_lite_conf_pcr__.dcm")
+    study = _make_study([_make_instance(inst_path)])
+    cancel = threading.Event()
+
+    # Association accepts nothing, rejects our only context.
+    fake_assoc = FakeAssociation(
+        established=True,
+        accepted_contexts=[],
+        rejected_contexts=[FakeContext(SOP_CLASS, TS_EXPLICIT)],
+    )
+    fake_ae = FakeAE(fake_assoc)
+    with (
+        patch("sender_lite.sender.pynetdicom") as mock_pn,
+        patch("sender_lite.sender.dcmread"),
+    ):
+        mock_pn.AE.return_value = fake_ae
+        mock_pn.build_context = lambda sc, ts: FakeContext(sc, ts)
+        sender.send_study(study, cancel)
+
+    events = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    pcr = [e for e in events if e["event"] == "presentation_context_rejected"]
+    assert len(pcr) == 1
+    # §14.2: SOP Class UID, transfer syntax UID, affected Instance count
+    assert pcr[0]["sop_class_uid"] == SOP_CLASS
+    assert pcr[0]["transfer_syntax_uid"] == TS_EXPLICIT
+    assert pcr[0]["affected_instance_count"] == 1

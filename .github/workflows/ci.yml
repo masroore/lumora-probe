@@ -3,12 +3,15 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  quality:
     name: ${{ matrix.os }} / CPython ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,21 +24,93 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up CPython
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          node-version: "22"
+          cache: npm
 
-      - name: Install package and development tools
-        run: python -m pip install . pytest ruff
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Set up CPython
+        run: uv python install ${{ matrix.python-version }}
 
-      - name: Check lint
-        run: python -m ruff check .
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Check committed frontend assets
+        run: npm ci && npm run build:assets && git diff --exit-code -- static assets/vendor
 
       - name: Check formatting
-        run: python -m ruff format --check .
+        run: uv run ruff format --check .
+
+      - name: Check lint
+        run: uv run ruff check .
+
+      - name: Check architecture boundaries
+        run: uv run lint-imports --no-cache
+
+      - name: Check static types
+        run: uv run basedpyright src/lumora_probe/core src/lumora_probe/shared
+
+      - name: Run tests with per-slice coverage
+        run: >-
+          uv run pytest -q
+          --cov=lumora_probe.core
+          --cov=lumora_probe.shared
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.python-version }}
+          path: coverage.xml
+
+      - name: Export locked dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: uv export --format requirements.txt --all-groups --no-emit-project --output-file audit-requirements.txt
+
+      - name: Audit dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: uv run pip-audit --strict -r audit-requirements.txt
+
+  interop:
+    name: Scheduled DICOM interoperability suite
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up CPython
+        run: uv python install 3.13
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Start interoperability implementations
+        run: docker compose -f tests/interop/docker-compose.yml --profile interop up -d
+
+      - name: Run non-gating interoperability tests
+        env:
+          LUMORA_INTEROP: "1"
+        run: uv run pytest -m interop -q
+
+      - name: Stop interoperability implementations
+        if: always()
+        run: docker compose -f tests/interop/docker-compose.yml --profile interop down -v

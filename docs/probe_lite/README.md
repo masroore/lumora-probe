@@ -123,7 +123,7 @@ options:
 ## Configuration
 
 Configuration is resolved from three sources with **precedence: CLI flags > environment
-variables > defaults** (implemented in `probe_lite/config.py`).
+variables > defaults** (implemented in `src/probe_lite/config.py`).
 
 | Option      | Flag           | Environment variable    | Default     | Validation |
 |-------------|----------------|-------------------------|-------------|------------|
@@ -158,7 +158,7 @@ probe-lite
 
 ## Storage layout
 
-Instances are written by `probe_lite/storage.py`:
+Instances are written by `src/probe_lite/storage.py`:
 
 - **Normal datasets** → `<output>/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm`
   (written via `pydicom.filewriter.dcmwrite`, file meta preserved).
@@ -182,7 +182,7 @@ validation.
 
 ## Logging
 
-`probe_lite/log.py` provides a self-contained logger that writes **only to stdout**
+`src/probe_lite/log.py` provides a self-contained logger that writes **only to stdout**
 (no file handlers, no global `logging` configuration). The format is chosen with
 `--format` / `PROBE_LITE_FORMAT`.
 
@@ -228,7 +228,7 @@ and exits `2` without binding any socket. Original signal handlers are restored 
 
 ## DICOM behavior
 
-`probe_lite/receiver.py` builds the pynetdicom `AE` and handles DIMSE events.
+`src/probe_lite/receiver.py` builds the pynetdicom `AE` and handles DIMSE events.
 
 - **Supported contexts:** all storage SOP Classes from `AllStoragePresentationContexts`
   **plus** the Verification SOP Class, each negotiated with **all transfer syntaxes**.
@@ -312,7 +312,7 @@ required.
 ## Project structure
 
 ```
-probe_lite/
+src/probe_lite/
 ├── __init__.py     # package marker, __version__ = "0.1.0"
 ├── __main__.py     # `python -m probe_lite` entry (SystemExit(cli.main()))
 ├── cli.py          # `probe-lite` console entry: config, logging, signals, exit codes
@@ -349,5 +349,5 @@ pyproject.toml      # metadata, deps, scripts, hatchling build, ruff & pytest co
 ---
 
 *Note: `docs/architecture-baseline/` and `docs/adr/` describe the broader
-**Lumora Probe** product. Probe Lite (`probe_lite/`) is the standalone minimal receiver
+**Lumora Probe** product. Probe Lite (`src/probe_lite/`) is the standalone minimal receiver
 documented here.*

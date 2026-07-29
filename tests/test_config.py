@@ -17,7 +17,7 @@ def test_defaults() -> None:
 
     assert config.port == DEFAULT_PORT
     assert config.ae_title == DEFAULT_AE_TITLE
-    assert config.output == Path("received")
+    assert config.output == Path("storage/inbox")
     assert config.accept_ae is None
     assert config.log_format == "text"
     assert config.max_pdu == DEFAULT_MAX_PDU

@@ -1,0 +1,16 @@
+services:
+  orthanc:
+    image: orthancteam/orthanc:24.5.1
+    ports:
+      - "4242:4242"
+    profiles: [interop]
+
+  dcmtk:
+    image: dcmtk/dcmtk:3.6.8
+    command: ["storescp", "--version"]
+    profiles: [interop]
+
+  dcm4che:
+    image: dcm4che/dcm4che-tools:5.34.1
+    command: ["storescu", "--version"]
+    profiles: [interop]

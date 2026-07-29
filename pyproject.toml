@@ -16,22 +16,44 @@ classifiers = [
 dependencies = [
     "pydicom>=3.0,<4.0",
     "pynetdicom>=3.0,<4.0",
+    "pydantic-settings>=2.10,<3.0",
+    "structlog>=25.4,<26.0",
+    "fastapi>=0.116,<1.0",
+    "uvicorn>=0.35,<1.0",
 ]
 
 [project.scripts]
 probe-lite = "probe_lite.cli:main"
 sender-lite = "sender_lite.cli:main"
+lumora = "lumora_probe.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["probe_lite", "sender_lite"]
+artifacts = ["static/**", "assets/vendor/**"]
+include = ["static/**", "assets/vendor/**"]
+packages = [
+    "src/lumora_probe",
+    "src/probe_lite",
+    "src/sender_lite",
+    "src/lumora_lite_common",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"static" = "static"
+"assets/vendor" = "assets/vendor"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.30,<2.0",
+    "httpx>=0.28,<1.0",
+    "import-linter>=2.0,<3.0",
+    "pip-audit>=2.9,<3.0",
     "pytest>=9.0",
+    "pytest-asyncio>=1.0,<2.0",
+    "pytest-cov>=7.0,<8.0",
     "ruff>=0.12",
 ]
 
@@ -41,3 +63,18 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: isolated pure logic tests",
+    "component: tests using real filesystem, database, or bus components",
+    "dicom: tests exercising DICOM networking or parsing",
+    "e2e: end-to-end workflow tests",
+    "interop: tests against external DICOM implementations",
+    "slow: tests excluded from the default fast gate",
+]
+
+[tool.basedpyright]
+include = ["src/lumora_probe/core", "src/lumora_probe/shared"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
