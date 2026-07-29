@@ -15,7 +15,6 @@ class FakePublisher:
 
     def publish_from_thread(self, event):
         self.events.append(event)
-        return None
 
 
 def test_runtime_setting_update_publishes_redacted_configuration_event(tmp_path) -> None:
