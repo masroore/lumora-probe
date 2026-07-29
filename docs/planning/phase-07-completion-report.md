@@ -70,7 +70,7 @@
 
 ## Verification
 
-- Full pytest suite: **242 passed, 1 skipped**.
+- Full pytest suite: **243 passed, 1 skipped**.
 - Ruff format check: passed.
 - Ruff lint: passed.
 - BasedPyright strict checks for `core` and `shared`: 0 errors, warnings, or notes.
