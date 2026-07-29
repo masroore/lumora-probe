@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import copy
+import importlib
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
@@ -175,18 +176,21 @@ class DICOMSCUClient:
 
     async def echo(self) -> DICOMEchoResult:
         """Establish, negotiate, verify, and release one association off the event loop."""
-        return await asyncio.to_thread(self._echo_sync)
+        return await asyncio.to_thread(self.echo_sync)
 
-    def _echo_sync(self) -> DICOMEchoResult:
+    def echo_sync(self) -> DICOMEchoResult:
         started = self._monotonic_ns()
-        association: Any | None = None
+        association: Any = None
         try:
             from pynetdicom import AE
-            from pynetdicom.sop_class import Verification
+
+            Verification: Any = getattr(
+                importlib.import_module("pynetdicom.sop_class"), "Verification"
+            )
         except ImportError as exc:
             raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
 
-        ae = AE(ae_title=str(self.config.calling_ae))
+        ae: Any = AE(ae_title=str(self.config.calling_ae))
         ae.maximum_pdu_size = self.config.max_pdu
         ae.acse_timeout = self.config.timeout_seconds
         ae.dimse_timeout = self.config.timeout_seconds
@@ -225,15 +229,17 @@ class DICOMSCUClient:
             if association is not None and association.is_established:
                 association.release()
 
-    def iter_find(self, identifier: Any, *, query_model: str):
+    def iter_find(self, identifier: Any, *, query_model: str) -> Iterator[tuple[Any, Any | None]]:
         """Yield C-FIND responses from the configured peer."""
         yield from self._iter_query("find", identifier, query_model=query_model)
 
-    def iter_get(self, identifier: Any, *, query_model: str):
+    def iter_get(self, identifier: Any, *, query_model: str) -> Iterator[tuple[Any, Any | None]]:
         """Yield C-GET responses from the configured peer."""
         yield from self._iter_query("get", identifier, query_model=query_model)
 
-    def iter_move(self, identifier: Any, *, move_aet: str, query_model: str):
+    def iter_move(
+        self, identifier: Any, *, move_aet: str, query_model: str
+    ) -> Iterator[tuple[Any, Any | None]]:
         """Yield C-MOVE progress responses from the configured peer."""
         yield from self._iter_query("move", identifier, query_model=query_model, move_aet=move_aet)
 
@@ -244,14 +250,14 @@ class DICOMSCUClient:
         *,
         query_model: str,
         move_aet: str | None = None,
-    ):
-        association: Any | None = None
+    ) -> Iterator[tuple[Any, Any | None]]:
+        association: Any = None
         try:
             from pynetdicom import AE
         except ImportError as exc:
             raise RuntimeError("pynetdicom and pydicom are required for the DICOM SCU") from exc
 
-        ae = AE(ae_title=str(self.config.calling_ae))
+        ae: Any = AE(ae_title=str(self.config.calling_ae))
         ae.maximum_pdu_size = self.config.max_pdu
         ae.acse_timeout = self.config.timeout_seconds
         ae.dimse_timeout = self.config.timeout_seconds
@@ -306,7 +312,7 @@ class DICOMSCUClient:
         file_meta: Any | None,
     ) -> DICOMStoreResult:
         started = self._monotonic_ns()
-        association: Any | None = None
+        association: Any = None
         try:
             from pynetdicom import AE
         except ImportError as exc:
@@ -321,7 +327,7 @@ class DICOMSCUClient:
         outbound.file_meta.MediaStorageSOPClassUID = str(outbound.SOPClassUID)
         outbound.file_meta.MediaStorageSOPInstanceUID = str(outbound.SOPInstanceUID)
 
-        ae = AE(ae_title=str(self.config.calling_ae))
+        ae: Any = AE(ae_title=str(self.config.calling_ae))
         ae.maximum_pdu_size = self.config.max_pdu
         ae.acse_timeout = self.config.timeout_seconds
         ae.dimse_timeout = self.config.timeout_seconds
@@ -455,9 +461,10 @@ class DICOMListener:
         """Start the SCP without blocking the owning asyncio loop."""
         if self._started:
             return
-        self.ae = self._build_ae()
+        ae: Any = self._build_ae()
+        self.ae = ae
         try:
-            self.server = self.ae.start_server(
+            self.server = ae.start_server(
                 (self.config.bind_host, self.config.port),
                 block=False,
                 evt_handlers=self._handlers(),
@@ -526,7 +533,7 @@ class DICOMListener:
         _config.UNRESTRICTED_STORAGE_SERVICE = True
         _config.STORE_RECV_CHUNKED_DATASET = True
 
-        ae = AE(ae_title=str(self.config.ae_title))
+        ae: Any = AE(ae_title=str(self.config.ae_title))
         ae.maximum_pdu_size = self.config.max_pdu
         ae.supported_contexts = []
         for context in (
@@ -655,7 +662,7 @@ class DICOMListener:
         return DICOM_SUCCESS
 
     def _on_c_store(self, event: Any) -> int:
-        payload = _c_store_payload(event)
+        payload = c_store_payload(event)
         self._publish_dimse_event(event.assoc, "CStoreReceived", payload)
         self._publish_dimse_event(event.assoc, "DatasetParsed", payload)
         if self.c_store_sink is not None:
@@ -806,7 +813,8 @@ def _called_ae(association: Any) -> str:
 def _source_endpoint(association: Any) -> tuple[str, int | None]:
     remote = getattr(association, "remote", None)
     if isinstance(remote, dict):
-        return _text(remote.get("address", "unknown")), _port(remote.get("port"))
+        remote_value = cast(dict[str, Any], remote)
+        return _text(remote_value.get("address", "unknown")), _port(remote_value.get("port"))
     requestor = getattr(association, "requestor", None)
     return _text(getattr(requestor, "address", "unknown")), _port(getattr(requestor, "port", None))
 
@@ -861,7 +869,7 @@ def _pdu_boundaries(pdu: Any) -> tuple[tuple[int, int], ...]:
     return tuple(values)
 
 
-def _c_store_payload(event: Any) -> dict[str, object]:
+def c_store_payload(event: Any) -> dict[str, object]:
     request = getattr(event, "request", None)
     dataset = getattr(event, "dataset", None)
     context = getattr(event, "context", None)

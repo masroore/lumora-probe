@@ -15,7 +15,7 @@ from .network import (
     DICOMSCUClient,
     DICOMSCUConfig,
     DICOM_SUCCESS,
-    _c_store_payload,
+    c_store_payload,
 )
 
 
@@ -162,7 +162,7 @@ class DICOMRelay(DICOMListener):
         return 0x0122
 
     def _on_c_store(self, event: Any) -> int:
-        payload = _c_store_payload(event)
+        payload = c_store_payload(event)
         upstream = self.relay_config.upstream
         if upstream is None:
             payload = {
@@ -237,7 +237,7 @@ class DICOMRelay(DICOMListener):
                 },
             )
             return DICOM_SUCCESS
-        result = DICOMSCUClient(upstream, clock=self.clock)._echo_sync()
+        result = DICOMSCUClient(upstream, clock=self.clock).echo_sync()
         self._publish_dimse_event(
             event.assoc,
             "CEchoReceived",
