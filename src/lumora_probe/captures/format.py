@@ -105,6 +105,7 @@ class CaptureManifest(BaseModel):
     partial: bool = False
     promoted_from_buffer: bool = False
     incomplete_aggregates: tuple[str, ...] = ()
+    interruption_reason: str | None = None
     client_asserted_event_count: int = Field(default=0, ge=0)
     clock_anchor: ClockAnchor | None = None
     objects: tuple[CaptureObject, ...] = ()
@@ -320,6 +321,20 @@ class CapturePackageWriter:
         self._write_manifest(self.manifest)
         self._sealed = True
         return self.manifest
+
+    def update_manifest(self, manifest: CaptureManifest) -> CaptureManifest:
+        """Persist mutable lifecycle metadata before the package is sealed."""
+        self._ensure_open()
+        if manifest.capture_id != self.manifest.capture_id:
+            raise CaptureFormatError(
+                code="LUMORA-CAPTURE-FMT-013",
+                message="Capture manifest identity cannot change",
+                remediation="Create a new capture package for a different capture_id.",
+                context={"capture_id": self.manifest.capture_id},
+            )
+        self.manifest = manifest
+        self._write_manifest(manifest)
+        return manifest
 
     def _write_manifest(self, manifest: CaptureManifest) -> None:
         destination = self.capture_path / MANIFEST_NAME
