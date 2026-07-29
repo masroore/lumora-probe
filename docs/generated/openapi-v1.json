@@ -351,6 +351,29 @@
         ]
       }
     },
+    "/api/v1/captures/ring-buffer": {
+      "get": {
+        "operationId": "get_ring_buffer_status_api_v1_captures_ring_buffer_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Ring Buffer Status Api V1 Captures Ring Buffer Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ring Buffer Status",
+        "tags": [
+          "captures"
+        ]
+      }
+    },
     "/api/v1/captures/{capture_id}": {
       "delete": {
         "operationId": "delete_capture_api_v1_captures__capture_id__delete",
