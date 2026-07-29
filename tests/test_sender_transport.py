@@ -1076,12 +1076,6 @@ def _make_json_logger() -> SenderLogger:
     return logger
 
 
-def _make_json_logger_and_events() -> tuple[SenderLogger, object]:
-    """Return a JSON logger and its parsed-event accessor."""
-    logger = _make_json_logger()
-    return logger, logger._events  # type: ignore[attr-defined]
-
-
 def _send_success_study(
     config: Config, logger: SenderLogger, tmp_path: Path
 ) -> tuple[Sender, StudyBatch, threading.Event]:
@@ -1160,7 +1154,7 @@ def test_association_accepted_includes_peer_and_rejected_count(tmp_path: Path) -
 
 
 def test_verbose_emits_association_negotiation(tmp_path: Path) -> None:
-    logger, _ = _make_json_logger_and_events()
+    logger = _make_json_logger()
     _send_success_study(_make_config(verbose=True), logger, tmp_path)
     events = logger._events()  # type: ignore[attr-defined]
     negotiation = [e for e in events if e["event"] == "association_negotiation"]
@@ -1173,7 +1167,7 @@ def test_verbose_emits_association_negotiation(tmp_path: Path) -> None:
 
 
 def test_non_verbose_omits_association_negotiation(tmp_path: Path) -> None:
-    logger, _ = _make_json_logger_and_events()
+    logger = _make_json_logger()
     _send_success_study(_make_config(verbose=False), logger, tmp_path)
     events = logger._events()  # type: ignore[attr-defined]
     assert not any(e["event"] == "association_negotiation" for e in events)
