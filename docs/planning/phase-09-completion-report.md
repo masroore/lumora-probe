@@ -83,7 +83,8 @@
 - Ruff lint and format: passed.
 - BasedPyright (`core`, `shared`, `web`, CLI): passed with 0 errors, warnings, and notes.
 - Import-linter: **7 contracts kept, 0 broken**.
-- Asset checks and package build remain part of the final phase gate.
+- `npm run check:assets`: passed after `npm ci` (existing npm audit findings unchanged).
+- `uv build`: passed for source distribution and wheel.
 
 ## Known limitations
 
