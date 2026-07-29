@@ -355,7 +355,13 @@ def build_default_event_registry() -> EventPayloadRegistry:
             "InstancePersisted",
         ),
         EventCategory.VIEWER: ("ImageDisplayed", "WindowLevelChanged", "CineStarted"),
-        EventCategory.CAPTURE: ("CaptureStarted", "CaptureStopped", "CaptureCompleted"),
+        EventCategory.CAPTURE: (
+            "CaptureStarted",
+            "CaptureStopped",
+            "CaptureCompleted",
+            "CaptureInterrupted",
+            "CapturePromoted",
+        ),
         EventCategory.REPLAY: (
             "ReplayStarted",
             "ReplayPaused",

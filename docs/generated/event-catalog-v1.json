@@ -432,6 +432,40 @@
     },
     {
       "category": "Capture",
+      "event_name": "CaptureInterrupted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
+    },
+    {
+      "category": "Capture",
+      "event_name": "CapturePromoted",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
+    },
+    {
+      "category": "Capture",
       "event_name": "CaptureStarted",
       "event_version": 1,
       "origins": [
