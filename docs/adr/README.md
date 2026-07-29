@@ -54,6 +54,7 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | [0022](ADR-0022-test-strategy-weighting.md) | Component-weighted tests; injected `Clock` and `IdGenerator` |
 | [0025](ADR-0025-frontend-asset-pipeline.md) | Node at asset-build time only; built assets committed |
 | [0026](ADR-0026-redaction-and-handover.md) | Honest partial redaction; object-dropping is the default handover |
+| [0030](ADR-0030-ratified-performance-budgets.md) | Ratified capture volume and rolling-retention budgets |
 
 ## Probe Lite tools
 

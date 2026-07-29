@@ -1,12 +1,12 @@
 # Provisional Non-Functional Budgets
 
 **Task:** T-03-03-02
-**Status:** Provisional — ratification scheduled for Phase 11
+**Status:** Ratified — see ADR-0030
 **Date:** 2026-07-29
 
 These budgets convert the only quantified capacity figures in ADR-0014 and the approved
-UI target into checks that can fail. They are not release commitments until ratified
-against representative traffic in Phase 11.
+UI target into checks that can fail. ADR-0030 promotes the capture and retention thresholds
+to release commitments.
 
 | Area | Provisional budget | Basis | Measurement |
 | --- | --- | --- | --- |
@@ -25,6 +25,5 @@ against representative traffic in Phase 11.
 
 ## Ratification work
 
-Phase 11 will replay representative synthetic studies, measure the budgets under the
-approved concurrency model, and either ratify these values or record an ADR amendment.
-Until then, tests and dashboards should label these thresholds `provisional`.
+Phase 11 measured representative synthetic traffic and ratified these values in ADR-0030.
+Tests and dashboards should label these thresholds `ratified`.
