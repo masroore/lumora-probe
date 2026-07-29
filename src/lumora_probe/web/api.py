@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from lumora_probe.core.clock import Clock, SystemClock
 from lumora_probe.core.errors import (
     ConfigurationError,
     LumoraError,
@@ -13,10 +14,12 @@ from lumora_probe.core.errors import (
     SettingLockedError,
     VersionMismatchError,
 )
+from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.core.logging import new_correlation_id
 
 from .association_routes import create_association_router
 from .capture_routes import create_capture_router
+from .client_event_routes import ClientEventPublisher, RateLimiter, create_client_event_router
 from .contracts import ErrorResponse
 from .event_routes import create_event_router
 from .health_routes import HealthProvider, create_health_router
@@ -36,6 +39,12 @@ def _http_status_for(error: LumoraError) -> int:
         return 409
     if isinstance(error, (ConfigurationError, PathSecurityError)):
         return 400
+    if error.code == "LUMORA-WEB-RATE-001":
+        return 429
+    if error.code == "LUMORA-WEB-EVENTS-002":
+        return 422
+    if error.code == "LUMORA-WEB-EVENTS-001":
+        return 503
     return 500
 
 
@@ -78,6 +87,10 @@ def create_app(
     settings_provider: SettingsProvider | None = None,
     health_provider: HealthProvider | None = None,
     security_policy: SecurityPolicy | None = None,
+    event_publisher: ClientEventPublisher | None = None,
+    event_clock: Clock | None = None,
+    event_id_generator: IdGenerator | None = None,
+    client_event_rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -97,6 +110,15 @@ def create_app(
     application.include_router(create_operation_router(operation_registry), prefix=API_PREFIX)
     application.include_router(create_settings_router(settings_provider), prefix=API_PREFIX)
     application.include_router(create_health_router(health_provider), prefix=API_PREFIX)
+    application.include_router(
+        create_client_event_router(
+            publisher=event_publisher,
+            clock=event_clock or SystemClock(),
+            id_generator=event_id_generator or UUIDv7Generator(),
+            rate_limiter=client_event_rate_limiter,
+        ),
+        prefix=API_PREFIX,
+    )
     return application
 
 
