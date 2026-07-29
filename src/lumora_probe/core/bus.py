@@ -70,7 +70,7 @@ class EventSubscription:
 
     def __init__(
         self,
-        bus: "EventBus",
+        bus: EventBus,
         *,
         subscription_id: str,
         channel: SubscriberChannel,
@@ -316,11 +316,12 @@ class EventBus:
     ) -> EventEnvelope:
         self.registry.validate(event)
         category = self.registry.category_for(event.event_name, event.event_version)
-        if event.origin is EventOrigin.CLIENT_ASSERTED:
-            if category is not EventCategory.VIEWER or event.producer != "web-ui":
-                raise ValueError(
-                    "client-asserted events must be registered Viewer events produced by web-ui"
-                )
+        if event.origin is EventOrigin.CLIENT_ASSERTED and (
+            category is not EventCategory.VIEWER or event.producer != "web-ui"
+        ):
+            raise ValueError(
+                "client-asserted events must be registered Viewer events produced by web-ui"
+            )
         sequence_key = capture_id or event.aggregate_id
         sequence = self._next_sequence.get(sequence_key, 0) + 1
         self._next_sequence[sequence_key] = sequence

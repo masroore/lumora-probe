@@ -184,7 +184,7 @@ class EventEnvelope(BaseModel):
         severity: EventSeverity = EventSeverity.INFO,
         replay_id: str | None = None,
         replay_of_event_id: str | None = None,
-    ) -> "EventEnvelope":
+    ) -> EventEnvelope:
         """Create an unpublished envelope using injected time and identity sources."""
         if clock is None or id_generator is None:
             raise ValueError("EventEnvelope.create requires injected clock and id_generator")
@@ -210,7 +210,7 @@ class EventEnvelope(BaseModel):
             replay_of_event_id=replay_of_event_id,
         )
 
-    def with_sequence(self, sequence: int) -> "EventEnvelope":
+    def with_sequence(self, sequence: int) -> EventEnvelope:
         """Return a published copy with the sequencer-assigned sequence."""
         return self.model_copy(update={"sequence": sequence})
 

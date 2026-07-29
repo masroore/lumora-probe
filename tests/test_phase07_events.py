@@ -88,7 +88,7 @@ def test_event_name_and_uuid_invariants_are_enforced() -> None:
         EventEnvelope.model_validate({**make_event().model_dump(), "event_id": "not-a-uuidv7"})
     with pytest.raises(ValidationError):
         EventEnvelope.model_validate(
-            {**make_event().model_dump(), "occurred_at": datetime(2026, 7, 29)}
+            {**make_event().model_dump(), "occurred_at": "2026-07-29T00:00:00"}
         )
 
 
