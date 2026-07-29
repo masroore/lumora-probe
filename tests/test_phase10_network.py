@@ -128,6 +128,7 @@ async def test_association_callbacks_use_thread_safe_event_ingress(free_port: in
         assert [event.event_name for event in ingress.events] == [
             "AssociationStarted",
             "AssociationAccepted",
+            "CEchoReceived",
             "AssociationReleased",
         ]
         assert ingress.thread_names
@@ -285,3 +286,45 @@ def test_phase10_event_contracts_are_registered_and_catalogued() -> None:
         definition = DEFAULT_EVENT_REGISTRY.definition(name, 1)
         assert definition is not None
         assert definition.category is category
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_inline_relay_forwards_c_echo_to_upstream_and_labels_mode(free_port: int) -> None:
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+    from lumora_probe.associations.relay import DICOMRelay, RelayConfig, RelayMode
+
+    upstream_port = free_port + 1
+    upstream = DICOMListener(
+        DICOMListenerConfig(port=upstream_port, ae_title="UPSTREAM"),
+    )
+    ingress = _RecordingIngress()
+    relay = DICOMRelay(
+        DICOMListenerConfig(port=free_port, ae_title="RELAY"),
+        RelayConfig(
+            mode=RelayMode.PASS_THROUGH,
+            upstream=DICOMSCUConfig(
+                host="127.0.0.1",
+                port=upstream_port,
+                calling_ae="RELAY-SCU",
+                called_ae="UPSTREAM",
+            ),
+        ),
+        event_ingress=ingress,
+        clock=SystemClock(),
+        id_generator=_ids(12),
+    )
+    await upstream.start()
+    await relay.start()
+    try:
+        result = await DICOMSCUClient(
+            DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="DOWNSTREAM")
+        ).echo()
+        assert result.success is True
+        echo = next(event for event in ingress.events if event.event_name == "CEchoReceived")
+        assert echo.payload["relay_mode"] == "pass-through"
+        assert echo.payload["upstream_forwarded"] is True
+        assert echo.payload["upstream_success"] is True
+    finally:
+        await relay.stop()
+        await upstream.stop()

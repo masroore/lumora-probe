@@ -413,6 +413,18 @@ class DICOMListener:
         self._forget(association)
 
     def _on_c_echo(self, event: Any) -> int:
+        self._publish_dimse_event(
+            event.assoc,
+            "CEchoReceived",
+            {
+                "dimse": "C-ECHO",
+                "pdu_count": 0,
+                "bytes": 0,
+                "first_monotonic_ns": None,
+                "last_monotonic_ns": None,
+                "max_inter_pdu_gap_ns": 0,
+            },
+        )
         return DICOM_SUCCESS
 
     def _state_for(self, association: Any) -> _AssociationState:
@@ -432,6 +444,26 @@ class DICOMListener:
     def _forget(self, association: Any) -> None:
         with self._lock:
             self._states.pop(id(association), None)
+
+    def _publish_dimse_event(
+        self, association: Any, event_name: str, payload: dict[str, object]
+    ) -> None:
+        if self.event_ingress is None:
+            return
+        state = self._state_for(association)
+        event = EventEnvelope.create(
+            event_name=event_name,
+            event_version=1,
+            correlation_id=state.association_id,
+            aggregate_type="Association",
+            aggregate_id=state.association_id,
+            producer="association-manager",
+            payload=payload,
+            origin=EventOrigin.OBSERVED,
+            clock=self._clock(),
+            id_generator=self._id_generator(),
+        )
+        self.event_ingress.publish_from_thread(event)
 
     def _id_generator(self) -> AssociationIdGenerator:
         if self.id_generator is None:

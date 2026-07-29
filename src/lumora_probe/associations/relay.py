@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .network import DICOMSCUConfig
+from .network import DICOMListener, DICOMSCUClient, DICOMSCUConfig, DICOM_SUCCESS
 
 
 class RelayMode(StrEnum):
@@ -51,6 +51,69 @@ class RelayConfig:
                 "explicitly to capture without one"
             )
         return self.upstream
+
+
+class DICOMRelay(DICOMListener):
+    """Inline relay endpoint with explicit pass-through or standalone semantics."""
+
+    def __init__(self, config: Any, relay_config: RelayConfig, **kwargs: Any) -> None:
+        super().__init__(config, **kwargs)
+        self.relay_config = relay_config
+
+    def _on_c_echo(self, event: Any) -> int:
+        upstream = self.relay_config.upstream
+        if self.relay_config.mode is RelayMode.PASS_THROUGH and upstream is None:
+            self._publish_dimse_event(
+                event.assoc,
+                "CEchoReceived",
+                {
+                    "dimse": "C-ECHO",
+                    "relay_mode": self.relay_config.negotiation_label,
+                    "upstream_forwarded": False,
+                    "error": "upstream unavailable",
+                    "pdu_count": 0,
+                    "bytes": 0,
+                    "first_monotonic_ns": None,
+                    "last_monotonic_ns": None,
+                    "max_inter_pdu_gap_ns": 0,
+                },
+            )
+            return 0xA700
+        if upstream is None:
+            self._publish_dimse_event(
+                event.assoc,
+                "CEchoReceived",
+                {
+                    "dimse": "C-ECHO",
+                    "relay_mode": self.relay_config.negotiation_label,
+                    "upstream_forwarded": False,
+                    "pdu_count": 0,
+                    "bytes": 0,
+                    "first_monotonic_ns": None,
+                    "last_monotonic_ns": None,
+                    "max_inter_pdu_gap_ns": 0,
+                },
+            )
+            return DICOM_SUCCESS
+        result = DICOMSCUClient(upstream, clock=self.clock)._echo_sync()
+        self._publish_dimse_event(
+            event.assoc,
+            "CEchoReceived",
+            {
+                "dimse": "C-ECHO",
+                "relay_mode": self.relay_config.negotiation_label,
+                "upstream_forwarded": True,
+                "upstream_success": result.success,
+                "upstream_status": result.status,
+                "probe_hop_duration_ns": result.duration_ns,
+                "pdu_count": 0,
+                "bytes": 0,
+                "first_monotonic_ns": None,
+                "last_monotonic_ns": None,
+                "max_inter_pdu_gap_ns": 0,
+            },
+        )
+        return DICOM_SUCCESS if result.success else 0xA700
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +296,7 @@ _PDU_TYPES = {
 
 __all__ = [
     "ByteFaithfulRelay",
+    "DICOMRelay",
     "PDUTraceRecord",
     "PDUTraceWriter",
     "PassThroughNegotiator",
