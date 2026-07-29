@@ -27,7 +27,7 @@ async def test_projection_collections_are_exposed_with_consistent_pagination() -
     )
     application = create_app(projection_store=store)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         studies = await client.get("/api/v1/studies")
         series = await client.get("/api/v1/series?filter=study_uid:s1")
         instance = await client.get("/api/v1/instances/i1")

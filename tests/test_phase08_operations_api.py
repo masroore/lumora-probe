@@ -16,7 +16,7 @@ async def test_operation_endpoint_exposes_progress_record() -> None:
     )
     application = create_app(operation_registry=registry)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/operations/op-1")
         missing = await client.get("/api/v1/operations/missing")
 

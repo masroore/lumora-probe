@@ -44,7 +44,7 @@ async def test_lumora_error_handler_returns_structured_response() -> None:
         )
 
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/test-error", headers={"X-Correlation-ID": "corr-456"})
 
     assert response.status_code == 500

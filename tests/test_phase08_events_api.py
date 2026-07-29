@@ -22,7 +22,7 @@ async def test_events_are_queryable_by_correlation_and_sequence() -> None:
     )
     application = create_app(event_store=store)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/events?correlation_id=c1&sequence=2")
 
     assert response.status_code == 200

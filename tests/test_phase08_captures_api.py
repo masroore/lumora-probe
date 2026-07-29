@@ -22,7 +22,7 @@ async def test_capture_collection_is_paginated_and_retrievable() -> None:
     )
     application = create_app(capture_store=store)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/captures?page_size=1&sort=-capture_id")
         detail = await client.get("/api/v1/captures/a")
 
@@ -40,7 +40,7 @@ async def test_capture_delete_is_explicit() -> None:
     store = InMemoryResourceStore({"captures": {"a": {"capture_id": "a"}}})
     application = create_app(capture_store=store)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.delete("/api/v1/captures/a")
         missing = await client.get("/api/v1/captures/a")
 

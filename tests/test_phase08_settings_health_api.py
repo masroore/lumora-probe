@@ -17,7 +17,7 @@ async def test_settings_expose_source_and_locked_fields() -> None:
     )
     application = create_app(settings_provider=settings)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/settings")
         update = await client.patch("/api/v1/settings", json={"port": 9000})
 
@@ -31,7 +31,7 @@ async def test_settings_expose_source_and_locked_fields() -> None:
 async def test_readiness_and_liveness_are_distinct() -> None:
     application = create_app(health_provider=InMemoryHealthProvider(ready=False, alive=True))
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         ready = await client.get("/api/v1/health/ready")
         live = await client.get("/api/v1/health/live")
 

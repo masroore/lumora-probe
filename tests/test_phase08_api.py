@@ -19,7 +19,7 @@ def test_api_uses_stable_versioned_prefix() -> None:
 async def test_api_root_reports_version() -> None:
     application = create_app()
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get(API_PREFIX)
 
     assert response.status_code == 200

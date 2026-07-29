@@ -27,7 +27,7 @@ async def test_associations_preserve_pair_and_per_leg_timing_data() -> None:
     )
     application = create_app(association_store=store)
     transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/associations/a1")
 
     assert response.status_code == 200

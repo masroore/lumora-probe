@@ -22,6 +22,7 @@ from .event_routes import create_event_router
 from .health_routes import HealthProvider, create_health_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .resources import ResourceStore
+from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import create_projection_routers
 
@@ -76,6 +77,7 @@ def create_app(
     operation_registry: OperationRegistry | None = None,
     settings_provider: SettingsProvider | None = None,
     health_provider: HealthProvider | None = None,
+    security_policy: SecurityPolicy | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -85,6 +87,7 @@ def create_app(
         description="DICOM observability, troubleshooting, and engineering platform.",
     )
     application.add_exception_handler(LumoraError, lumora_error_handler)
+    application.add_middleware(SecurityMiddleware, policy=security_policy or SecurityPolicy())
     application.include_router(api_v1_router)
     application.include_router(create_capture_router(capture_store), prefix=API_PREFIX)
     for router in create_projection_routers(projection_store):
