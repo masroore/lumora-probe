@@ -298,15 +298,18 @@ class EventPayloadRegistry:
 
     def catalog(self) -> dict[str, Any]:
         """Return the versioned, JSON-serializable catalog generated from registrations."""
-        envelope_fields = {
-            name: str(field.annotation) for name, field in EventEnvelope.model_fields.items()
-        }
         return {
             "catalog_version": EVENT_CATALOG_VERSION,
             "envelope": {
-                "fields": envelope_fields,
+                "fields": list(EventEnvelope.model_fields),
+                "schema": EventEnvelope.model_json_schema(),
                 "unknown_fields": "preserved",
                 "unknown_event_pairs": "accepted_as_opaque_payload",
+                "client_asserted": {
+                    "category": EventCategory.VIEWER.value,
+                    "producer": "web-ui",
+                },
+                "replay_fields": ["replay_id", "replay_of_event_id"],
             },
             "events": [
                 {
@@ -314,6 +317,7 @@ class EventPayloadRegistry:
                     "event_version": definition.event_version,
                     "category": definition.category.value,
                     "payload_model": f"{definition.payload_model.__module__}.{definition.payload_model.__name__}",
+                    "payload_schema": definition.payload_model.model_json_schema(),
                     "origins": [origin.value for origin in EventOrigin],
                 }
                 for definition in self.definitions()

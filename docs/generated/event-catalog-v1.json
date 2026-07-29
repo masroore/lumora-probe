@@ -1,23 +1,175 @@
 {
   "catalog_version": 1,
   "envelope": {
-    "fields": {
-      "aggregate_id": "<class 'str'>",
-      "aggregate_type": "<class 'str'>",
-      "causation_id": "str | None",
-      "correlation_id": "<class 'str'>",
-      "event_id": "<class 'str'>",
-      "event_name": "<class 'str'>",
-      "event_version": "<class 'int'>",
-      "monotonic_ns": "<class 'int'>",
-      "occurred_at": "<class 'datetime.datetime'>",
-      "origin": "<enum 'EventOrigin'>",
-      "payload": "dict[str, typing.Any]",
-      "producer": "<class 'str'>",
-      "replay_id": "str | None",
-      "replay_of_event_id": "str | None",
-      "sequence": "int | None",
-      "severity": "<enum 'EventSeverity'>"
+    "client_asserted": {
+      "category": "Viewer",
+      "producer": "web-ui"
+    },
+    "fields": [
+      "event_id",
+      "event_name",
+      "event_version",
+      "occurred_at",
+      "correlation_id",
+      "causation_id",
+      "aggregate_type",
+      "aggregate_id",
+      "producer",
+      "severity",
+      "payload",
+      "origin",
+      "monotonic_ns",
+      "sequence",
+      "replay_id",
+      "replay_of_event_id"
+    ],
+    "replay_fields": [
+      "replay_id",
+      "replay_of_event_id"
+    ],
+    "schema": {
+      "$defs": {
+        "EventOrigin": {
+          "description": "Whether an event was observed by the server or asserted by the browser.",
+          "enum": [
+            "observed",
+            "client-asserted"
+          ],
+          "title": "EventOrigin",
+          "type": "string"
+        },
+        "EventSeverity": {
+          "description": "Operator-facing event severity.",
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "critical"
+          ],
+          "title": "EventSeverity",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "description": "Immutable, versioned wire envelope shared by all event producers.",
+      "properties": {
+        "aggregate_id": {
+          "title": "Aggregate Id",
+          "type": "string"
+        },
+        "aggregate_type": {
+          "title": "Aggregate Type",
+          "type": "string"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_name": {
+          "title": "Event Name",
+          "type": "string"
+        },
+        "event_version": {
+          "minimum": 1,
+          "title": "Event Version",
+          "type": "integer"
+        },
+        "monotonic_ns": {
+          "minimum": 0,
+          "title": "Monotonic Ns",
+          "type": "integer"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/EventOrigin"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "producer": {
+          "title": "Producer",
+          "type": "string"
+        },
+        "replay_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replay Id"
+        },
+        "replay_of_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replay Of Event Id"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sequence"
+        },
+        "severity": {
+          "$ref": "#/$defs/EventSeverity",
+          "default": "info"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_name",
+        "event_version",
+        "occurred_at",
+        "correlation_id",
+        "aggregate_type",
+        "aggregate_id",
+        "producer",
+        "payload",
+        "origin",
+        "monotonic_ns"
+      ],
+      "title": "EventEnvelope",
+      "type": "object"
     },
     "unknown_event_pairs": "accepted_as_opaque_payload",
     "unknown_fields": "preserved"
@@ -31,7 +183,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -41,7 +200,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -51,7 +217,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Association",
@@ -61,7 +234,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Association",
@@ -71,7 +251,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Association",
@@ -81,7 +268,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Association",
@@ -91,7 +285,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Association",
@@ -101,7 +302,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "DIMSE",
@@ -111,7 +319,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "DIMSE",
@@ -121,7 +336,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "DIMSE",
@@ -131,7 +353,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "DIMSE",
@@ -141,7 +370,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "DIMSE",
@@ -151,7 +387,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Capture",
@@ -161,7 +404,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Capture",
@@ -171,7 +421,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Capture",
@@ -181,7 +438,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Viewer",
@@ -191,7 +455,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -201,7 +472,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -211,7 +489,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Dataset",
@@ -221,7 +506,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Dataset",
@@ -231,7 +523,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -241,7 +540,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -251,7 +557,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Viewer",
@@ -261,7 +574,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Dataset",
@@ -271,7 +591,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Plugin",
@@ -281,7 +608,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Replay",
@@ -291,7 +625,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Replay",
@@ -301,7 +642,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Replay",
@@ -311,7 +659,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Replay",
@@ -321,7 +676,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Reporting",
@@ -331,7 +693,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Reporting",
@@ -341,7 +710,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "System",
@@ -351,7 +727,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     },
     {
       "category": "Viewer",
@@ -361,7 +744,14 @@
         "observed",
         "client-asserted"
       ],
-      "payload_model": "lumora_probe.shared.events.EventPayload"
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
     }
   ]
 }
