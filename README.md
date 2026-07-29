@@ -147,14 +147,27 @@ arguments, Sender Lite loads `./sender-lite.toml` if present and errors otherwis
 | `2` | invalid CLI/TOML configuration or usage |
 | `130` | interrupted/cancelled before completion |
 
+## Project layout
+
+```
+src/
+├── probe_lite/          Probe Lite CLI receiver
+├── sender_lite/         Sender Lite CLI sender
+├── lumora_lite_common/  Shared helpers (logger, signals, validators, UIDs)
+└── lumora_probe/        Lumora Probe application (incremental build)
+```
+
+All three Lite packages ship in a single wheel (`lumora-probe-lite`). Python import
+names are `probe_lite`, `sender_lite`, and `lumora_lite_common` (no `src.` prefix).
+
 ## Shared library
 
-Both tools share a small internal package, `src/lumora_lite_common`, which holds the
+Both Lite tools share `src/lumora_lite_common`, which holds the
 genuinely duplicated helpers: the event-logger engine (an `EventLogger` base class that
 `ProbeLogger` and `SenderLogger` extend), portable signal install/restore, config leaf
 validators (port, max PDU, log format, AE title), and DICOM UID validation. See
 ADR-0028 for the scope and the pragmatic-OOP boundary. This is internal to the Lite
-tools and does not share code with the parent `lumora/` project.
+tools and does not share code with `src/lumora_probe/`.
 
 ## Verify locally
 
@@ -166,7 +179,7 @@ python -m ruff format --check .
 
 CI runs these checks on CPython 3.13 for Ubuntu, macOS, and Windows.
 
-## Lumora Probe architecture package
+## Lumora Probe application
 
 The broader Lumora Probe application is being implemented incrementally under
 `src/lumora_probe/`. Its module-first structure follows ADR-0012: each application slice
@@ -174,5 +187,5 @@ owns `domain`, `service`, `repository`, `api`, and `contracts` boundaries. Impor
 contracts run with the development quality gates and prevent slices from reaching into
 another slice's internals.
 
-The Lite command-line tools remain separate packages. Their shared helpers stay in
-`src/lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
+The Lite command-line tools remain separate packages under `src/`. Their shared helpers
+stay in `src/lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
