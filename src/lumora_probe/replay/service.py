@@ -27,6 +27,26 @@ from .contracts import (
 ReplaySleeper = Callable[[float], Awaitable[None]]
 
 
+class InMemoryReplayExclusivity:
+    """Refuse a second live protocol replay instead of queueing it."""
+
+    def __init__(self) -> None:
+        self._active = False
+
+    def acquire(self) -> None:
+        if self._active:
+            raise ReplayDomainError(
+                code="LUMORA-REPLAY-GUARD-003",
+                message="A protocol replay is already running",
+                remediation="Wait for the active protocol replay to finish before starting another.",
+                context={"queued": False},
+            )
+        self._active = True
+
+    def release(self) -> None:
+        self._active = False
+
+
 class ProtocolReplayService:
     """Replay captured DICOM datasets through an injected async sender."""
 
@@ -39,6 +59,7 @@ class ProtocolReplayService:
         audit_sink: ReplayAuditSink | None = None,
         clock: Clock | None = None,
         id_generator: IdGenerator | None = None,
+        exclusivity: InMemoryReplayExclusivity | None = None,
     ) -> None:
         self.sender = sender
         self.policy = policy
@@ -46,6 +67,7 @@ class ProtocolReplayService:
         self.audit_sink = audit_sink
         self.clock = clock if clock is not None else SystemClock()
         self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
+        self.exclusivity = exclusivity if exclusivity is not None else InMemoryReplayExclusivity()
 
     async def replay(
         self,
@@ -61,6 +83,7 @@ class ProtocolReplayService:
         """Send datasets in persisted order at original or scaled timing."""
         run_replay_id = replay_id or self.id_generator.new_id()
         planned_count = 0
+        acquired = False
         try:
             _require_protocol_fidelity(capture_fidelity)
             _require_complete_capture(partial, incomplete_aggregates)
@@ -82,6 +105,8 @@ class ProtocolReplayService:
                 self._audit(result, outcome="dry-run")
                 return result
 
+            self.exclusivity.acquire()
+            acquired = True
             results: list[DICOMStoreResult] = []
             for previous, dataset in _with_previous_dataset(source_datasets):
                 if previous is not None:
@@ -112,6 +137,9 @@ class ProtocolReplayService:
                 error=str(exc),
             )
             raise
+        finally:
+            if acquired:
+                self.exclusivity.release()
 
     def _audit(self, result: ProtocolReplayResult, *, outcome: str) -> None:
         if self.audit_sink is None:

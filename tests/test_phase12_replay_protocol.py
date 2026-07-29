@@ -13,7 +13,7 @@ from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian
 from lumora_probe.associations.contracts import DICOMSCUConfig, DICOMStoreResult
 from lumora_probe.associations.network import DICOMSCUClient
 from lumora_probe.replay.contracts import ProtocolReplayDataset, ProtocolReplayPolicy
-from lumora_probe.replay.service import ProtocolReplayService
+from lumora_probe.replay.service import InMemoryReplayExclusivity, ProtocolReplayService
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.value_objects import NetworkEndpoint
 
@@ -197,6 +197,27 @@ async def test_protocol_replay_audit_sink_records_refusal() -> None:
     assert len(records) == 1
     assert records[0].outcome == "refused"
     assert "target" in (records[0].error or "")
+
+
+@pytest.mark.asyncio
+async def test_protocol_replay_refuses_second_live_run_instead_of_queueing() -> None:
+    target = NetworkEndpoint("127.0.0.1", 11112)
+    exclusivity = InMemoryReplayExclusivity()
+    exclusivity.acquire()
+
+    try:
+        with pytest.raises(ReplayDomainError, match="already running"):
+            await ProtocolReplayService(
+                FakeDatasetSender([]),
+                policy=ProtocolReplayPolicy(
+                    target=target,
+                    allowed_targets=frozenset({target}),
+                    dry_run=False,
+                ),
+                exclusivity=exclusivity,
+            ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
+    finally:
+        exclusivity.release()
 
 
 @pytest.mark.asyncio
