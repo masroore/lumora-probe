@@ -179,6 +179,21 @@ python -m ruff format --check .
 
 CI runs these checks on CPython 3.13 for Ubuntu, macOS, and Windows.
 
+## DICOM networking
+
+The Phase 10 DICOM plane uses pynetdicom and binds `127.0.0.1:11112` by default. The DICOM
+bind interface is independent of the HTTP interface:
+
+| Setting | Environment variable | Default |
+| --- | --- | --- |
+| `dicom_bind_host` | `LUMORA_DICOM_BIND_HOST` | `127.0.0.1` |
+| `dicom_port` | `LUMORA_DICOM_PORT` | `11112` |
+
+Non-loopback DICOM or HTTP binds require the explicit `allow_unauthenticated_network` gate.
+Association lifecycle events use the canonical bus ingress; PDU traces are written separately
+from domain events. See `docs/planning/phase-10-completion-report.md` for relay modes and
+known limitations.
+
 ## Lumora Probe application
 
 The broader Lumora Probe application is being implemented incrementally under
