@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from lumora_probe.core.lifecycle import ServiceHealth
+from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
 from lumora_probe.shared.value_objects import AETitle
 
 DICOM_SUCCESS = 0x0000
@@ -29,6 +31,14 @@ class AssociationIdGenerator(Protocol):
     """Injected UUIDv7 identity source for association observations."""
 
     def new_id(self) -> str: ...
+
+
+class AssociationEventIngress(Protocol):
+    """Minimal thread-safe event ingress required from the core bus."""
+
+    def publish_from_thread(
+        self, event: EventEnvelope, *, capture_id: str | None = None
+    ) -> concurrent.futures.Future[EventEnvelope]: ...
 
 
 class AssociationAuditSink(Protocol):
@@ -209,11 +219,13 @@ class DICOMListener:
         config: DICOMListenerConfig | None = None,
         *,
         audit_sink: AssociationAuditSink | None = None,
+        event_ingress: AssociationEventIngress | None = None,
         clock: AssociationClock | None = None,
         id_generator: AssociationIdGenerator | None = None,
     ) -> None:
         self.config = config or DICOMListenerConfig()
         self.audit_sink = audit_sink
+        self.event_ingress = event_ingress
         self.clock = clock
         self.id_generator = id_generator
         self.ae: Any | None = None
@@ -394,6 +406,11 @@ class DICOMListener:
         with self._lock:
             self._states.pop(id(association), None)
 
+    def _id_generator(self) -> AssociationIdGenerator:
+        if self.id_generator is None:
+            raise RuntimeError("event ingress requires an injected association ID generator")
+        return self.id_generator
+
     def _clock(self) -> AssociationClock:
         if self.clock is None:
             raise RuntimeError("audit sink requires an injected association clock")
@@ -414,22 +431,46 @@ class DICOMListener:
         accepted_contexts: tuple[dict[str, object], ...] = (),
         reason: str | None = None,
     ) -> None:
-        if self.audit_sink is None:
+        if self.audit_sink is None and self.event_ingress is None:
             return
-        self.audit_sink(
-            AssociationAuditRecord(
-                association_id=state.association_id,
-                phase=phase,
-                calling_ae=state.calling_ae,
-                called_ae=state.called_ae,
-                source_host=state.source_host,
-                source_port=state.source_port,
-                occurred_at=self._clock().now(),
-                monotonic_ns=self._clock().monotonic_ns(),
-                accepted_contexts=accepted_contexts,
-                reason=reason,
-            )
+        record = AssociationAuditRecord(
+            association_id=state.association_id,
+            phase=phase,
+            calling_ae=state.calling_ae,
+            called_ae=state.called_ae,
+            source_host=state.source_host,
+            source_port=state.source_port,
+            occurred_at=self._clock().now(),
+            monotonic_ns=self._clock().monotonic_ns(),
+            accepted_contexts=accepted_contexts,
+            reason=reason,
         )
+        if self.audit_sink is not None:
+            self.audit_sink(record)
+        if self.event_ingress is not None:
+            event = EventEnvelope.create(
+                event_name=_event_name_for_phase(phase),
+                event_version=1,
+                correlation_id=state.association_id,
+                aggregate_type="Association",
+                aggregate_id=state.association_id,
+                producer="association-manager",
+                payload={
+                    "calling_ae": record.calling_ae,
+                    "called_ae": record.called_ae,
+                    "source_host": record.source_host,
+                    "source_port": record.source_port,
+                    "accepted_contexts": record.accepted_contexts,
+                    "reason": record.reason,
+                },
+                origin=EventOrigin.OBSERVED,
+                clock=self._clock(),
+                id_generator=self._id_generator(),
+                severity=EventSeverity.WARNING
+                if phase in {"rejected", "aborted"}
+                else EventSeverity.INFO,
+            )
+            self.event_ingress.publish_from_thread(event)
 
 
 def _service_user(association: Any, name: str) -> Any:
@@ -473,6 +514,20 @@ def _contexts(association: Any) -> tuple[dict[str, object], ...]:
     return tuple(values)
 
 
+def _event_name_for_phase(phase: str) -> str:
+    names = {
+        "requested": "AssociationStarted",
+        "accepted": "AssociationAccepted",
+        "rejected": "AssociationRejected",
+        "released": "AssociationReleased",
+        "aborted": "AssociationAborted",
+    }
+    try:
+        return names[phase]
+    except KeyError as exc:
+        raise ValueError(f"unsupported association phase: {phase}") from exc
+
+
 def _status_code(response: Any) -> int:
     value = getattr(response, "Status", response)
     return int(value)
@@ -503,6 +558,7 @@ __all__ = [
     "DICOM_SUCCESS",
     "AssociationAuditRecord",
     "AssociationAuditSink",
+    "AssociationEventIngress",
     "AssociationClock",
     "AssociationIdGenerator",
 ]

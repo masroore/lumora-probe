@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import socket
+import threading
 from collections.abc import Iterator
 import pytest
 
@@ -22,13 +24,26 @@ def free_port() -> Iterator[int]:
     yield port
 
 
-def _ids() -> SeededUUIDv7Generator:
+def _ids(count: int = 2) -> SeededUUIDv7Generator:
     return SeededUUIDv7Generator(
-        [
-            "018f3f4e-7b00-7000-8000-000000000001",
-            "018f3f4e-7b00-7000-8000-000000000002",
-        ]
+        [f"018f3f4e-7b00-7000-8000-{index:012x}" for index in range(1, count + 1)]
     )
+
+
+class _RecordingIngress:
+    def __init__(self) -> None:
+        self.events: list[object] = []
+        self.thread_names: list[str] = []
+
+    def publish_from_thread(
+        self, event: object, *, capture_id: str | None = None
+    ) -> concurrent.futures.Future[object]:
+        del capture_id
+        self.events.append(event)
+        self.thread_names.append(threading.current_thread().name)
+        result: concurrent.futures.Future[object] = concurrent.futures.Future()
+        result.set_result(event)
+        return result
 
 
 @pytest.mark.dicom
@@ -86,5 +101,35 @@ async def test_scu_establishes_negotiates_echoes_and_releases(free_port: int) ->
         assert result.success is True
         assert result.status == 0x0000
         assert result.error is None
+    finally:
+        await listener.stop()
+
+
+@pytest.mark.dicom
+@pytest.mark.asyncio
+async def test_association_callbacks_use_thread_safe_event_ingress(free_port: int) -> None:
+    from lumora_probe.associations.network import DICOMSCUClient, DICOMSCUConfig
+
+    ingress = _RecordingIngress()
+    listener = DICOMListener(
+        DICOMListenerConfig(port=free_port),
+        event_ingress=ingress,
+        clock=SystemClock(),
+        id_generator=_ids(8),
+    )
+    await listener.start()
+    try:
+        result = await DICOMSCUClient(
+            DICOMSCUConfig(host="127.0.0.1", port=free_port, calling_ae="INGRESS-SCU")
+        ).echo()
+
+        assert result.success is True
+        assert [event.event_name for event in ingress.events] == [
+            "AssociationStarted",
+            "AssociationAccepted",
+            "AssociationReleased",
+        ]
+        assert ingress.thread_names
+        assert all(name != threading.current_thread().name for name in ingress.thread_names)
     finally:
         await listener.stop()
