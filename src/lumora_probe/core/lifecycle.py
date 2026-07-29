@@ -119,6 +119,7 @@ class LifecycleManager:
                 await self._call_optional("flush")
                 await self._stop_started()
         except TimeoutError as exc:
+            await self._call_optional("interrupt")
             self._state = LifecycleState.FAILED
             raise LifecycleError(
                 code="LUMORA-CORE-LIFE-004",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -160,6 +161,14 @@ class _FakeService:
         return ServiceHealth(self.name, self.started, True)
 
 
+class _HangingService(_FakeService):
+    async def drain(self) -> None:
+        await asyncio.sleep(1)
+
+    async def interrupt(self) -> None:
+        self.calls.append(f"interrupt:{self.name}")
+
+
 @pytest.mark.asyncio
 async def test_lifecycle_starts_in_order_and_drains_in_reverse() -> None:
     calls: list[str] = []
@@ -197,6 +206,20 @@ async def test_lifecycle_start_failure_stops_started_services() -> None:
     with pytest.raises(LifecycleError):
         await manager.start()
     assert calls == ["start:first", "start:second", "stop:first"]
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_interrupts_services_after_shutdown_deadline() -> None:
+    calls: list[str] = []
+    service = _HangingService("capture", calls)
+    manager = LifecycleManager(shutdown_grace_seconds=0.01)
+    manager.register(service)
+    await manager.start()
+
+    with pytest.raises(LifecycleError):
+        await manager.shutdown()
+
+    assert "interrupt:capture" in calls
 
 
 @pytest.mark.asyncio
