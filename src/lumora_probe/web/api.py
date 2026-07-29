@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -47,6 +47,16 @@ from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import create_projection_routers
 
 API_PREFIX = "/api/v1"
+
+
+class CaptureRuntime(Protocol):
+    """Lifecycle adapter for the capture engine owned by application bootstrap."""
+
+    ring_buffer: RetentionStateProvider
+
+    async def start(self, *, event_bus: Any | None = None) -> None: ...
+
+    async def stop(self) -> None: ...
 
 
 def _http_status_for(error: LumoraError) -> int:
@@ -138,6 +148,7 @@ def create_app(
     *,
     capture_store: ResourceStore | None = None,
     retention_provider: RetentionStateProvider | None = None,
+    capture_engine: CaptureRuntime | None = None,
     projection_store: ResourceStore | None = None,
     association_store: ResourceStore | None = None,
     event_store: ResourceStore | None = None,
@@ -156,15 +167,24 @@ def create_app(
 
     active_policy = security_policy or SecurityPolicy()
     active_bus = event_bus or NullEventSource()
+    active_retention = retention_provider or (
+        capture_engine.ring_buffer if capture_engine is not None else None
+    )
     active_settings = live_settings or LiveSettings()
     live_governor = CoalescingGovernor(bus=active_bus, settings=active_settings)
     live_hub = LiveUpdateHub(bus=active_bus, governor=live_governor)
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
+        if capture_engine is not None:
+            await capture_engine.start(
+                event_bus=None if isinstance(active_bus, NullEventSource) else active_bus
+            )
         try:
             yield
         finally:
+            if capture_engine is not None:
+                await capture_engine.stop()
             await live_hub.stop()
 
     application = FastAPI(
@@ -179,7 +199,7 @@ def create_app(
     application.add_middleware(SecurityMiddleware, policy=active_policy)
     application.include_router(api_v1_router)
     application.include_router(
-        create_capture_router(capture_store, retention_provider), prefix=API_PREFIX
+        create_capture_router(capture_store, active_retention), prefix=API_PREFIX
     )
     for router in create_projection_routers(projection_store):
         application.include_router(router, prefix=API_PREFIX)
