@@ -9,11 +9,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lumora_probe.core.errors import ConfigurationError, RestartRequiredError, SettingLockedError
+from lumora_probe.shared.events import EventClock, EventEnvelope, EventIdGenerator, EventOrigin
+
+
+class ConfigurationEventPublisher(Protocol):
+    """Minimal transport-neutral publisher used by synchronous settings updates."""
+
+    def publish_from_thread(self, event: EventEnvelope) -> Any: ...
 
 
 class SettingSource(StrEnum):
@@ -101,9 +108,20 @@ def _render_toml(values: Mapping[str, Any]) -> str:
 class RuntimeSettingsStore:
     """Load, inspect, and atomically update settings.toml under the data root."""
 
-    def __init__(self, path: Path, *, environ: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        environ: Mapping[str, str] | None = None,
+        event_publisher: ConfigurationEventPublisher | None = None,
+        clock: EventClock | None = None,
+        id_generator: EventIdGenerator | None = None,
+    ) -> None:
         self.path = path
         self.environ = dict(os.environ if environ is None else environ)
+        self.event_publisher = event_publisher
+        self.clock = clock
+        self.id_generator = id_generator
         self._settings: RuntimeSettings | None = None
         self._sources: dict[str, str] = {}
 
@@ -196,7 +214,39 @@ class RuntimeSettingsStore:
         self._atomic_write(updated.model_dump())
         self._settings = updated
         self._sources[name] = SettingSource.RUNTIME
-        return self.snapshot(name)
+        changed = self.snapshot(name)
+        self._emit_configuration_changed(current, changed)
+        return changed
+
+    def _emit_configuration_changed(
+        self, previous: SettingSnapshot, changed: SettingSnapshot
+    ) -> None:
+        if self.event_publisher is None:
+            return
+        if self.clock is None or self.id_generator is None:
+            raise RuntimeError(
+                "configuration event publication requires injected clock and id_generator"
+            )
+        event = EventEnvelope.create(
+            event_name="ConfigurationChanged",
+            event_version=1,
+            correlation_id=None,
+            causation_id=None,
+            aggregate_type="System",
+            aggregate_id=changed.name,
+            producer="settings",
+            payload={
+                "setting": changed.name,
+                "old_value": _redact_setting_value(changed.name, previous.value),
+                "new_value": _redact_setting_value(changed.name, changed.value),
+                "old_source": previous.source,
+                "new_source": changed.source,
+            },
+            origin=EventOrigin.OBSERVED,
+            clock=self.clock,
+            id_generator=self.id_generator,
+        )
+        self.event_publisher.publish_from_thread(event)
 
     def _atomic_write(self, values: Mapping[str, Any]) -> None:
         fd, temporary_name = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
@@ -209,3 +259,12 @@ class RuntimeSettingsStore:
             temporary.replace(self.path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _redact_setting_value(name: str, value: Any) -> Any:
+    """Redact values whose setting names conventionally carry secrets."""
+    lowered = name.casefold()
+    sensitive_tokens = ("password", "secret", "token", "credential", "private_key")
+    if any(token in lowered for token in sensitive_tokens):
+        return "[REDACTED]"
+    return value

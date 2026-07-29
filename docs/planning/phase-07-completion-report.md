@@ -32,6 +32,7 @@
   - UI subscriptions are bounded and drop oldest; `events_dropped` and `EventsDropped` diagnostics are exposed.
   - Client-asserted events are restricted to Viewer events produced by `web-ui`.
   - Wall/monotonic divergence produces `ClockAnomalyDetected` diagnostics containing both deltas.
+  - Runtime setting updates publish redacted `ConfigurationChanged` events through an injected transport-neutral publisher.
 
 ## Design decisions
 
@@ -49,6 +50,7 @@
 - `docs/generated/event-catalog-v1.json`
 - `tests/test_phase07_events.py`
 - `tests/test_phase07_bus.py`
+- `tests/test_phase07_settings_events.py`
 - `docs/planning/phase-07-completion-report.md`
 
 ## Tests added
@@ -64,6 +66,7 @@
 - Capture-path losslessness under UI saturation.
 - Client-asserted Viewer quarantine.
 - Clock anomaly diagnostics.
+- Configuration provenance events and sensitive-value redaction.
 
 ## Verification
 
@@ -78,7 +81,6 @@ Existing pydicom warnings from Lite-tool fixtures remain unchanged; no test fail
 
 ## Known limitations
 
-- `ConfigurationChanged` is registered in the catalog but settings mutation does not yet publish it; the existing settings store is synchronous and Phase 08's application event wiring will provide the integration seam.
 - PDU-level records remain outside the event bus and continue to use `pdus.jsonl`, as required by ADR-0014.
 - Capture writer lifecycle integration, ring-buffer promotion, and crash recovery remain Phase 11 work.
 - Remote transport authentication and a remote publisher endpoint remain later API/runtime work; the local bus ingress is already transport-abstracted.
