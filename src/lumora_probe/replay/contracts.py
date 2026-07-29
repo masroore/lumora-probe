@@ -54,7 +54,7 @@ class ProtocolReplayPolicy:
 class ProtocolReplayAuditRecord:
     """One immutable audit observation for a protocol replay run."""
 
-    replay_id: str
+    replay_id: str | None
     capture_id: str | None
     target: NetworkEndpoint | None
     dry_run: bool

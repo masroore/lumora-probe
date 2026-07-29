@@ -8,10 +8,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from itertools import pairwise
 
 from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
-from lumora_probe.core.clock import Clock, SystemClock
-from lumora_probe.core.ids import IdGenerator, UUIDv7Generator
 from lumora_probe.shared.errors import ReplayDomainError
-from lumora_probe.shared.events import EventEnvelope
+from lumora_probe.shared.events import EventClock, EventEnvelope, EventIdGenerator
 from lumora_probe.shared.value_objects import NetworkEndpoint
 
 from .contracts import (
@@ -57,16 +55,16 @@ class ProtocolReplayService:
         policy: ProtocolReplayPolicy,
         sleeper: ReplaySleeper | None = None,
         audit_sink: ReplayAuditSink | None = None,
-        clock: Clock | None = None,
-        id_generator: IdGenerator | None = None,
+        clock: EventClock | None = None,
+        id_generator: EventIdGenerator | None = None,
         exclusivity: InMemoryReplayExclusivity | None = None,
     ) -> None:
         self.sender = sender
         self.policy = policy
         self.sleeper = sleeper if sleeper is not None else asyncio.sleep
         self.audit_sink = audit_sink
-        self.clock = clock if clock is not None else SystemClock()
-        self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
+        self.clock = clock
+        self.id_generator = id_generator
         self.exclusivity = exclusivity if exclusivity is not None else InMemoryReplayExclusivity()
 
     async def replay(
@@ -81,7 +79,11 @@ class ProtocolReplayService:
         speed: float = 1.0,
     ) -> ProtocolReplayResult:
         """Send datasets in persisted order at original or scaled timing."""
-        run_replay_id = replay_id or self.id_generator.new_id()
+        run_replay_id = replay_id or (
+            self.id_generator.new_id() if self.id_generator is not None else None
+        )
+        if self.audit_sink is not None and run_replay_id is None:
+            raise ValueError("protocol replay audit requires replay_id or id_generator")
         planned_count = 0
         acquired = False
         try:
@@ -144,6 +146,8 @@ class ProtocolReplayService:
     def _audit(self, result: ProtocolReplayResult, *, outcome: str) -> None:
         if self.audit_sink is None:
             return
+        if self.clock is None or result.replay_id is None:
+            raise ValueError("protocol replay audit requires an injected clock and replay ID")
         self.audit_sink(
             ProtocolReplayAuditRecord(
                 replay_id=result.replay_id,
@@ -168,6 +172,8 @@ class ProtocolReplayService:
     ) -> None:
         if self.audit_sink is None:
             return
+        if self.clock is None or not replay_id:
+            raise ValueError("protocol replay audit requires an injected clock and replay ID")
         self.audit_sink(
             ProtocolReplayAuditRecord(
                 replay_id=replay_id,
@@ -199,11 +205,11 @@ class EventReplayService:
         publisher: EventPublisher,
         *,
         sleeper: ReplaySleeper | None = None,
-        id_generator: IdGenerator | None = None,
+        id_generator: EventIdGenerator | None = None,
     ) -> None:
         self.publisher = publisher
         self.sleeper = sleeper if sleeper is not None else asyncio.sleep
-        self.id_generator = id_generator if id_generator is not None else UUIDv7Generator()
+        self.id_generator = id_generator
 
     async def replay(
         self,
@@ -217,6 +223,8 @@ class EventReplayService:
         _validate_speed(speed)
         source_events = tuple(events)
         _validate_monotonic_order(source_events)
+        if self.id_generator is None:
+            raise ValueError("event replay requires an injected id_generator")
         run_replay_id = replay_id or self.id_generator.new_id()
         replay_correlation_id = self.id_generator.new_id()
 

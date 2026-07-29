@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
@@ -16,6 +17,7 @@ from lumora_probe.replay.contracts import ProtocolReplayDataset, ProtocolReplayP
 from lumora_probe.replay.service import InMemoryReplayExclusivity, ProtocolReplayService
 from lumora_probe.shared.errors import ReplayDomainError
 from lumora_probe.shared.value_objects import NetworkEndpoint
+from tests.doubles.clock import ControllableClock
 
 
 class FakeDatasetSender:
@@ -39,6 +41,10 @@ def dataset(index: int, *, monotonic_ns: int) -> ProtocolReplayDataset:
         transfer_syntax=ExplicitVRLittleEndian,
         monotonic_ns=monotonic_ns,
     )
+
+
+def clock() -> ControllableClock:
+    return ControllableClock(datetime(2026, 7, 29, tzinfo=UTC))
 
 
 @pytest.mark.asyncio
@@ -167,6 +173,7 @@ async def test_protocol_replay_audit_sink_records_completed_run() -> None:
         sender,
         policy=policy(),
         audit_sink=records.append,
+        clock=clock(),
     ).replay(
         [dataset(0, monotonic_ns=1)],
         capture_fidelity="protocol",
@@ -192,7 +199,12 @@ async def test_protocol_replay_audit_sink_records_refusal() -> None:
             FakeDatasetSender([]),
             policy=ProtocolReplayPolicy(allowed_targets=frozenset({target})),
             audit_sink=records.append,
-        ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
+            clock=clock(),
+        ).replay(
+            [dataset(0, monotonic_ns=1)],
+            capture_fidelity="protocol",
+            replay_id="018f0d4e-7b6a-7000-8000-000000000203",
+        )
 
     assert len(records) == 1
     assert records[0].outcome == "refused"

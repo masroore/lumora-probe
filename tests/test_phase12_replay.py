@@ -103,7 +103,11 @@ async def test_event_replay_scales_monotonic_gaps_not_wall_clock_gaps() -> None:
     async def sleeper(delay: float) -> None:
         sleeps.append(delay)
 
-    await EventReplayService(bus, sleeper=sleeper).replay(source, speed=2.0)
+    await EventReplayService(
+        bus,
+        sleeper=sleeper,
+        id_generator=SeededIdGenerator(REPLAY_IDS),
+    ).replay(source, speed=2.0)
     await bus.stop()
 
     assert sleeps == [0.5e-6]
