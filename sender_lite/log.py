@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, TextIO
-
 
 _TEXT_LABELS = {
     "configuration_resolved": "Configuration resolved",
@@ -53,7 +52,7 @@ class SenderLogger:
 
     @staticmethod
     def _timestamp() -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     def event(self, event: str, level: str = "INFO", **fields: Any) -> None:
         timestamp = self._timestamp()

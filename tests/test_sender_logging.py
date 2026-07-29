@@ -65,7 +65,9 @@ def test_json_logging_flushes_each_event() -> None:
     logger = SenderLogger("json", output)
     logger.info("scan_started", input="/tmp/in")
     logger.warning("file_skipped", path="/tmp/bad.dcm", reason="unreadable", error="boom")
-    logger.error("catalog_conflict", path="/tmp/dup.dcm", sop_instance_uid="1.2.3", conflicting_count=2)
+    logger.error(
+        "catalog_conflict", path="/tmp/dup.dcm", sop_instance_uid="1.2.3", conflicting_count=2
+    )
 
     lines = [line for line in output.getvalue().splitlines() if line]
     assert len(lines) == 3
@@ -114,7 +116,9 @@ def test_json_events_exclude_phi_fields(phi_field: str) -> None:
         if not line:
             continue
         record = json.loads(line)
-        assert phi_field not in record, f"PHI field {phi_field!r} leaked into event {record.get('event')!r}"
+        assert phi_field not in record, (
+            f"PHI field {phi_field!r} leaked into event {record.get('event')!r}"
+        )
 
 
 def test_no_event_includes_clinical_metadata_regression() -> None:
@@ -122,7 +126,16 @@ def test_no_event_includes_clinical_metadata_regression() -> None:
     output = io.StringIO()
     logger = SenderLogger("json", output)
     logger.info("configuration_resolved", mode="send", host="127.0.0.1", port=11112)
-    logger.info("scan_completed", files_scanned=3, rejected=0, studies=1, series=1, instances=3, bytes_total=9, duration_ms=1)
+    logger.info(
+        "scan_completed",
+        files_scanned=3,
+        rejected=0,
+        studies=1,
+        series=1,
+        instances=3,
+        bytes_total=9,
+        duration_ms=1,
+    )
     logger.error("run_failed", reason="empty_catalog", exit_code=1)
 
     for line in output.getvalue().splitlines():

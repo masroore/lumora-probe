@@ -8,9 +8,9 @@ deterministic ordering.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 from pydicom import dcmread
 from pydicom.uid import UID
@@ -137,6 +137,7 @@ def _parse_instance_number(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
+    # pydicom may wrap in IS (a str subclass) or ISfloat
     # Accept int-like decimal strings
     try:
         text = str(value).strip()
@@ -145,11 +146,19 @@ def _parse_instance_number(value: object) -> int | None:
     if not text:
         return None
     # Must look like an integer (no decimal point, optional leading sign)
-    if text.lstrip("-+").isdigit() and text.lstrip("-+"):
+    stripped = text.lstrip("-+")
+    if stripped.isdigit() and stripped:
         try:
             return int(text)
         except Exception:
             return None
+    # Try float -> int if it's a whole number (e.g., "1.0" or Decimal("1"))
+    try:
+        f = float(text)
+        if f.is_integer():
+            return int(f)
+    except Exception:
+        pass
     return None
 
 
@@ -157,9 +166,7 @@ def _iter_candidates(input_root: Path) -> Iterator[Path]:
     paths: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(input_root, followlinks=False):
         # Skip symlinked subdirectories
-        dirnames[:] = sorted(
-            d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))
-        )
+        dirnames[:] = sorted(d for d in dirnames if not os.path.islink(os.path.join(dirpath, d)))
         for fname in filenames:
             full = os.path.join(dirpath, fname)
             if os.path.islink(full):
@@ -195,16 +202,24 @@ def _read_candidate(path: Path) -> tuple[CatalogInstance | None, CatalogIssue | 
 
     study_uid, err = _validate_uid(ds.get("StudyInstanceUID"))
     if err or study_uid is None:
-        return None, CatalogIssue(path=path, reason=err or REASON_MISSING_UID, message="invalid StudyInstanceUID")
+        return None, CatalogIssue(
+            path=path, reason=err or REASON_MISSING_UID, message="invalid StudyInstanceUID"
+        )
     series_uid, err = _validate_uid(ds.get("SeriesInstanceUID"))
     if err or series_uid is None:
-        return None, CatalogIssue(path=path, reason=err or REASON_MISSING_UID, message="invalid SeriesInstanceUID")
+        return None, CatalogIssue(
+            path=path, reason=err or REASON_MISSING_UID, message="invalid SeriesInstanceUID"
+        )
     sop_uid, err = _validate_uid(ds.get("SOPInstanceUID"))
     if err or sop_uid is None:
-        return None, CatalogIssue(path=path, reason=err or REASON_MISSING_UID, message="invalid SOPInstanceUID")
+        return None, CatalogIssue(
+            path=path, reason=err or REASON_MISSING_UID, message="invalid SOPInstanceUID"
+        )
     sop_class, err = _validate_uid(ds.get("SOPClassUID"))
     if err or sop_class is None:
-        return None, CatalogIssue(path=path, reason=err or REASON_MISSING_UID, message="invalid SOPClassUID")
+        return None, CatalogIssue(
+            path=path, reason=err or REASON_MISSING_UID, message="invalid SOPClassUID"
+        )
 
     # File meta
     file_meta = getattr(ds, "file_meta", None)
@@ -220,9 +235,7 @@ def _read_candidate(path: Path) -> tuple[CatalogInstance | None, CatalogIssue | 
         )
     fm_sop_class, err = _validate_uid(file_meta.get("MediaStorageSOPClassUID"))
     if err:
-        return None, CatalogIssue(
-            path=path, reason=err, message="invalid MediaStorageSOPClassUID"
-        )
+        return None, CatalogIssue(path=path, reason=err, message="invalid MediaStorageSOPClassUID")
     fm_ts_raw = file_meta.get("TransferSyntaxUID")
     if fm_ts_raw is None:
         return None, CatalogIssue(
@@ -260,13 +273,10 @@ def _read_candidate(path: Path) -> tuple[CatalogInstance | None, CatalogIssue | 
             message="SOPInstanceUID != MediaStorageSOPInstanceUID",
         )
 
-    inst_num_elem = ds.get("InstanceNumber")
-    if inst_num_elem is not None:
-        try:
-            inst_num_value = inst_num_elem.value
-        except (ValueError, AttributeError):
-            inst_num_value = None
-    else:
+    # InstanceNumber: accept int or int-like decimal string, else None
+    try:
+        inst_num_value = ds.get("InstanceNumber")
+    except (ValueError, AttributeError):
         inst_num_value = None
     instance_number = _parse_instance_number(inst_num_value)
 
@@ -288,6 +298,7 @@ def _sort_instances(instances: tuple[CatalogInstance, ...]) -> tuple[CatalogInst
             # After numbered; tiebreak by SOP UID
             return (1, 0, inst.sop_instance_uid)
         return (0, inst.instance_number, inst.sop_instance_uid)
+
     return tuple(sorted(instances, key=key))
 
 

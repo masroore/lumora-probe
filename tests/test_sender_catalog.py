@@ -91,9 +91,8 @@ def _make_dicom(
     ds.is_implicit_VR = transfer_syntax == ImplicitVRLittleEndian
     # Use write_like_original when we intentionally set mismatched file-meta
     # values so pydicom does not silently re-derive them from the dataset.
-    mismatch = (
-        (fm_sop_class is not None and fm_sop_class != sop_class_uid)
-        or (fm_sop_instance is not None and fm_sop_instance != sop_instance_uid)
+    mismatch = (fm_sop_class is not None and fm_sop_class != sop_class_uid) or (
+        fm_sop_instance is not None and fm_sop_instance != sop_instance_uid
     )
     ds.save_as(path, enforce_file_format=True, write_like_original=mismatch)
     return path
@@ -329,12 +328,8 @@ def test_instance_number_missing_or_invalid(tmp_path: Path) -> None:
         tmp_path / "no_num.dcm",
         sop_instance_uid="1.2.3.100.1",
     )
-    _make_dicom(
-        tmp_path / "bad_num.dcm",
-        sop_instance_uid="1.2.3.100.2",
-        instance_number=42,  # will be overridden below
-    )
-    # Manually write a file with non-int InstanceNumber
+    # Write a file with non-int InstanceNumber by directly manipulating bytes
+    # to bypass pydicom's validation
     path_bad = tmp_path / "bad_num.dcm"
     file_meta = FileMetaDataset()
     file_meta.MediaStorageSOPInstanceUID = "1.2.3.100.2"
@@ -345,10 +340,29 @@ def test_instance_number_missing_or_invalid(tmp_path: Path) -> None:
     ds.SeriesInstanceUID = SERIES_A1
     ds.SOPInstanceUID = "1.2.3.100.2"
     ds.SOPClassUID = SOP_CLASS
-    ds.InstanceNumber = "not_a_number"
     ds.is_little_endian = True
     ds.is_implicit_VR = False
-    ds.save_as(path_bad, enforce_file_format=True)
+    ds.save_as(path_bad, write_like_original=True)
+
+    # Now manually patch the InstanceNumber in the file
+    # Read the file, find a good place to insert the element
+    with open(path_bad, "rb") as f:
+        data = f.read()
+
+    # InstanceNumber tag: (0020,0013), VR=IS, length=12, value="not_a_number"
+    # Group=0x0020, Element=0x0013
+    tag_bytes = b"\x20\x00\x13\x00"  # little endian
+    vr_bytes = b"IS"
+    length_bytes = b"\x0c\x00\x00\x00"  # 12 bytes
+    value_bytes = b"not_a_number"
+    new_element = tag_bytes + vr_bytes + length_bytes + value_bytes
+
+    # Insert before the end of file (before any trailing padding)
+    # Find a safe insertion point - after the last data element
+    patched_data = data + new_element
+
+    with open(path_bad, "wb") as f:
+        f.write(patched_data)
 
     catalog = build_catalog(tmp_path)
     assert catalog.sendable_count == 2

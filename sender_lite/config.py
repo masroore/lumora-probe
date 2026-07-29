@@ -9,7 +9,6 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 11112
 DEFAULT_CALLING_AE = "SENDER_LITE"
@@ -107,19 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sender-lite",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=(
-            "One-shot DICOM C-STORE sender. No security. Use on trusted networks only."
-        ),
+        description=("One-shot DICOM C-STORE sender. No security. Use on trusted networks only."),
     )
-    parser.add_argument(
-        "--config", type=Path, default=None, help="Path to TOML configuration file"
-    )
-    parser.add_argument(
-        "-i", "--input", type=Path, default=None, help="Input DICOM directory"
-    )
-    parser.add_argument(
-        "--host", default=None, help=f"Remote host (default: {DEFAULT_HOST})"
-    )
+    parser.add_argument("--config", type=Path, default=None, help="Path to TOML configuration file")
+    parser.add_argument("-i", "--input", type=Path, default=None, help="Input DICOM directory")
+    parser.add_argument("--host", default=None, help=f"Remote host (default: {DEFAULT_HOST})")
     parser.add_argument(
         "-p", "--port", type=int, default=None, help=f"Remote port (default: {DEFAULT_PORT})"
     )
@@ -187,9 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     from . import __version__
 
-    parser.add_argument(
-        "--version", action="version", version=f"sender-lite {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"sender-lite {__version__}")
     parser.epilog = (
         "Precedence: CLI arguments override TOML values, which override defaults.\n"
         "No security. Use on trusted networks only."
@@ -202,26 +191,22 @@ def _check_toml_types(data: dict[str, object], path: Path) -> None:
         if key in {"port", "max_pdu"}:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(
-                    f"config key {key!r} in {path} must be an integer, "
-                    f"got {type(value).__name__}"
+                    f"config key {key!r} in {path} must be an integer, got {type(value).__name__}"
                 )
         elif key in {"study_delay", "connect_timeout", "dimse_timeout"}:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(
-                    f"config key {key!r} in {path} must be a number, "
-                    f"got {type(value).__name__}"
+                    f"config key {key!r} in {path} must be a number, got {type(value).__name__}"
                 )
         elif key in {"input", "host", "calling_ae", "called_ae", "log_format"}:
             if not isinstance(value, str):
                 raise ValueError(
-                    f"config key {key!r} in {path} must be a string, "
-                    f"got {type(value).__name__}"
+                    f"config key {key!r} in {path} must be a string, got {type(value).__name__}"
                 )
         elif key == "verbose":
             if not isinstance(value, bool):
                 raise ValueError(
-                    f"config key {key!r} in {path} must be a boolean, "
-                    f"got {type(value).__name__}"
+                    f"config key {key!r} in {path} must be a boolean, got {type(value).__name__}"
                 )
 
 
@@ -239,9 +224,7 @@ def _load_toml(path: Path) -> dict[str, object]:
         raise ValueError(f"config root must be a table: {path}")
     unknown = set(data.keys()) - _TOML_FIELDS
     if unknown:
-        raise ValueError(
-            f"unknown config key(s) in {path}: {', '.join(sorted(unknown))}"
-        )
+        raise ValueError(f"unknown config key(s) in {path}: {', '.join(sorted(unknown))}")
     _check_toml_types(data, path)
     return data
 

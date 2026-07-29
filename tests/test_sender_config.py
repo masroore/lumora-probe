@@ -161,7 +161,9 @@ def test_wrong_toml_type_bool_for_int_errors(tmp_path: Path) -> None:
         (["--dimse-timeout", "-0.1"], ValueError),
     ],
 )
-def test_invalid_cli_values_rejected(tmp_path: Path, argv: list[str], expected_error: type[BaseException]) -> None:
+def test_invalid_cli_values_rejected(
+    tmp_path: Path, argv: list[str], expected_error: type[BaseException]
+) -> None:
     with pytest.raises(expected_error):
         parse_args(argv, cwd=tmp_path)
 
