@@ -343,10 +343,17 @@ def build_default_event_registry() -> EventPayloadRegistry:
             "CEchoReceived",
             "CStoreReceived",
             "CFindReceived",
+            "CFindCompleted",
             "CMoveRequested",
             "CGetRequested",
+            "UnrecognizedDimseObserved",
         ),
-        EventCategory.DATASET: ("DatasetLoaded", "DatasetParsed", "MetadataExtracted"),
+        EventCategory.DATASET: (
+            "DatasetLoaded",
+            "DatasetParsed",
+            "MetadataExtracted",
+            "InstancePersisted",
+        ),
         EventCategory.VIEWER: ("ImageDisplayed", "WindowLevelChanged", "CineStarted"),
         EventCategory.CAPTURE: ("CaptureStarted", "CaptureStopped", "CaptureCompleted"),
         EventCategory.REPLAY: (

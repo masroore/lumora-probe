@@ -272,3 +272,16 @@ def test_relay_requires_explicit_mode_for_standalone_capture() -> None:
 
     standalone = RelayConfig(mode=RelayMode.PERMISSIVE_STANDALONE)
     assert standalone.negotiation_label == "permissive-standalone"
+
+
+def test_phase10_event_contracts_are_registered_and_catalogued() -> None:
+    from lumora_probe.shared.events import DEFAULT_EVENT_REGISTRY, EventCategory
+
+    for name, category in (
+        ("CFindCompleted", EventCategory.DIMSE),
+        ("InstancePersisted", EventCategory.DATASET),
+        ("UnrecognizedDimseObserved", EventCategory.DIMSE),
+    ):
+        definition = DEFAULT_EVENT_REGISTRY.definition(name, 1)
+        assert definition is not None
+        assert definition.category is category
