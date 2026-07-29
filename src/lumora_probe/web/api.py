@@ -19,8 +19,10 @@ from .association_routes import create_association_router
 from .capture_routes import create_capture_router
 from .contracts import ErrorResponse
 from .event_routes import create_event_router
+from .health_routes import HealthProvider, create_health_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .resources import ResourceStore
+from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import create_projection_routers
 
 API_PREFIX = "/api/v1"
@@ -72,6 +74,8 @@ def create_app(
     association_store: ResourceStore | None = None,
     event_store: ResourceStore | None = None,
     operation_registry: OperationRegistry | None = None,
+    settings_provider: SettingsProvider | None = None,
+    health_provider: HealthProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -88,6 +92,8 @@ def create_app(
     application.include_router(create_association_router(association_store), prefix=API_PREFIX)
     application.include_router(create_event_router(event_store), prefix=API_PREFIX)
     application.include_router(create_operation_router(operation_registry), prefix=API_PREFIX)
+    application.include_router(create_settings_router(settings_provider), prefix=API_PREFIX)
+    application.include_router(create_health_router(health_provider), prefix=API_PREFIX)
     return application
 
 
