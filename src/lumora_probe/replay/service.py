@@ -20,6 +20,7 @@ from .contracts import (
     ProtocolReplayPolicy,
     ProtocolReplayResult,
     ReplayAuditSink,
+    ReplayCancellation,
 )
 
 ReplaySleeper = Callable[[float], Awaitable[None]]
@@ -76,6 +77,7 @@ class ProtocolReplayService:
         incomplete_aggregates: Iterable[str] = (),
         replay_id: str | None = None,
         capture_id: str | None = None,
+        cancellation: ReplayCancellation | None = None,
         speed: float = 1.0,
     ) -> ProtocolReplayResult:
         """Send datasets in persisted order at original or scaled timing."""
@@ -103,6 +105,7 @@ class ProtocolReplayService:
                     target=target,
                     dry_run=True,
                     planned_count=planned_count,
+                    cancelled=False,
                 )
                 self._audit(result, outcome="dry-run")
                 return result
@@ -110,7 +113,11 @@ class ProtocolReplayService:
             self.exclusivity.acquire()
             acquired = True
             results: list[DICOMStoreResult] = []
+            cancelled = False
             for previous, dataset in _with_previous_dataset(source_datasets):
+                if cancellation is not None and cancellation.is_cancelled:
+                    cancelled = True
+                    break
                 if previous is not None:
                     delay_seconds = (dataset.monotonic_ns - previous.monotonic_ns) / 1_000_000_000
                     delay_seconds /= speed
@@ -128,8 +135,9 @@ class ProtocolReplayService:
                 target=target,
                 dry_run=False,
                 planned_count=planned_count,
+                cancelled=cancelled,
             )
-            self._audit(result, outcome="completed")
+            self._audit(result, outcome="cancelled" if cancelled else "completed")
             return result
         except Exception as exc:
             self._audit_refusal(

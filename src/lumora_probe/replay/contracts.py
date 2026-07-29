@@ -74,6 +74,15 @@ class ReplayAuditSink(Protocol):
         ...
 
 
+class ReplayCancellation(Protocol):
+    """Cooperative cancellation probe supplied by the job registry."""
+
+    @property
+    def is_cancelled(self) -> bool:
+        """Return whether replay should stop before the next send."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class ProtocolReplayResult:
     """C-STORE results produced by one protocol replay."""
@@ -84,6 +93,7 @@ class ProtocolReplayResult:
     target: NetworkEndpoint
     dry_run: bool
     planned_count: int
+    cancelled: bool = False
 
     @property
     def count(self) -> int:

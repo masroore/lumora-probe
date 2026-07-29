@@ -13,6 +13,7 @@ from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian
 
 from lumora_probe.associations.contracts import DICOMSCUConfig, DICOMStoreResult
 from lumora_probe.associations.network import DICOMSCUClient
+from lumora_probe.core.operations import CancellationToken
 from lumora_probe.replay.contracts import ProtocolReplayDataset, ProtocolReplayPolicy
 from lumora_probe.replay.service import InMemoryReplayExclusivity, ProtocolReplayService
 from lumora_probe.shared.errors import ReplayDomainError
@@ -230,6 +231,34 @@ async def test_protocol_replay_refuses_second_live_run_instead_of_queueing() -> 
             ).replay([dataset(0, monotonic_ns=1)], capture_fidelity="protocol")
     finally:
         exclusivity.release()
+
+
+@pytest.mark.asyncio
+async def test_protocol_replay_cancellation_reports_confirmed_count() -> None:
+    cancellation = CancellationToken()
+
+    class CancellingSender(FakeDatasetSender):
+        async def send_dataset(self, data: bytes, *, transfer_syntax: str) -> DICOMStoreResult:
+            result = await super().send_dataset(data, transfer_syntax=transfer_syntax)
+            cancellation.cancel()
+            return result
+
+    sender = CancellingSender(
+        [
+            DICOMStoreResult(success=True, status=0x0000, duration_ns=1),
+            DICOMStoreResult(success=True, status=0x0000, duration_ns=1),
+        ]
+    )
+    result = await ProtocolReplayService(sender, policy=policy()).replay(
+        [dataset(0, monotonic_ns=1), dataset(1, monotonic_ns=2)],
+        capture_fidelity="protocol",
+        cancellation=cancellation,
+    )
+
+    assert result.cancelled
+    assert result.count == 1
+    assert result.success_count == 1
+    assert result.planned == 2
 
 
 @pytest.mark.asyncio
