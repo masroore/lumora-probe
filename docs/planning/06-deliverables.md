@@ -203,7 +203,7 @@ what is additional or phase-defining.
 
 | Class | Deliverable |
 |-------|-------------|
-| Decision | ADR-0028 — Analysis ownership and the Transfer Analysis boundary |
+| Decision | ADR-0033 — Analysis ownership and the Transfer Analysis boundary (Phase 14 task planned as ADR-0028; repository ADR-0028 is occupied by Lite) |
 | Code | `analysis/` — condition registry, detection, finding model, rule engine |
 | Code | Rule-set versioning; `analysis/` persistence |
 | Code | Evidence linking in the UI |
