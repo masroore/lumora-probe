@@ -2,11 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: implementation through Phase 12
+## Status: Phase 13 in progress
 
-Implementation is active through Phase 12 (Replay Engine). Phase completion reports in
-`docs/planning/phase-*-completion-report.md` and task reports are the current status record.
-Do not start Phase 13 until the Phase 12 acceptance report is reviewed and accepted.
+Phase 12 (Replay Engine) is accepted. Phase 13 (Viewer) is in progress: the server-side decode
+pipeline, frame endpoints, client renderer seam, workspace shell, and study provenance services
+are implemented; retention/promotion UI, bookmarks, and several workspace panels remain. Phase
+completion reports in `docs/planning/phase-*-completion-report.md`, progress reports, and task
+reports are the current status record. Do not start Phase 14 until Phase 13 exit criteria are
+reviewed and accepted.
 
 ## What the product is
 
