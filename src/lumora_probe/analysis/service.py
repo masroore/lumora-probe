@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
@@ -12,6 +13,7 @@ from .domain import (
     ConditionId,
     ConditionIdRegistry,
     ConditionObservation,
+    Finding,
 )
 
 DEFAULT_CONDITION_DEFINITIONS = (
@@ -103,6 +105,75 @@ class ConditionDetector:
         if event.event_name == "AssociationAborted":
             return "LP-NEG-002"
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class RuleContext:
+    """Immutable observed evidence and deterministic conditions supplied to a rule."""
+
+    events: tuple[EventEnvelope, ...]
+    conditions: tuple[ConditionObservation, ...]
+
+
+class AnalysisRule(Protocol):
+    """Public shape for bundled and plugin-contributed analysis rules."""
+
+    rule_id: str
+    rule_version: str
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]: ...
+
+
+class RuleEngine:
+    """Evaluate versioned rules deterministically against observed evidence."""
+
+    def __init__(
+        self,
+        rules: Iterable[AnalysisRule],
+        *,
+        detector: ConditionDetector | None = None,
+    ) -> None:
+        values = tuple(rules)
+        keys = [(rule.rule_id, rule.rule_version) for rule in values]
+        if len(keys) != len(set(keys)):
+            raise ValueError("rule IDs and versions must be unique")
+        self._rules = tuple(sorted(values, key=lambda rule: (rule.rule_id, rule.rule_version)))
+        self._detector = detector or ConditionDetector()
+
+    def evaluate(self, events: Iterable[EventEnvelope]) -> tuple[Finding, ...]:
+        """Return findings sorted by rule identity and cited evidence."""
+        observed = tuple(event for event in events if event.origin is EventOrigin.OBSERVED)
+        context = RuleContext(
+            events=observed,
+            conditions=self._detector.detect(observed),
+        )
+        sequences = {event.sequence for event in observed if event.sequence is not None}
+        findings: list[Finding] = []
+        for rule in self._rules:
+            for finding in rule.evaluate(context):
+                if type(finding) is not Finding:
+                    raise TypeError("analysis rules must return Finding values")
+                if (finding.rule_id, finding.rule_version) != (
+                    rule.rule_id,
+                    rule.rule_version,
+                ):
+                    raise ValueError("finding rule identity must match its evaluating rule")
+                if not set(finding.cited_sequences).issubset(sequences):
+                    raise ValueError("finding citations must resolve to observed event sequences")
+                findings.append(finding)
+        return tuple(
+            sorted(
+                findings,
+                key=lambda finding: (
+                    finding.rule_id,
+                    finding.rule_version,
+                    finding.cited_sequences,
+                    finding.explanation,
+                ),
+            )
+        )
+
+    run = evaluate
 
 
 __all__: tuple[str, ...] = ()

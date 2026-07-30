@@ -16,7 +16,12 @@ from lumora_probe.analysis.contracts import (
     Finding,
     FindingConfidence,
 )
-from lumora_probe.analysis.service import ConditionDetector, default_condition_registry
+from lumora_probe.analysis.service import (
+    ConditionDetector,
+    RuleContext,
+    RuleEngine,
+    default_condition_registry,
+)
 from lumora_probe.shared.errors import DomainInvariantError
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
@@ -240,3 +245,58 @@ def test_analysis_repository_writes_only_analysis_directory_and_round_trips(tmp_
     assert not path.exists()
     repository.write_findings((finding,), rule_set_version="rules-v1")
     assert path.read_bytes() == first_bytes
+
+
+class _Rule:
+    rule_id = "LP-RULE-TEST-001"
+    rule_version = "1"
+
+    def evaluate(self, context: RuleContext) -> tuple[Finding, ...]:
+        assert len(context.events) == 1
+        assert context.conditions[0].code == "LP-NEG-004"
+        return (
+            Finding(
+                rule_id=self.rule_id,
+                rule_version=self.rule_version,
+                confidence="certain",
+                cited_sequences=(7,),
+                explanation="The observed association had no acceptable context.",
+                next_steps=("Compare offered contexts",),
+            ),
+        )
+
+
+def test_rule_engine_excludes_client_asserted_events_and_validates_citations() -> None:
+    observed = _event("AssociationRejected", {"accepted_contexts": ()})
+    client = _event(
+        "ImageDisplayed",
+        {"condition_code": "LP-NEG-004"},
+        event_id=UUIDS[2],
+        origin=EventOrigin.CLIENT_ASSERTED,
+    )
+
+    findings = RuleEngine([_Rule()]).evaluate([client, observed])
+
+    assert len(findings) == 1
+    assert findings[0].rule_id == "LP-RULE-TEST-001"
+
+
+def test_rule_engine_rejects_duplicate_rules_and_unresolvable_citations() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        RuleEngine([_Rule(), _Rule()])
+
+    class BadRule(_Rule):
+        def evaluate(self, context: RuleContext) -> tuple[Finding, ...]:
+            return (
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    confidence="possible",
+                    cited_sequences=(99,),
+                    explanation="Bad citation",
+                    next_steps=("Inspect evidence",),
+                ),
+            )
+
+    with pytest.raises(ValueError, match="citations"):
+        RuleEngine([BadRule()]).evaluate([_event("CStoreReceived", {})])
