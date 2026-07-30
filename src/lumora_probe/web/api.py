@@ -206,7 +206,7 @@ def create_app(
     active_retention = retention_provider or (
         capture_engine.ring_buffer if capture_engine is not None else None
     )
-    active_ring_buffer = ring_buffer_service
+    active_ring_buffer: Any | None = ring_buffer_service
     if active_ring_buffer is None and capture_engine is not None:
         candidate = capture_engine.ring_buffer
         if hasattr(candidate, "snapshot") and hasattr(candidate, "config"):

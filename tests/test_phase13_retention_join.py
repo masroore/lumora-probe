@@ -134,37 +134,85 @@ async def test_study_browser_endpoint_shows_ring_buffer_retention() -> None:
         aggregate_id="assoc-1",
     )
     digest = hashlib.sha256(raw).hexdigest()
+    instances = [
+        InstanceProjection(
+            capture_id="capture-1",
+            study_uid="study-1",
+            series_uid="series-1",
+            sop_instance_uid="sop-1",
+            object_digest=digest,
+            object_path=f"objects/{digest}",
+            transfer_syntax_uid="1.2.840.10008.1.2.1",
+            rows=2,
+            columns=2,
+            created_at=BASE_TIME,
+        )
+    ]
+
+    class CountingRingBuffer:
+        def __init__(self, delegate: RingBufferService) -> None:
+            self.delegate = delegate
+            self.snapshot_calls = 0
+
+        @property
+        def config(self):
+            return self.delegate.config
+
+        def snapshot(self, **kwargs):
+            self.snapshot_calls += 1
+            return self.delegate.snapshot(**kwargs)
+
+    live_ring_buffer = CountingRingBuffer(ring_buffer)
 
     class BrowserProvider:
         async def get_study_browser(self, study_uid: str):
-            instances = [
-                InstanceProjection(
-                    capture_id="capture-1",
-                    study_uid="study-1",
-                    series_uid="series-1",
-                    sop_instance_uid="sop-1",
-                    object_digest=digest,
-                    object_path=f"objects/{digest}",
-                    transfer_syntax_uid="1.2.840.10008.1.2.1",
-                    rows=2,
-                    columns=2,
-                    created_at=BASE_TIME,
-                )
-            ]
             return StudyBrowserService.browser(study_uid, instances)
 
     application = create_app(
         study_browser_provider=BrowserProvider(),
-        ring_buffer_service=ring_buffer,
+        ring_buffer_service=live_ring_buffer,
         clock=clock,
     )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.get("/api/v1/studies/study-1/browser")
 
+        assert response.status_code == 200
+        payload = response.json()
+        instance = payload["instances"][0]
+        assert instance["retention"]["source"] == "ring-buffer"
+        assert instance["retention"]["state"] == "retained"
+        assert instance["retention"]["promotable"] is True
+        assert live_ring_buffer.snapshot_calls == 1
+
+        raw_b = b"new-dicom-object-for-browser"
+        ring_buffer.record_object(
+            raw_b,
+            study_uid="study-1",
+            series_uid="series-1",
+            sop_instance_uid="sop-2",
+            aggregate_id="assoc-2",
+        )
+        digest_b = hashlib.sha256(raw_b).hexdigest()
+        instances.append(
+            InstanceProjection(
+                capture_id="capture-1",
+                study_uid="study-1",
+                series_uid="series-1",
+                sop_instance_uid="sop-2",
+                object_digest=digest_b,
+                object_path=f"objects/{digest_b}",
+                transfer_syntax_uid="1.2.840.10008.1.2.1",
+                rows=2,
+                columns=2,
+                created_at=BASE_TIME,
+            )
+        )
+        response = await client.get("/api/v1/studies/study-1/browser")
+
     assert response.status_code == 200
-    payload = response.json()
-    instance = payload["instances"][0]
-    assert instance["retention"]["source"] == "ring-buffer"
-    assert instance["retention"]["state"] == "retained"
-    assert instance["retention"]["promotable"] is True
+    assert live_ring_buffer.snapshot_calls == 2
+    second_instance = next(
+        item for item in response.json()["instances"] if digest_b in item["object_digests"]
+    )
+    assert second_instance["retention"]["source"] == "ring-buffer"

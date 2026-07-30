@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from lumora_probe.studies.contracts import InstanceRetention
 
@@ -27,7 +27,7 @@ class _RingBufferRecord:
     occurred_at: datetime
     recorded_at: datetime
     aggregate_id: str | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
 
 class RetentionClock(Protocol):
@@ -113,22 +113,26 @@ def join_retention(
         return payload
 
     joined_instances: list[Any] = []
-    for instance in instances:
-        if not isinstance(instance, Mapping):
-            joined_instances.append(instance)
+    instance_values = cast(list[Any], instances)
+    for raw_instance in instance_values:
+        if not isinstance(raw_instance, Mapping):
+            joined_instances.append(raw_instance)
             continue
-        digests = instance.get("object_digests")
-        if not isinstance(digests, list | tuple):
-            joined_instances.append(instance)
+        instance = cast(Mapping[str, Any], raw_instance)
+        digests_value = instance.get("object_digests")
+        if not isinstance(digests_value, list | tuple):
+            joined_instances.append(raw_instance)
             continue
+        raw_digests = cast(list[Any] | tuple[Any, ...], digests_value)
+        digests = tuple(digest for digest in raw_digests if isinstance(digest, str))
         retention = next(
             (retention_by_digest[digest] for digest in digests if digest in retention_by_digest),
             None,
         )
         if retention is None:
-            joined_instances.append(instance)
+            joined_instances.append(raw_instance)
             continue
-        joined_instance = dict(instance)
+        joined_instance: dict[str, Any] = dict(instance)
         joined_instance["retention"] = retention.as_dict()
         joined_instances.append(joined_instance)
 
