@@ -154,6 +154,7 @@
               <button type="button" role="tab" aria-selected="true" tabindex="0">Metadata</button>
               <button type="button" role="tab" aria-selected="false" tabindex="-1">Properties</button>
               <button type="button" role="tab" aria-selected="false" tabindex="-1">Transfer</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Analysis</button>
               <button type="button" role="tab" aria-selected="false" tabindex="-1">Events</button>
             </div>
             <div class="metadata-inspector" role="tabpanel" aria-label="Metadata inspector">
@@ -201,6 +202,40 @@
               {% endif %}
               <span class="metadata-action-status" data-metadata-status role="status" aria-live="polite"></span>
             </div>
+            <div class="analysis-inspector" role="tabpanel" aria-label="Analysis inspector">
+              {% if workspace.findings %}
+              <ol class="analysis-findings">
+                {% for finding in workspace.findings %}
+                <li class="analysis-finding">
+                  <div class="analysis-finding-heading">
+                    <strong>{{ finding.rule_id }}</strong>
+                    <span>{{ finding.confidence }}</span>
+                  </div>
+                  <p>{{ finding.explanation }}</p>
+                  <p class="analysis-evidence-label">Evidence</p>
+                  <ul class="analysis-evidence-links">
+                    {% for evidence in finding.evidence_links %}
+                    <li>
+                      <a href="{{ evidence.href }}" data-event-sequence="{{ evidence.sequence }}">
+                        Sequence {{ evidence.sequence }} · {{ evidence.event_name }}
+                      </a>
+                    </li>
+                    {% endfor %}
+                    {% for sequence in finding.unresolved_sequences %}
+                    <li><span role="status">Sequence {{ sequence }} unavailable</span></li>
+                    {% endfor %}
+                  </ul>
+                  <p class="analysis-next-steps"><strong>Next:</strong> {{ finding.next_steps | join('; ') }}</p>
+                </li>
+                {% endfor %}
+              </ol>
+              {% else %}
+              <div class="inspector-empty">
+                <h3>No findings available</h3>
+                <p>Run analysis against a capture to inspect evidence-linked findings.</p>
+              </div>
+              {% endif %}
+            </div>
           </div>
         </aside>
       </div>
@@ -212,7 +247,9 @@
             {% if workspace.timeline %}
             <ol class="event-list">
               {% for event in workspace.timeline %}
-              <li><span class="event-sequence">{{ event.sequence }}</span><span>{{ event.label }}</span><span class="event-meta">{{ event.detail }}</span></li>
+              <li{% if event.sequence is defined and event.sequence is not none %} id="event-sequence-{{ event.sequence }}" data-event-sequence="{{ event.sequence }}"{% endif %}>
+                <span class="event-sequence">{{ event.sequence }}</span><span>{{ event.label or event.event_name }}</span><span class="event-meta">{{ event.detail or event.severity }}</span>
+              </li>
               {% endfor %}
             </ol>
             {% else %}

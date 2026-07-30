@@ -373,3 +373,77 @@ def test_analysis_purity_delete_rerun_is_byte_identical_and_newer_rules_add_find
         [ImprovedRule(), SecondImprovedRule()], rule_set_version="rules-v2"
     ).evaluate(events)
     assert len(improved) > len(first_findings)
+
+
+def test_finding_evidence_links_resolve_only_to_captured_event_sequences() -> None:
+    from lumora_probe.web.workspace_routes import _finding_views
+
+    finding = Finding(
+        rule_id="LP-RULE-NEG-001",
+        rule_version="1",
+        rule_set_version="bundled-v1",
+        confidence=FindingConfidence.LIKELY,
+        cited_sequences=(2, 7),
+        explanation="The association was rejected after negotiation.",
+        next_steps=("Compare peer negotiation settings",),
+    )
+
+    views = _finding_views(
+        (finding,),
+        (
+            {"sequence": 2, "event_id": "event-2", "event_name": "AssociationRequested"},
+            {"sequence": 9, "event_id": "event-9", "event_name": "AssociationAborted"},
+        ),
+    )
+
+    assert views[0]["evidence_links"] == (
+        {
+            "sequence": 2,
+            "event_id": "event-2",
+            "event_name": "AssociationRequested",
+            "href": "#event-sequence-2",
+        },
+    )
+    assert views[0]["unresolved_sequences"] == (7,)
+
+
+@pytest.mark.asyncio
+async def test_workspace_renders_finding_links_to_timeline_event_anchors() -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from lumora_probe.web.api import create_app
+
+    finding = Finding(
+        rule_id="LP-RULE-NEG-001",
+        rule_version="1",
+        rule_set_version="bundled-v1",
+        confidence=FindingConfidence.CERTAIN,
+        cited_sequences=(4,),
+        explanation="The observed association was rejected.",
+        next_steps=("Review the peer response",),
+    )
+    application = create_app(
+        workspace_data={
+            "findings": (finding,),
+            "timeline": (
+                {
+                    "sequence": 4,
+                    "event_id": "event-4",
+                    "event_name": "AssociationRejected",
+                    "label": "Association rejected",
+                    "detail": "observed",
+                },
+            ),
+        }
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=application), base_url="http://localhost"
+    ) as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert 'href="#event-sequence-4"' in response.text
+    assert 'id="event-sequence-4"' in response.text
+    assert 'data-event-sequence="4"' in response.text
+    assert "The observed association was rejected." in response.text
