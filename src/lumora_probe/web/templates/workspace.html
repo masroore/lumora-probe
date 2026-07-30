@@ -234,6 +234,13 @@
             {% endif %}
           </div>
         </details>
+        <details>
+          <summary><span>Live Monitor</span><span class="summary-meta">associations and drop counters</span></summary>
+          <div class="dock-panel monitor-panel" id="monitor-panel" role="region" aria-label="Live monitor">
+            <div id="panel-status" data-page="workspace" hx-swap-oob="outerHTML"></div>
+            <div id="panel-counters" data-page="workspace" hx-swap-oob="outerHTML"></div>
+          </div>
+        </details>
       </section>
     </main>
 

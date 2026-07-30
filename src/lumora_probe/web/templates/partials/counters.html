@@ -1,10 +1,13 @@
 <div id="panel-counters" data-page="{{ page }}" hx-swap-oob="outerHTML">
   <h2>Counters</h2>
   <dl>
-  {% for name, value in counters.items() %}
+  {% for name, value in counters.items() if name != "events_dropped" %}
     <div><dt>{{ name }}</dt><dd>{{ value }}</dd></div>
   {% else %}
     <div><dt>events</dt><dd>0</dd></div>
   {% endfor %}
   </dl>
+  {% if events_dropped is defined and events_dropped > 0 %}
+  <p class="counters-dropped" role="status">{{ events_dropped }} events dropped</p>
+  {% endif %}
 </div>
