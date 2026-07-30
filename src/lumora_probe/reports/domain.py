@@ -1,4 +1,4 @@
-"""Plain-Python report aggregate."""
+"""Plain-Python report aggregate and lifecycle."""
 
 from __future__ import annotations
 
