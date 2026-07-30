@@ -11,10 +11,12 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
+from lumora_probe.core.clock import Clock
 from lumora_probe.core.config import is_uuid7
-from lumora_probe.core.errors import PathSecurityError
+from lumora_probe.core.errors import LumoraError, PathSecurityError
+from lumora_probe.core.ids import IdGenerator
 from lumora_probe.core.paths import assert_contained
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
 
@@ -331,6 +333,141 @@ class FileSystemInstanceSourceRepository:
             raw_bytes=raw_bytes,
             capture_id=capture_id,
             instance_id=instance_id,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Bookmark:
+    """A user-saved study/series navigation point."""
+
+    bookmark_id: str
+    name: str
+    study_uid: str
+    series_uid: str | None
+    capture_id: str | None
+    sop_instance_uid: str | None
+    created_at: datetime
+
+
+class BookmarkRepository:
+    """CRUD for the bookmarks table in app.db."""
+
+    def __init__(
+        self,
+        databases: StorageDatabases,
+        clock: Clock,
+        id_generator: IdGenerator,
+    ) -> None:
+        self._databases = databases
+        self._clock = clock
+        self._ids = id_generator
+
+    async def add_bookmark(
+        self,
+        name: str,
+        study_uid: str,
+        series_uid: str | None = None,
+        capture_id: str | None = None,
+        sop_instance_uid: str | None = None,
+    ) -> Bookmark:
+        """Insert a bookmark; raise LumoraError on UNIQUE(name) conflict."""
+        bookmark_id = self._ids.new_id()
+        created_at = self._clock.now()
+        try:
+            await asyncio.to_thread(
+                self._insert,
+                bookmark_id,
+                name,
+                study_uid,
+                series_uid,
+                capture_id,
+                sop_instance_uid,
+                created_at,
+            )
+        except Exception as error:
+            if "UNIQUE" in str(error).upper():
+                raise LumoraError(
+                    code="LUMORA-STUDIES-BOOKMARKS-001",
+                    message=f"A bookmark named '{name}' already exists.",
+                    remediation="Choose a different bookmark name.",
+                    context={"name": name},
+                ) from error
+            raise
+        return Bookmark(
+            bookmark_id=bookmark_id,
+            name=name,
+            study_uid=study_uid,
+            series_uid=series_uid,
+            capture_id=capture_id,
+            sop_instance_uid=sop_instance_uid,
+            created_at=created_at,
+        )
+
+    def _insert(
+        self,
+        bookmark_id: str,
+        name: str,
+        study_uid: str,
+        series_uid: str | None,
+        capture_id: str | None,
+        sop_instance_uid: str | None,
+        created_at: datetime,
+    ) -> None:
+        with self._databases.app.write_transaction() as conn:
+            conn.execute(
+                "INSERT INTO bookmarks "
+                "(bookmark_id, name, study_uid, series_uid, capture_id, sop_instance_uid, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    bookmark_id,
+                    name,
+                    study_uid,
+                    series_uid,
+                    capture_id,
+                    sop_instance_uid,
+                    created_at.isoformat(),
+                ),
+            )
+
+    async def list_bookmarks(self, capture_id: str | None = None) -> tuple[Bookmark, ...]:
+        """List all bookmarks, optionally filtered by capture_id."""
+        return await asyncio.to_thread(self._list, capture_id)
+
+    def _list(self, capture_id: str | None) -> tuple[Bookmark, ...]:
+        with self._databases.app.connection(read_only=True) as conn:
+            if capture_id is not None:
+                rows = conn.execute(
+                    "SELECT bookmark_id, name, study_uid, series_uid, capture_id, "
+                    "sop_instance_uid, created_at FROM bookmarks "
+                    "WHERE capture_id = ? ORDER BY created_at",
+                    (capture_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT bookmark_id, name, study_uid, series_uid, capture_id, "
+                    "sop_instance_uid, created_at FROM bookmarks ORDER BY created_at"
+                ).fetchall()
+        return tuple(self._row_to_bookmark(row) for row in rows)
+
+    async def remove_bookmark(self, bookmark_id: str) -> bool:
+        """Delete a bookmark by ID; return True if it existed."""
+        return await asyncio.to_thread(self._remove, bookmark_id)
+
+    def _remove(self, bookmark_id: str) -> bool:
+        with self._databases.app.write_transaction() as conn:
+            cursor = conn.execute("DELETE FROM bookmarks WHERE bookmark_id = ?", (bookmark_id,))
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _row_to_bookmark(row: Any) -> Bookmark:
+        return Bookmark(
+            bookmark_id=row[0],
+            name=row[1],
+            study_uid=row[2],
+            series_uid=row[3],
+            capture_id=row[4],
+            sop_instance_uid=row[5],
+            created_at=datetime.fromisoformat(row[6]),
         )
 
 
