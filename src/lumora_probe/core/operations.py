@@ -167,6 +167,14 @@ class InMemoryJobRegistry:
             await task
         return await self.get(operation_id)
 
+    async def startup_sweep(self, *, reason: str) -> int:
+        """Mark durable and in-memory running jobs interrupted after process restart."""
+        durable_count = 0
+        if self.durable is not None:
+            durable_count = await self.durable.mark_running_interrupted(reason=reason)
+        await self.interrupt_running(reason)
+        return durable_count
+
     async def interrupt_running(self, reason: str) -> int:
         """Mark in-memory running jobs interrupted during shutdown."""
         count = 0
@@ -321,6 +329,29 @@ class SQLiteOperationRegistry:
             "UPDATE jobs SET state = 'interrupted', interruption_reason = ? "
             "WHERE operation_id = ? AND state = 'running'",
             (reason, operation_id),
+        )
+
+    async def append_replay_audit(self, record: Mapping[str, Any]) -> None:
+        """Persist one replay audit record through the application database."""
+        replay_id = record.get("replay_id")
+        occurred_at = record.get("occurred_at")
+        if not isinstance(replay_id, str) or not replay_id:
+            raise ValueError("replay audit requires a replay_id")
+        if not isinstance(occurred_at, datetime):
+            raise TypeError("replay audit occurred_at must be a datetime")
+        payload = dict(record)
+        payload["target"] = str(payload["target"]) if payload.get("target") is not None else None
+        payload["occurred_at"] = occurred_at.isoformat()
+        await self.databases.app.execute_write(
+            "INSERT INTO audit_log(event_type, entity_type, entity_id, occurred_at, payload_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                "ProtocolReplayAudit",
+                "replay",
+                replay_id,
+                occurred_at.isoformat(),
+                json.dumps(payload, sort_keys=True, default=str),
+            ),
         )
 
 

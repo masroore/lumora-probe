@@ -59,6 +59,12 @@ class CaptureRuntime(Protocol):
     async def stop(self) -> None: ...
 
 
+class ReplayRuntime(Protocol):
+    """Application replay composition hook used by the ASGI lifespan."""
+
+    async def startup(self) -> int: ...
+
+
 def _http_status_for(error: LumoraError) -> int:
     """Map structured application errors to stable HTTP status classes."""
 
@@ -162,6 +168,7 @@ def create_app(
     client_event_rate_limiter: RateLimiter | None = None,
     event_bus: LiveEventSource | None = None,
     live_settings: LiveSettings | None = None,
+    replay_runtime: ReplayRuntime | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -176,6 +183,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
+        if replay_runtime is not None:
+            await replay_runtime.startup()
         if capture_engine is not None:
             await capture_engine.start(
                 event_bus=None if isinstance(active_bus, NullEventSource) else active_bus
@@ -219,6 +228,7 @@ def create_app(
     )
     application.state.event_bus = active_bus
     application.state.live_hub = live_hub
+    application.state.replay_runtime = replay_runtime
     application.include_router(
         create_live_router(
             hub=live_hub,

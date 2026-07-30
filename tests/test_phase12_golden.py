@@ -55,6 +55,7 @@ async def test_golden_event_replay_is_byte_comparable() -> None:
             EventEnvelope.model_validate(json.loads(line))
             for line in archive.read("events.jsonl").splitlines()
         )
+        expected_findings = archive.read("findings.json")
 
     first_publisher = RecordingPublisher()
     second_publisher = RecordingPublisher()
@@ -70,3 +71,8 @@ async def test_golden_event_replay_is_byte_comparable() -> None:
     first_bytes = b"".join(event.to_json_bytes() + b"\n" for event in first.events)
     second_bytes = b"".join(event.to_json_bytes() + b"\n" for event in second.events)
     assert first_bytes == second_bytes
+    assert json.loads(expected_findings) == []
+    assert (
+        expected_findings
+        == json.dumps(json.loads(expected_findings), separators=(",", ":")).encode() + b"\n"
+    )

@@ -6,6 +6,7 @@ import asyncio
 import math
 from collections.abc import Awaitable, Callable, Iterable
 from itertools import pairwise
+from typing import Any
 
 from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
 from lumora_probe.shared.errors import ReplayDomainError
@@ -20,7 +21,10 @@ from .contracts import (
     ProtocolReplayPolicy,
     ProtocolReplayResult,
     ReplayAuditSink,
+    ReplayAuditStore,
     ReplayCancellation,
+    ReplayJobContext,
+    ReplayJobRegistry,
 )
 
 ReplaySleeper = Callable[[float], Awaitable[None]]
@@ -196,6 +200,108 @@ class ProtocolReplayService:
                 error=error,
             )
         )
+
+
+class ReplayRuntime:
+    """Compose protocol replay with durable jobs, audit, cancellation, and exclusivity."""
+
+    def __init__(
+        self,
+        jobs: ReplayJobRegistry,
+        *,
+        sender_factory: Callable[[], DICOMDatasetSender],
+        audit_store: ReplayAuditStore,
+        clock: EventClock,
+        exclusivity: InMemoryReplayExclusivity | None = None,
+    ) -> None:
+        self.jobs = jobs
+        self.sender_factory = sender_factory
+        self.audit_store = audit_store
+        self.clock = clock
+        self.exclusivity = exclusivity if exclusivity is not None else InMemoryReplayExclusivity()
+        self._started = False
+
+    async def startup(self) -> int:
+        """Sweep persisted and in-memory jobs once when the application starts."""
+        if self._started:
+            return 0
+        self._started = True
+        return await self.jobs.startup_sweep(reason="process restarted")
+
+    async def start_protocol_replay(
+        self,
+        datasets: Iterable[ProtocolReplayDataset],
+        *,
+        policy: ProtocolReplayPolicy,
+        capture_fidelity: str,
+        partial: bool = False,
+        incomplete_aggregates: Iterable[str] = (),
+        capture_id: str | None = None,
+        speed: float = 1.0,
+    ) -> Any:
+        """Start a guarded protocol replay as a durable background operation."""
+        source_datasets = tuple(datasets)
+        parameters = {
+            "capture_id": capture_id,
+            "capture_fidelity": capture_fidelity,
+            "partial": partial,
+            "target": str(policy.target) if policy.target is not None else None,
+            "dry_run": policy.dry_run,
+            "planned_count": len(source_datasets),
+        }
+
+        async def worker(context: ReplayJobContext) -> str:
+            audit_records: list[ProtocolReplayAuditRecord] = []
+
+            def collect_audit(record: ProtocolReplayAuditRecord) -> None:
+                audit_records.append(record)
+
+            service = ProtocolReplayService(
+                self.sender_factory(),
+                policy=policy,
+                audit_sink=collect_audit,
+                clock=self.clock,
+                exclusivity=self.exclusivity,
+            )
+            try:
+                result = await service.replay(
+                    source_datasets,
+                    capture_fidelity=capture_fidelity,
+                    partial=partial,
+                    incomplete_aggregates=incomplete_aggregates,
+                    replay_id=context.operation_id,
+                    capture_id=capture_id,
+                    cancellation=context.cancellation,
+                    speed=speed,
+                )
+                await context.report_progress(
+                    {
+                        "planned": result.planned,
+                        "attempted": result.count,
+                        "confirmed": result.success_count,
+                        "failed": result.failure_count,
+                        "cancelled": result.cancelled,
+                    }
+                )
+                return "cancelled" if result.cancelled else "completed"
+            finally:
+                for record in audit_records:
+                    await self.audit_store.append_replay_audit(
+                        {
+                            "replay_id": record.replay_id,
+                            "capture_id": record.capture_id,
+                            "target": record.target,
+                            "dry_run": record.dry_run,
+                            "outcome": record.outcome,
+                            "planned_count": record.planned_count,
+                            "confirmed_count": record.confirmed_count,
+                            "failed_count": record.failed_count,
+                            "occurred_at": record.occurred_at,
+                            "error": record.error,
+                        }
+                    )
+
+        return await self.jobs.start("protocol-replay", worker, parameters=parameters)
 
 
 class EventReplayService:

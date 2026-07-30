@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from lumora_probe.associations.contracts import DICOMStoreResult
 from lumora_probe.shared.events import EventEnvelope
@@ -80,6 +81,53 @@ class ReplayCancellation(Protocol):
     @property
     def is_cancelled(self) -> bool:
         """Return whether replay should stop before the next send."""
+        ...
+
+
+class ReplayJobContext(Protocol):
+    """Job context required by the application replay composition."""
+
+    @property
+    def operation_id(self) -> str:
+        """Return the durable operation identity used as replay identity."""
+        ...
+
+    @property
+    def cancellation(self) -> ReplayCancellation:
+        """Return the cooperative cancellation probe."""
+        ...
+
+    async def report_progress(self, progress: Mapping[str, Any]) -> None:
+        """Persist and publish one replay progress checkpoint."""
+        ...
+
+
+ReplayJobWorker = Callable[[ReplayJobContext], Awaitable[str | None]]
+
+
+class ReplayJobRegistry(Protocol):
+    """Application job registry used to compose replay into durable execution."""
+
+    async def start(
+        self,
+        job_type: str,
+        worker: ReplayJobWorker,
+        *,
+        parameters: Mapping[str, Any] = {},
+    ) -> Any:
+        """Start one background replay job."""
+        ...
+
+    async def startup_sweep(self, *, reason: str) -> int:
+        """Mark all persisted/in-memory running jobs interrupted after restart."""
+        ...
+
+
+class ReplayAuditStore(Protocol):
+    """Async persistence boundary for replay audit records."""
+
+    async def append_replay_audit(self, record: Mapping[str, Any]) -> None:
+        """Persist one replay audit record without blocking the event loop."""
         ...
 
 
