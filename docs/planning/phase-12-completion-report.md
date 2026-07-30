@@ -57,6 +57,7 @@ Phase 12 replay engine is implemented across all approved WBS work packages:
 - `docs/planning/phase-12-task-t-12-05-02-report.md`
 - `tests/test_phase12_replay_protocol.py`
 - `tests/test_phase12_jobs.py`
+- `tests/test_phase12_runtime.py`
 - `tests/test_phase12_golden.py`
 - `tests/golden/phase12-protocol.lpcap`
 
@@ -68,6 +69,10 @@ Phase 12 replay engine is implemented across all approved WBS work packages:
 - `src/lumora_probe/replay/service.py`
 - `src/lumora_probe/core/operations.py`
 - `src/lumora_probe/shared/events.py`
+- `src/lumora_probe/core/operations.py`
+- `src/lumora_probe/replay/contracts.py`
+- `src/lumora_probe/replay/service.py`
+- `src/lumora_probe/web/api.py`
 - `docs/generated/event-catalog-v1.json`
 - `CLAUDE.md`
 
@@ -86,23 +91,26 @@ Phase 12 replay engine is implemented across all approved WBS work packages:
 - Ruff format check: passed.
 - Import-linter: passed (`7 kept`, `0 broken`).
 - BasedPyright (`core`, `shared`): passed (`0 errors`).
-- Full test suite: passed (`334 passed, 1 skipped`).
+- Full test suite: passed (`337 passed, 1 skipped`).
 - Package build: passed (`uv build`).
 
 ## Known limitations
 
-- Protocol replay input assembly from a verified capture package is an explicit composition seam;
-  the replay slice does not reach into capture repositories.
+- Protocol replay input assembly from a verified capture package remains an explicit composition seam;
+  the replay runtime does not reach into capture repositories.
 - Existing SCU transport opens one association per dataset. Association-level reconstruction is
   not claimed; byte-exact/mock-peer replay remains deferred by ADR-0005.
-- Durable jobs are available through the core registry but no new replay HTTP route was added;
-  API exposure belongs to a later approved integration task.
+- Durable protocol replay jobs are now composed through `ReplayRuntime`, including async audit
+  persistence, restart interruption sweep, shared live-replay exclusivity, cancellation, and
+  progress. No new replay HTTP route was added; API exposure belongs to a later approved
+  integration task.
 - Interoperability suite remains opt-in and was not run by the default quality gate.
 
 ## Follow-up recommendations
 
-- Before Phase 13, add an application composition adapter that joins verified capture objects to
-  source C-STORE monotonic samples through public capture contracts.
+- Before Phase 13, add the approved application adapter that joins verified capture objects to
+  source C-STORE monotonic samples through public capture contracts; `ReplayRuntime` now provides
+  the durable execution seam that adapter will call.
 - Add live loopback protocol replay coverage against `DICOMListener` once guardrails are wired to
   the runtime composition root.
 - Keep Phase 13 blocked until this report and the Phase 12 task reports are accepted.

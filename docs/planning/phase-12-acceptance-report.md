@@ -1,7 +1,7 @@
 # Phase 12 Acceptance Report — Replay Engine
 
 **Review date:** 2026-07-30
-**Decision:** Blocked pending remediation
+**Decision:** Accepted after remediation
 **Reviewed artifacts:** `phase-12-completion-report.md` and all `phase-12-task-*-report.md` files
 
 ## Acceptance basis
@@ -11,20 +11,20 @@ ADR-0005 replay fidelity tiers, ADR-0007 crash-recovery obligations, ADR-0017 or
 ADR-0022 golden-test obligations, and the Phase 12 exit criteria in
 `docs/planning/02-phase-plan.md`.
 
-The implementation passes its isolated service and quality-gate tests, but acceptance is blocked
-by production-composition gaps:
+The initial review identified four implementation blockers. They were remediated in commit
+`d757dd7` and verified by focused component tests:
 
-- Replay services are not wired into an application composition path with a durable job record and
-  mandatory audit sink.
-- Startup does not invoke the durable interruption sweep, so running jobs are not proven to become
-  `interrupted` after restart.
-- Live-replay exclusivity defaults to a per-service coordinator rather than a shared application
-  coordinator.
-- The golden regression compares only replayed event bytes; it does not compare a byte-stable
-  finding set as required by ADR-0022.
+- `ReplayRuntime` composes protocol replay through the durable job registry, mandatory async audit
+  persistence, cooperative cancellation, progress checkpoints, and one shared exclusivity guard.
+- `InMemoryJobRegistry.startup_sweep()` and the ASGI lifespan invoke the restart interruption sweep
+  for durable and in-memory running jobs.
+- The replay runtime owns one application-level exclusivity coordinator and injects it into every
+  protocol replay service it creates.
+- The golden capture now carries a deterministic `findings.json` set and the regression asserts its
+  canonical bytes alongside the replayed event stream, without writing findings into `events.jsonl`.
 
-These are implementation blockers, not accepted limitations. Phase 13 remains blocked until they
-are remediated and the quality gates are rerun.
+The original completion report's explicit capture-package input seam and lack of a replay write route
+remain documented limitations, not acceptance blockers.
 
 ## Quality gates rerun on 2026-07-30
 
@@ -34,7 +34,7 @@ are remediated and the quality gates are rerun.
 | `uv run ruff format --check .` | PASS |
 | `uv run lint-imports --no-cache` | PASS — 7 kept, 0 broken |
 | `uv run basedpyright src/lumora_probe/core src/lumora_probe/shared` | PASS — 0 errors |
-| `uv run pytest -q` | PASS — 334 passed, 1 skipped |
+| `uv run pytest -q` | PASS — 337 passed, 1 skipped |
 | `uv build` | PASS — sdist and wheel built |
 
 The opt-in interoperability suite was not run; this remains an explicitly documented limitation.
@@ -46,16 +46,15 @@ The opt-in interoperability suite was not run; this remains an explicitly docume
   byte-exact/mock-peer replay remain deferred by ADR-0005.
 - No replay HTTP write route was added ahead of the approved guardrails.
 
-## Blocking findings
+## Remediation evidence
 
-1. Add an application-level replay composition adapter that creates durable operation records,
-   supplies the mandatory audit sink, and wires replay cancellation/progress to the job registry.
-2. Invoke the durable interruption sweep from application startup and share one replay exclusivity
-   coordinator across all live replay services.
-3. Extend the golden fixture/test to compare a deterministic finding-set artifact as well as the
-   event stream.
+- `docs/planning/phase-12-remediation-report.md`
+- `tests/test_phase12_runtime.py`
+- `tests/test_phase12_golden.py`
+- `tests/golden/phase12-protocol.lpcap` (`findings.json`)
 
 ## Phase transition
 
-Phase 12 is **not accepted**. Phase 13 must not begin until the blocking findings are closed and
-this report is updated with a passing acceptance decision.
+Phase 12 is accepted. Phase 13 may begin from its documented entry criterion (Phase 11 exit),
+subject to the repository gate that this acceptance report is reviewed and accepted. Phase 13 work
+must remain within the approved Viewer work packages and must not implement deferred features.
