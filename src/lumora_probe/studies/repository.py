@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import logging
 import shutil
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -280,6 +282,56 @@ class InMemoryInstanceSourceRepository:
 
     async def get_instance_source(self, instance_id: str) -> DicomObjectSource | None:
         return self._sources.get(instance_id)
+
+
+_logger = logging.getLogger(__name__)
+
+
+class FileSystemInstanceSourceRepository:
+    """Resolve instance IDs to verified capture-owned DICOM bytes."""
+
+    def __init__(self, captures_root: Path, databases: StorageDatabases) -> None:
+        self._captures_root = captures_root.expanduser().resolve()
+        self._databases = databases
+
+    async def get_instance_source(self, instance_id: str) -> DicomObjectSource | None:
+        """Look up the projection row, read bytes off-loop, and verify the digest."""
+        rows = await self._databases.index.execute_read(
+            "SELECT capture_id, object_digest, object_path FROM instances "
+            "WHERE sop_instance_uid = ? LIMIT 1",
+            (instance_id,),
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        capture_id = row["capture_id"]
+        digest = row["object_digest"]
+        object_path = self._captures_root / capture_id / "objects" / digest
+        try:
+            raw_bytes = await asyncio.to_thread(object_path.read_bytes)
+        except FileNotFoundError:
+            _logger.warning(
+                "capture object missing",
+                extra={"capture_id": capture_id, "digest": digest},
+            )
+            return None
+        actual_digest = hashlib.sha256(raw_bytes).hexdigest()
+        if actual_digest != digest:
+            _logger.error(
+                "capture object digest mismatch; refusing to serve unverified bytes",
+                extra={
+                    "capture_id": capture_id,
+                    "expected": digest,
+                    "actual": actual_digest,
+                },
+            )
+            return None
+        return DicomObjectSource(
+            object_digest=digest,
+            raw_bytes=raw_bytes,
+            capture_id=capture_id,
+            instance_id=instance_id,
+        )
 
 
 __all__: tuple[str, ...] = ()
