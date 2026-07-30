@@ -41,6 +41,9 @@ Terminology should be:
 | Capture | Recorded engineering evidence for investigation or replay. |
 | Replay | Re-execution of captured events for analysis. |
 | Analysis | Automated or manual interpretation of engineering evidence. |
+| Diagnostic Condition | Deterministic observed fact with a stable condition ID, emitted as a warning or error. |
+| Finding | Versioned rule-derived inference stored under a capture's `analysis/` directory, never in `events.jsonl`. |
+| Condition ID | Stable `LP-XXX-NNN` identifier; `XXX` is a three-letter namespace and `NNN` is a never-reused sequence from `001` through `999`. |
 | Report | Generated investigation output. |
 
 ### Capture Summary Report
