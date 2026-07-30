@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Protocol
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,27 +26,6 @@ class _RingBufferRecord:
     recorded_at: datetime
     aggregate_id: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-class _Clock(Protocol):
-    """Wall clock protocol; avoids importing core.clock (which imports time)."""
-
-    def now(self) -> datetime: ...
-
-
-class _RingBufferService(Protocol):
-    """Structural protocol matching the ring-buffer snapshot and config surface."""
-
-    @property
-    def config(self) -> _RingBufferConfig: ...
-
-    def snapshot(
-        self,
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        aggregate_id: str | None = None,
-    ) -> tuple[_RingBufferRecord, ...]: ...
 
 
 class RingBufferRetentionMap:

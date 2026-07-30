@@ -113,4 +113,8 @@ def create_transfer_inspector_router(
     return router
 
 
-__all__: tuple[str, ...] = ("TransferInspectorService", "TransferLeg", "create_transfer_inspector_router")
+__all__: tuple[str, ...] = (
+    "TransferInspectorService",
+    "TransferLeg",
+    "create_transfer_inspector_router",
+)
