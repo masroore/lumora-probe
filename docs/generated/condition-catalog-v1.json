@@ -1,0 +1,24 @@
+{
+  "allocation": "LP-XXX-NNN; XXX is a three-letter namespace; NNN is never reused and ranges from 001 through 999.",
+  "catalog_version": 1,
+  "conditions": [
+    {
+      "code": "LP-NEG-001",
+      "description": "The observed association negotiation was rejected.",
+      "name": "Association rejected",
+      "remediation": "Compare the rejection result, source, reason, and offered contexts with the peer configuration."
+    },
+    {
+      "code": "LP-NEG-002",
+      "description": "The observed association was aborted before normal release.",
+      "name": "Association aborted",
+      "remediation": "Inspect the abort source and the last observed protocol events on both legs."
+    },
+    {
+      "code": "LP-NEG-004",
+      "description": "No acceptable presentation context was observed for the association.",
+      "name": "No acceptable presentation context",
+      "remediation": "Offer a presentation context containing the SOP class and a transfer syntax accepted by the peer."
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,7 +14,7 @@ from lumora_probe.analysis.contracts import (
     ConditionId,
     ConditionIdRegistry,
 )
-from lumora_probe.analysis.service import ConditionDetector
+from lumora_probe.analysis.service import ConditionDetector, default_condition_registry
 from lumora_probe.shared.errors import DomainInvariantError
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
@@ -144,3 +146,9 @@ def test_condition_detector_excludes_client_asserted_and_unknown_codes() -> None
         == ()
     )
     assert detector.detect([_event("WarningRaised", {"code": "LP-UNK-001"})]) == ()
+
+
+def test_condition_catalogue_artifact_matches_registry() -> None:
+    artifact = json.loads(Path("docs/generated/condition-catalog-v1.json").read_text())
+
+    assert artifact == default_condition_registry().catalog()

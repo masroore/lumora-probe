@@ -57,6 +57,18 @@ class ConditionDefinition:
     description: str
     remediation: str
 
+    def as_dict(self) -> dict[str, str]:
+        """Return the stable catalogue representation."""
+        condition_id = self.condition_id
+        if not isinstance(condition_id, ConditionId):
+            raise TypeError("condition definition ID was not validated")
+        return {
+            "code": condition_id.value,
+            "name": self.name,
+            "description": self.description,
+            "remediation": self.remediation,
+        }
+
     def __post_init__(self) -> None:
         if isinstance(self.condition_id, str):
             object.__setattr__(self, "condition_id", ConditionId(self.condition_id))
@@ -138,6 +150,14 @@ class ConditionIdRegistry:
     def definitions(self) -> tuple[ConditionDefinition, ...]:
         """Return registered definitions in stable ID order."""
         return tuple(self._definitions[condition_id] for condition_id in self.ids())
+
+    def catalog(self) -> dict[str, object]:
+        """Return the versioned, JSON-compatible condition catalogue."""
+        return {
+            "catalog_version": 1,
+            "allocation": "LP-XXX-NNN; XXX is a three-letter namespace; NNN is never reused and ranges from 001 through 999.",
+            "conditions": [definition.as_dict() for definition in self.definitions()],
+        }
 
     def __contains__(self, condition_id: object) -> bool:
         return isinstance(condition_id, ConditionId) and condition_id in self._definitions
