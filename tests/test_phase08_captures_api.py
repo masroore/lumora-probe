@@ -82,3 +82,34 @@ async def test_capture_delete_removes_capture_directory(tmp_path: Path) -> None:
 
     assert await store.delete("captures", "a") is True
     assert not capture_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_ring_buffer_promotion_endpoint_uses_injected_provider() -> None:
+    class Provider:
+        def status(self):
+            return {"enabled": True}
+
+        async def promote_window(self, *, start, end, capture_id=None, aggregate_id=None):
+            class Manifest:
+                def model_dump(self, *, mode):
+                    return {"capture_id": capture_id or "generated", "fidelity": "objects"}
+
+            assert start.isoformat().startswith("2026-07-30")
+            assert end > start
+            return Manifest()
+
+    application = create_app(retention_provider=Provider())
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.post(
+            "/api/v1/captures/ring-buffer/promote",
+            json={
+                "start": "2026-07-30T00:00:00+00:00",
+                "end": "2026-07-30T00:01:00+00:00",
+                "capture_id": "capture-1",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"capture_id": "capture-1", "fidelity": "objects"}

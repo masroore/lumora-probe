@@ -2,4 +2,6 @@
 
 **Status:** Partial
 
-The existing capture API exposes ring-buffer retention state. The workspace shell and study browser provider seam are ready for inline promotion wiring, but the promotion action is not yet exposed from the Phase 13 UI.
+The existing capture API exposes ring-buffer retention state and now exposes an injected promotion
+endpoint at `POST /api/v1/captures/ring-buffer/promote`. Binding instance retention metadata and an
+inline promotion control into the study workspace remains outstanding.
