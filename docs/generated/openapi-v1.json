@@ -374,6 +374,51 @@
         ]
       }
     },
+    "/api/v1/captures/ring-buffer/promote": {
+      "post": {
+        "operationId": "promote_ring_buffer_api_v1_captures_ring_buffer_promote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Promote Ring Buffer Api V1 Captures Ring Buffer Promote Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Ring Buffer",
+        "tags": [
+          "captures"
+        ]
+      }
+    },
     "/api/v1/captures/{capture_id}": {
       "delete": {
         "operationId": "delete_capture_api_v1_captures__capture_id__delete",

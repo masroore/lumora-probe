@@ -23,7 +23,7 @@
 
 ## Files added or modified
 
-See Phase 13 task reports `phase-13-task-t-13-*.md`, commits `bc1a75a` through `63ff5ee`, and
+See Phase 13 task reports `phase-13-task-t-13-*.md`, commits `bc1a75a` through `9bdf4c7`, and
 regenerated `docs/generated/openapi-v1.json`.
 
 ## Verification
@@ -40,7 +40,7 @@ regenerated `docs/generated/openapi-v1.json`.
 
 ## Remaining Phase 13 work
 
-- Ring-buffer retention state bound to study instances with inline promotion action.
+- Ring-buffer retention state bound to study instances with inline promotion action (the capture API promotion seam now exists, but browser binding remains).
 - Capture-scoped bookmark UI and API action.
 - Full Metadata Inspector (tag search/copy/JSON/raw/private toggle).
 - Transfer Inspector with per-leg association and decode/receive evidence.
