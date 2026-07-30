@@ -13,6 +13,8 @@ from lumora_probe.analysis.contracts import (
     ConditionDefinition,
     ConditionId,
     ConditionIdRegistry,
+    Finding,
+    FindingConfidence,
 )
 from lumora_probe.analysis.service import ConditionDetector, default_condition_registry
 from lumora_probe.shared.errors import DomainInvariantError
@@ -152,3 +154,58 @@ def test_condition_catalogue_artifact_matches_registry() -> None:
     artifact = json.loads(Path("docs/generated/condition-catalog-v1.json").read_text())
 
     assert artifact == default_condition_registry().catalog()
+
+
+def test_finding_model_preserves_version_confidence_and_evidence_links() -> None:
+    finding = Finding(
+        rule_id="LP-RULE-NEG-001",
+        rule_version="2026-07-30",
+        confidence=FindingConfidence.CERTAIN,
+        cited_sequences=[2, 7],
+        explanation="The peer rejected negotiation after no acceptable context was offered.",
+        next_steps=["Compare offered contexts", "Review peer configuration"],
+    )
+
+    assert finding.sequence_numbers == (2, 7)
+    assert finding.as_dict() == {
+        "rule_id": "LP-RULE-NEG-001",
+        "rule_version": "2026-07-30",
+        "confidence": "certain",
+        "cited_sequences": [2, 7],
+        "explanation": "The peer rejected negotiation after no acceptable context was offered.",
+        "next_steps": ["Compare offered contexts", "Review peer configuration"],
+    }
+
+
+@pytest.mark.parametrize("confidence", ["73%", "high", 0.73])
+def test_finding_model_rejects_numeric_or_unknown_confidence(confidence: object) -> None:
+    with pytest.raises(DomainInvariantError):
+        Finding(
+            rule_id="LP-RULE-NEG-001",
+            rule_version="1",
+            confidence=confidence,  # type: ignore[arg-type]
+            cited_sequences=(1,),
+            explanation="Observed explanation",
+            next_steps=("Inspect evidence",),
+        )
+
+
+def test_finding_model_requires_sorted_unique_evidence_and_next_steps() -> None:
+    with pytest.raises(DomainInvariantError, match="unique and sorted"):
+        Finding(
+            rule_id="rule",
+            rule_version="1",
+            confidence="likely",
+            cited_sequences=(3, 2, 3),
+            explanation="Observed explanation",
+            next_steps=("Inspect evidence",),
+        )
+    with pytest.raises(DomainInvariantError, match="next_steps"):
+        Finding(
+            rule_id="rule",
+            rule_version="1",
+            confidence="likely",
+            cited_sequences=(2,),
+            explanation="Observed explanation",
+            next_steps=("",),
+        )

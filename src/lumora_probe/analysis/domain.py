@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from lumora_probe.shared.errors import domain_invariant
 
@@ -235,6 +236,108 @@ class ConditionObservation:
             "source_event_id": self.source_event_id,
             "source_sequence": self.source_sequence,
             "details": dict(self.details),
+        }
+
+
+class FindingConfidence(StrEnum):
+    """Coarse calibrated confidence vocabulary for inferred findings."""
+
+    CERTAIN = "certain"
+    LIKELY = "likely"
+    POSSIBLE = "possible"
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """Versioned, evidence-linked inference derived from captured observations."""
+
+    rule_id: str
+    rule_version: str
+    confidence: FindingConfidence | str
+    cited_sequences: tuple[int, ...] | Iterable[int]
+    explanation: str
+    next_steps: tuple[str, ...] | Iterable[str]
+
+    def __post_init__(self) -> None:
+        for field_name, value in (("rule_id", self.rule_id), ("rule_version", self.rule_version)):
+            if type(value) is not str or not value.strip():
+                raise domain_invariant(
+                    f"{field_name} must be a non-empty string",
+                    field=field_name,
+                    value=value,
+                )
+            object.__setattr__(self, field_name, value.strip())
+        if type(self.confidence) is str:
+            try:
+                confidence = FindingConfidence(self.confidence)
+            except ValueError as exc:
+                raise domain_invariant(
+                    "confidence must be certain, likely, or possible",
+                    field="confidence",
+                    value=self.confidence,
+                ) from exc
+            object.__setattr__(self, "confidence", confidence)
+        elif type(self.confidence) is not FindingConfidence:
+            raise domain_invariant(
+                "confidence must use the coarse FindingConfidence vocabulary",
+                field="confidence",
+                value=self.confidence,
+            )
+
+        sequences = tuple(self.cited_sequences)
+        if not sequences or any(
+            type(sequence) is not int or isinstance(sequence, bool) or sequence < 0
+            for sequence in sequences
+        ):
+            raise domain_invariant(
+                "cited_sequences must contain at least one non-negative integer",
+                field="cited_sequences",
+                value=sequences,
+            )
+        if sequences != tuple(sorted(set(sequences))):
+            raise domain_invariant(
+                "cited_sequences must be unique and sorted",
+                field="cited_sequences",
+                value=sequences,
+            )
+        object.__setattr__(self, "cited_sequences", sequences)
+
+        if type(self.explanation) is not str or not self.explanation.strip():
+            raise domain_invariant(
+                "explanation must be a non-empty string",
+                field="explanation",
+                value=self.explanation,
+            )
+        object.__setattr__(self, "explanation", self.explanation.strip())
+        steps = tuple(self.next_steps)
+        if not steps or any(type(step) is not str or not step.strip() for step in steps):
+            raise domain_invariant(
+                "next_steps must contain at least one non-empty string",
+                field="next_steps",
+                value=steps,
+            )
+        object.__setattr__(self, "next_steps", tuple(step.strip() for step in steps))
+
+    @property
+    def sequence_numbers(self) -> tuple[int, ...]:
+        """Return cited event sequence numbers for UI and report consumers."""
+        return tuple(self.cited_sequences)
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the stable JSON representation of the finding."""
+        confidence = self.confidence
+        confidence_value = (
+            confidence.value
+            if isinstance(confidence, FindingConfidence)
+            else FindingConfidence(confidence).value
+        )
+        return {
+            "rule_id": self.rule_id,
+            "rule_version": self.rule_version,
+            "confidence": confidence_value,
+            "cited_sequences": list(self.cited_sequences),
+            "explanation": self.explanation,
+            "next_steps": list(self.next_steps),
         }
 
 
