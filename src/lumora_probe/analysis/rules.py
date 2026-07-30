@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping
 from typing import cast
 
 from .domain import Finding, FindingConfidence
-from .service import RuleContext
+from .service import AnalysisRule, RuleContext
 
 BUNDLED_RULE_SET_VERSION = "bundled-v1"
 
@@ -458,6 +458,67 @@ class OversizedDatasetRule:
                 )
             )
         return tuple(findings)
+
+
+class CMoveOutOfBandRule:
+    """Explain that C-MOVE sub-operations flow outside Probe's observed path."""
+
+    rule_id = "LP-RULE-DIMSE-001"
+    rule_version = "1"
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            if event.event_name != "CMoveRequested":
+                continue
+            sequence = _sequence(event.sequence)
+            if sequence is None:
+                continue
+            destination = (
+                _text(
+                    event.payload.get("destination_ae")
+                    or event.payload.get("destination_ae_title")
+                    or event.payload.get("move_destination")
+                )
+                or "the configured destination AE"
+            )
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.CERTAIN,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"C-MOVE sub-operation data flows out-of-band from Probe to {destination}; "
+                        + "the subsequent C-STORE operations do not traverse this capture path."
+                    ),
+                    next_steps=(
+                        "Point the destination AE at Probe to observe the sub-operations, or use "
+                        + "C-GET when the workflow requires data to remain on this association.",
+                    ),
+                )
+            )
+        return tuple(findings)
+
+
+def bundled_rules(
+    *,
+    slow_c_store_threshold_ns: int = 1_000_000_000,
+    oversized_dataset_threshold_bytes: int = 100_000_000,
+) -> tuple[AnalysisRule, ...]:
+    """Build the deterministic bundled seed rule set with configured thresholds."""
+
+    return (
+        RejectedAssociationRule(),
+        NoAcceptablePresentationContextRule(),
+        TransferSyntaxMismatchRule(),
+        SlowCStoreRule(threshold_ns=slow_c_store_threshold_ns),
+        IncompleteStudyRule(),
+        TimeoutRetryRule(),
+        OversizedDatasetRule(threshold_bytes=oversized_dataset_threshold_bytes),
+        CMoveOutOfBandRule(),
+    )
 
 
 __all__: tuple[str, ...] = ()

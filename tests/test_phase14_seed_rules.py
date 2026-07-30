@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from lumora_probe.analysis.domain import FindingConfidence
 from lumora_probe.analysis.rules import (
+    CMoveOutOfBandRule,
     IncompleteStudyRule,
     NoAcceptablePresentationContextRule,
     OversizedDatasetRule,
@@ -13,6 +14,7 @@ from lumora_probe.analysis.rules import (
     SlowCStoreRule,
     TimeoutRetryRule,
     TransferSyntaxMismatchRule,
+    bundled_rules,
 )
 from lumora_probe.analysis.service import RuleContext
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
@@ -248,3 +250,41 @@ def test_oversized_dataset_rule_ignores_values_at_threshold() -> None:
     assert (
         tuple(OversizedDatasetRule(threshold_bytes=1_000).evaluate(RuleContext((event,), ()))) == ()
     )
+
+
+def test_c_move_rule_explains_out_of_band_sub_operations_and_remediation() -> None:
+    event = _event(
+        {"destination_ae_title": "REMOTE-STORE"},
+        sequence=19,
+        event_name="CMoveRequested",
+    )
+
+    findings = tuple(CMoveOutOfBandRule().evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert findings[0].confidence is FindingConfidence.CERTAIN
+    assert findings[0].cited_sequences == (19,)
+    assert "REMOTE-STORE" in findings[0].explanation
+    assert "out-of-band" in findings[0].explanation
+    assert "Point the destination AE at Probe" in findings[0].next_steps[0]
+    assert "C-GET" in findings[0].next_steps[0]
+
+
+def test_bundled_rules_contains_all_seed_families_and_accepts_thresholds() -> None:
+    rules = bundled_rules(slow_c_store_threshold_ns=10, oversized_dataset_threshold_bytes=20)
+
+    assert len(rules) == 8
+    assert {rule.rule_id for rule in rules} == {
+        "LP-RULE-NEG-001",
+        "LP-RULE-NEG-002",
+        "LP-RULE-NEG-003",
+        "LP-RULE-PERF-001",
+        "LP-RULE-STUDY-001",
+        "LP-RULE-ASSOC-001",
+        "LP-RULE-DATA-001",
+        "LP-RULE-DIMSE-001",
+    }
+    slow = next(rule for rule in rules if rule.rule_id == "LP-RULE-PERF-001")
+    oversized = next(rule for rule in rules if rule.rule_id == "LP-RULE-DATA-001")
+    assert slow.threshold_ns == 10
+    assert oversized.threshold_bytes == 20
