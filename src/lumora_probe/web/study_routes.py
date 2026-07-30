@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from .collection_routes import create_collection_router
 from .query import QueryPolicy
 from .resources import ResourceStore
+from .retention import RingBufferRetentionMap, join_retention
 
 
 class StudyBrowserProvider(Protocol):
@@ -52,8 +53,11 @@ def create_projection_routers(store: ResourceStore | None = None) -> tuple[APIRo
 __all__: tuple[str, ...] = ()
 
 
-def create_study_browser_router(provider: StudyBrowserProvider | None = None) -> APIRouter:
-    """Expose provenance and duplicate-UID data without making Study authoritative."""
+def create_study_browser_router(
+    provider: StudyBrowserProvider | None = None,
+    retention_map: RingBufferRetentionMap | None = None,
+) -> APIRouter:
+    """Expose provenance and live retention without making Study authoritative."""
 
     router = APIRouter(prefix="/studies", tags=["studies"])
 
@@ -64,6 +68,8 @@ def create_study_browser_router(provider: StudyBrowserProvider | None = None) ->
         result = await provider.get_study_browser(study_uid)
         if result is None:
             raise HTTPException(status_code=404, detail="Study not found")
+        if retention_map is not None:
+            result = join_retention(result, retention_map.retention_by_digest())
         return result
 
     return router

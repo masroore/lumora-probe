@@ -1,4 +1,4 @@
-"""Composition adapter joining live ring-buffer records to study browser retention."""
+"""Composition adapters joining live ring-buffer records to study browser retention."""
 
 from __future__ import annotations
 
@@ -6,7 +6,9 @@ import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
+
+from lumora_probe.studies.contracts import InstanceRetention
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,38 +30,60 @@ class _RingBufferRecord:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
-class RingBufferRetentionMap:
-    """Build digest-keyed InstanceRetention from live ring-buffer object records."""
+class RetentionClock(Protocol):
+    """Wall clock contract used by the web composition adapter."""
 
-    def __init__(self, ring_buffer: Any, clock: Any) -> None:
+    def now(self) -> datetime: ...
+
+
+class _RingBufferService(Protocol):
+    """Structural protocol for the live ring-buffer surface used by this adapter."""
+
+    @property
+    def config(self) -> _RingBufferConfig: ...
+
+    def snapshot(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        aggregate_id: str | None = None,
+    ) -> tuple[_RingBufferRecord, ...]: ...
+
+
+class RingBufferRetentionMap:
+    """Build a fresh digest-keyed retention map from live ring-buffer records."""
+
+    def __init__(self, ring_buffer: _RingBufferService, clock: RetentionClock) -> None:
         self._ring_buffer = ring_buffer
         self._clock = clock
 
-    def retention_by_digest(self) -> dict[str, Any]:
-        """Return a fresh digest-keyed retention map; never cache the result."""
-        from lumora_probe.studies.contracts import InstanceRetention
-
-        records = self._ring_buffer.snapshot()
-        object_records = [r for r in records if r.kind == "object"]
-        if not object_records:
+    def retention_by_digest(self) -> dict[str, InstanceRetention]:
+        """Return current object retention; snapshot state is never cached."""
+        records = tuple(
+            record for record in self._ring_buffer.snapshot() if record.kind == "object"
+        )
+        if not records:
             return {}
-        # Group by aggregate_id for promotion window computation
-        by_aggregate: dict[str | None, list] = {}
-        for record in object_records:
+
+        by_aggregate: dict[str | None, list[_RingBufferRecord]] = {}
+        for record in records:
             by_aggregate.setdefault(record.aggregate_id, []).append(record)
+
         result: dict[str, InstanceRetention] = {}
-        for record in object_records:
+        for record in records:
             digest = hashlib.sha256(record.raw).hexdigest()
             expires_at = record.recorded_at + timedelta(
                 seconds=self._ring_buffer.config.retention_seconds
             )
-            group = by_aggregate.get(record.aggregate_id, [record])
-            promotion_start = min(r.occurred_at for r in group)
-            promotion_end = max(r.occurred_at for r in group)
             if record.aggregate_id is None:
                 promotion_start = record.occurred_at
                 promotion_end = record.occurred_at
-            retention = InstanceRetention(
+            else:
+                aggregate_records = by_aggregate[record.aggregate_id]
+                promotion_start = min(item.occurred_at for item in aggregate_records)
+                promotion_end = max(item.occurred_at for item in aggregate_records)
+            candidate = InstanceRetention(
                 source="ring-buffer",
                 expires_at=expires_at,
                 promotion_start=promotion_start,
@@ -67,12 +91,50 @@ class RingBufferRetentionMap:
                 aggregate_id=record.aggregate_id,
             )
             existing = result.get(digest)
-            if existing is None or (
-                retention.expires_at is not None
-                and (existing.expires_at is None or retention.expires_at > existing.expires_at)
-            ):
-                result[digest] = retention
+            if existing is None or _expires_later(candidate, existing):
+                result[digest] = candidate
         return result
 
 
-__all__: tuple[str, ...] = ()
+def _expires_later(candidate: InstanceRetention, existing: InstanceRetention) -> bool:
+    """Return whether candidate wins a digest collision by expiry time."""
+    if candidate.expires_at is None:
+        return False
+    return existing.expires_at is None or candidate.expires_at > existing.expires_at
+
+
+def join_retention(
+    payload: Mapping[str, Any],
+    retention_by_digest: Mapping[str, InstanceRetention],
+) -> Mapping[str, Any]:
+    """Overlay live retention metadata on the browser's projected instances."""
+    instances = payload.get("instances")
+    if not isinstance(instances, list):
+        return payload
+
+    joined_instances: list[Any] = []
+    for instance in instances:
+        if not isinstance(instance, Mapping):
+            joined_instances.append(instance)
+            continue
+        digests = instance.get("object_digests")
+        if not isinstance(digests, list | tuple):
+            joined_instances.append(instance)
+            continue
+        retention = next(
+            (retention_by_digest[digest] for digest in digests if digest in retention_by_digest),
+            None,
+        )
+        if retention is None:
+            joined_instances.append(instance)
+            continue
+        joined_instance = dict(instance)
+        joined_instance["retention"] = retention.as_dict()
+        joined_instances.append(joined_instance)
+
+    joined_payload = dict(payload)
+    joined_payload["instances"] = joined_instances
+    return joined_payload
+
+
+__all__ = ("RetentionClock", "RingBufferRetentionMap", "join_retention")

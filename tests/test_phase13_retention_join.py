@@ -137,8 +137,6 @@ async def test_study_browser_endpoint_shows_ring_buffer_retention() -> None:
 
     class BrowserProvider:
         async def get_study_browser(self, study_uid: str):
-            retention_map = RingBufferRetentionMap(ring_buffer, clock)
-            retention_by_digest = retention_map.retention_by_digest()
             instances = [
                 InstanceProjection(
                     capture_id="capture-1",
@@ -153,11 +151,12 @@ async def test_study_browser_endpoint_shows_ring_buffer_retention() -> None:
                     created_at=BASE_TIME,
                 )
             ]
-            return StudyBrowserService.browser(study_uid, instances, retention_by_digest)
+            return StudyBrowserService.browser(study_uid, instances)
 
     application = create_app(
         study_browser_provider=BrowserProvider(),
         ring_buffer_service=ring_buffer,
+        clock=clock,
     )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:

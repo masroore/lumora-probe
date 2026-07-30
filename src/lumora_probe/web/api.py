@@ -5,6 +5,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
@@ -47,6 +48,7 @@ from .metadata_routes import MetadataProvider, create_metadata_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .report_routes import CaptureSummaryProvider, create_reports_router
 from .resources import ResourceStore
+from .retention import RetentionClock, RingBufferRetentionMap
 from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import (
@@ -161,12 +163,20 @@ async def validation_exception_handler(request: Request, error: Exception) -> JS
     )
 
 
+class _DateTimeClock:
+    """Production wall clock for web-only composition adapters."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+
 def create_app(
     *,
     capture_store: ResourceStore | None = None,
     retention_provider: RetentionStateProvider | None = None,
     capture_engine: CaptureRuntime | None = None,
     ring_buffer_service: Any | None = None,
+    clock: RetentionClock | None = None,
     projection_store: ResourceStore | None = None,
     association_store: ResourceStore | None = None,
     event_store: ResourceStore | None = None,
@@ -196,6 +206,17 @@ def create_app(
     active_retention = retention_provider or (
         capture_engine.ring_buffer if capture_engine is not None else None
     )
+    active_ring_buffer = ring_buffer_service
+    if active_ring_buffer is None and capture_engine is not None:
+        candidate = capture_engine.ring_buffer
+        if hasattr(candidate, "snapshot") and hasattr(candidate, "config"):
+            active_ring_buffer = candidate
+    study_retention_map = None
+    if active_ring_buffer is not None:
+        study_retention_map = RingBufferRetentionMap(
+            active_ring_buffer,
+            clock or _DateTimeClock(),
+        )
     active_settings = live_settings or LiveSettings()
     live_governor = CoalescingGovernor(bus=active_bus, settings=active_settings)
     live_hub = LiveUpdateHub(bus=active_bus, governor=live_governor)
@@ -232,7 +253,7 @@ def create_app(
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)
     application.include_router(
-        create_study_browser_router(study_browser_provider), prefix=API_PREFIX
+        create_study_browser_router(study_browser_provider, study_retention_map), prefix=API_PREFIX
     )
     application.include_router(create_reports_router(reports_provider), prefix=API_PREFIX)
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
@@ -268,18 +289,7 @@ def create_app(
             settings=active_settings,
         )
     )
-    if ring_buffer_service is not None:
-        from datetime import UTC, datetime
-
-        from .retention import RingBufferRetentionMap
-
-        class _DateTimeClock:
-            def now(self) -> datetime:
-                return datetime.now(UTC)
-
-        application.state.retention_map = RingBufferRetentionMap(
-            ring_buffer_service, _DateTimeClock()
-        )
+    application.state.retention_map = study_retention_map
     return application
 
 
