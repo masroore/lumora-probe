@@ -13,10 +13,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from lumora_probe.core.clock import Clock
 from lumora_probe.core.config import is_uuid7
 from lumora_probe.core.errors import LumoraError, PathSecurityError
-from lumora_probe.core.ids import IdGenerator
+from lumora_probe.shared.events import EventClock, EventIdGenerator
 from lumora_probe.core.paths import assert_contained
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
 
@@ -355,8 +354,8 @@ class BookmarkRepository:
     def __init__(
         self,
         databases: StorageDatabases,
-        clock: Clock,
-        id_generator: IdGenerator,
+        clock: EventClock,
+        id_generator: EventIdGenerator,
     ) -> None:
         self._databases = databases
         self._clock = clock
