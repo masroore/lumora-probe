@@ -1,0 +1,68 @@
+# Lumora Probe report
+
+- Capture: `{{ report.capture_id }}`
+- Rule-set version: `{{ report.rule_set_version }}`
+- Report version: `{{ report.report_version }}`
+- Generated from: `{{ report.generated_from }}`
+
+## Provenance
+
+- Source: `{{ report.provenance.source }}`
+- Source capture: `{{ report.provenance.source_capture_id or "—" }}`
+- Fidelity: `{{ report.provenance.fidelity or "—" }}`
+- Created: `{{ report.provenance.created_at or "—" }}`
+- Completed: `{{ report.provenance.completed_at or "—" }}`
+- Partial: `{{ report.provenance.partial }}`
+- Promoted from buffer: `{{ report.provenance.promoted_from_buffer }}`
+- Client-asserted events: `{{ report.provenance.client_asserted_event_count }}`
+- Objects: `{{ report.provenance.object_count }}`
+- Source aggregates: {{ report.provenance.source_aggregate_ids | join(", ") or "—" }}
+
+## Conditions
+
+{% if report.conditions %}
+{% for condition in report.conditions %}
+### {{ condition.condition_id }} — {{ condition.condition_name }}
+
+{{ condition.message }}
+
+- Event: `{{ condition.event_name }}`
+- Evidence sequence: `{{ condition.source_sequence if condition.source_sequence is not none else "unsequenced" }}`
+{% if condition.details %}
+```json
+{{ condition.details | tojson(indent=2) }}
+```
+{% endif %}
+{% endfor %}
+{% else %}
+No observed conditions.
+{% endif %}
+
+## Findings
+
+{% if report.findings %}
+{% for finding in report.findings %}
+### {{ finding.rule_id }} v{{ finding.rule_version }} — {{ finding.confidence }}
+
+{{ finding.explanation }}
+
+Cited event sequences: {% for sequence in finding.cited_sequences %}`{{ sequence }}`{% if not loop.last %}, {% endif %}{% endfor %}
+
+Next steps:
+{% for step in finding.next_steps %}- {{ step }}
+{% endfor %}
+{% endfor %}
+{% else %}
+No findings persisted for this capture.
+{% endif %}
+
+## Decode timings
+
+{% if report.timings %}
+| Instance | Frames | Total (ns) | Max (ns) |
+| --- | ---: | ---: | ---: |
+{% for timing in report.timings %}| `{{ timing.instance_id }}` | {{ timing.frame_count }} | {{ timing.total_duration_ns }} | {{ timing.max_duration_ns }} |
+{% endfor %}
+{% else %}
+No decode timings recorded.
+{% endif %}

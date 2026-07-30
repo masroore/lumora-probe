@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lumora Probe report — {{ report.capture_id }}</title>
+</head>
+<body>
+  <main>
+    <h1>Lumora Probe report</h1>
+    <dl>
+      <dt>Capture</dt><dd>{{ report.capture_id }}</dd>
+      <dt>Rule-set version</dt><dd>{{ report.rule_set_version }}</dd>
+      <dt>Report version</dt><dd>{{ report.report_version }}</dd>
+      <dt>Generated from</dt><dd>{{ report.generated_from }}</dd>
+    </dl>
+
+    <h2>Provenance</h2>
+    <dl>
+      <dt>Source</dt><dd>{{ report.provenance.source }}</dd>
+      <dt>Source capture</dt><dd>{{ report.provenance.source_capture_id or "—" }}</dd>
+      <dt>Fidelity</dt><dd>{{ report.provenance.fidelity or "—" }}</dd>
+      <dt>Created</dt><dd>{{ report.provenance.created_at or "—" }}</dd>
+      <dt>Completed</dt><dd>{{ report.provenance.completed_at or "—" }}</dd>
+      <dt>Partial</dt><dd>{{ report.provenance.partial }}</dd>
+      <dt>Promoted from buffer</dt><dd>{{ report.provenance.promoted_from_buffer }}</dd>
+      <dt>Client-asserted events</dt><dd>{{ report.provenance.client_asserted_event_count }}</dd>
+      <dt>Objects</dt><dd>{{ report.provenance.object_count }}</dd>
+      <dt>Source aggregates</dt><dd>{{ report.provenance.source_aggregate_ids | join(", ") or "—" }}</dd>
+    </dl>
+
+    <h2>Conditions</h2>
+    {% if report.conditions %}
+    <ul>
+      {% for condition in report.conditions %}
+      <li>
+        <strong>{{ condition.condition_id }} — {{ condition.condition_name }}</strong>
+        <p>{{ condition.message }}</p>
+        <p>Evidence: {{ condition.source_sequence if condition.source_sequence is not none else "unsequenced" }}</p>
+        {% if condition.details %}<pre>{{ condition.details | tojson(indent=2) }}</pre>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No observed conditions.</p>
+    {% endif %}
+
+    <h2>Findings</h2>
+    {% if report.findings %}
+    {% for finding in report.findings %}
+    <article>
+      <h3>{{ finding.rule_id }} v{{ finding.rule_version }} ({{ finding.confidence }})</h3>
+      <p>{{ finding.explanation }}</p>
+      <p>Cited event sequences: {{ finding.cited_sequences | join(", ") }}</p>
+      <h4>Next steps</h4>
+      <ul>{% for step in finding.next_steps %}<li>{{ step }}</li>{% endfor %}</ul>
+    </article>
+    {% endfor %}
+    {% else %}
+    <p>No findings persisted for this capture.</p>
+    {% endif %}
+
+    <h2>Decode timings</h2>
+    {% if report.timings %}
+    <table>
+      <thead><tr><th>Instance</th><th>Frames</th><th>Total (ns)</th><th>Max (ns)</th></tr></thead>
+      <tbody>
+      {% for timing in report.timings %}
+      <tr><td>{{ timing.instance_id }}</td><td>{{ timing.frame_count }}</td><td>{{ timing.total_duration_ns }}</td><td>{{ timing.max_duration_ns }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No decode timings recorded.</p>
+    {% endif %}
+  </main>
+</body>
+</html>
