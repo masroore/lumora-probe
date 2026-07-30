@@ -1,6 +1,6 @@
 # Phase 13 Task Report — T-13-03-05 retention state in browser
 
-**Status:** Partial — browser contract and inline action implemented; application composition remains
+**Status:** Complete
 
 ## Completed
 
@@ -14,16 +14,16 @@
   existing `POST /api/v1/captures/ring-buffer/promote` seam, reports success/failure, and disables
   duplicate submissions while the request is active.
 
-## Remaining
+## Follow-up
 
-- Wire the retention map from the live ring-buffer object records into the study browser provider.
-- Add the application adapter that joins verified capture objects to `DicomObjectSource`; it remains
-  a separate Phase 13 integration task.
+- The file-backed `DicomObjectSource` application adapter is tracked separately in T2 and is
+  complete in the Phase 13 closeout implementation.
 
 ## Verification
 
 - Focused studies/workspace tests: 7 passed.
-- Full suite: 351 passed, 1 skipped.
+- Full suite at the time of the original task: 351 passed, 1 skipped.
+- T1 closeout verification: live retention join tests pass through `create_app`.
 - Ruff lint and format: passed.
 - Import-linter: 7 kept, 0 broken.
 - BasedPyright strict gate for `core` and `shared`: 0 errors.

@@ -1,7 +1,7 @@
 # Phase 13 Progress Report — Viewer
 
 **Review date:** 2026-07-30
-**Status:** In progress — not accepted
+**Status:** Complete — see phase-13-completion-report.md
 
 ## Completed work
 
@@ -33,21 +33,15 @@ regenerated `docs/generated/openapi-v1.json`.
 - Import-linter: 7 kept, 0 broken.
 - BasedPyright (`core`, `shared`): 0 errors.
 - Full suite: **348 passed, 1 skipped**.
-- Asset build/check: passed before the final Python-only study-browser route update; route changes do
-  not affect assets.
+- Browser e2e: **1 passed** with `LUMORA_E2E=1`.
+- Asset build/check: passed.
 - Synthetic decode, executor isolation, cache/prefetch, failure explanation, frame API, workspace,
   provenance, duplicate finding, and folder import tests are included.
 
-## Remaining Phase 13 work
+## Closeout status
 
-- Ring-buffer retention state contract, study browser serialization, and accessible inline promotion action (live ring-buffer-to-provider composition remains).
-- Capture-scoped bookmark UI and API action.
-- Transfer Inspector with per-leg association and decode/receive evidence.
-- Event Timeline synchronization over the live bus, Log Console, Live Monitor, Dashboard, Search,
-  command palette, notifications, and client-asserted `ImageDisplayed` post-back.
-- Cine playback, fullscreen, and a browser-facing Cornerstone integration test.
-- An application adapter joining verified capture objects to `DicomObjectSource` and a complete
-  report/export assertion that includes decode timing.
+Wave 1 and Wave 2 closeout deliverables are complete. Dashboard, Search, notifications, and Log
+Console are deferred as additive views; `phase-13-defer-audit.md` records that no Phase 13 exit
+criterion depends on them and that no new ADR is required for this schedule-only deferral.
 
-Phase 13 remains open. Do not begin Phase 14 until these deliverables are implemented or explicitly
-deferred with architecture-approved documentation and the phase exit criteria pass.
+See `phase-13-completion-report.md` for exit-criterion evidence and quality-gate results.
