@@ -15,9 +15,9 @@ from typing import Any, Protocol
 
 from lumora_probe.core.config import is_uuid7
 from lumora_probe.core.errors import LumoraError, PathSecurityError
-from lumora_probe.shared.events import EventClock, EventIdGenerator
 from lumora_probe.core.paths import assert_contained
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
+from lumora_probe.shared.events import EventClock, EventIdGenerator
 
 from .contracts import DicomObjectSource
 

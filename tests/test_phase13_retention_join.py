@@ -9,7 +9,6 @@ import httpx
 import pytest
 
 from lumora_probe.captures.service import RingBufferConfig, RingBufferService
-from lumora_probe.studies.contracts import InstanceRetention
 from lumora_probe.studies.repository import InstanceProjection
 from lumora_probe.studies.service import StudyBrowserService
 from lumora_probe.web.api import create_app
