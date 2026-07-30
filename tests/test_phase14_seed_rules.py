@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from lumora_probe.analysis.domain import FindingConfidence
 from lumora_probe.analysis.rules import (
+    IncompleteStudyRule,
     NoAcceptablePresentationContextRule,
     RejectedAssociationRule,
     SlowCStoreRule,
@@ -156,3 +157,39 @@ def test_slow_c_store_rule_can_derive_duration_from_monotonic_summary() -> None:
 
     assert len(findings) == 1
     assert "probe-hop leg" in findings[0].explanation
+
+
+def test_incomplete_study_rule_reports_missing_instances_as_investigation_target() -> None:
+    event = _event(
+        {
+            "study_uid": "1.2.3.4",
+            "expected_instance_count": 5,
+            "observed_instance_count": 3,
+        },
+        sequence=12,
+        event_name="StudySummary",
+    )
+
+    findings = tuple(IncompleteStudyRule().evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert findings[0].confidence is FindingConfidence.LIKELY
+    assert findings[0].cited_sequences == (12,)
+    assert "1.2.3.4" in findings[0].explanation
+    assert "2 instance(s)" in findings[0].explanation
+    assert "problem being investigated" in findings[0].explanation
+
+
+def test_incomplete_study_rule_uses_instance_set_difference() -> None:
+    event = _event(
+        {
+            "expected_instances": ("sop-1", "sop-2"),
+            "observed_instances": ("sop-1",),
+        },
+        event_name="StudyProjectionUpdated",
+    )
+
+    findings = tuple(IncompleteStudyRule().evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert "1 instance(s)" in findings[0].explanation

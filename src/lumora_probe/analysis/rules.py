@@ -268,4 +268,69 @@ class SlowCStoreRule:
         return tuple(findings)
 
 
+class IncompleteStudyRule:
+    """Report missing study instances without claiming why the study is incomplete."""
+
+    rule_id = "LP-RULE-STUDY-001"
+    rule_version = "1"
+    _EVENT_NAMES = frozenset(
+        {"StudySummary", "StudyCompleted", "StudyIncomplete", "StudyProjectionUpdated"}
+    )
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            if event.event_name not in self._EVENT_NAMES:
+                continue
+            payload = event.payload
+            missing = payload.get("missing_instances")
+            missing_count = (
+                len(tuple(cast(Iterable[object], missing)))
+                if isinstance(missing, (tuple, list, set, frozenset))
+                else 0
+            )
+            expected = payload.get("expected_instance_count")
+            observed = payload.get("observed_instance_count")
+            if (
+                type(expected) is int
+                and not isinstance(expected, bool)
+                and type(observed) is int
+                and not isinstance(observed, bool)
+                and expected > observed
+            ):
+                missing_count = max(missing_count, expected - observed)
+            expected_instances = payload.get("expected_instances")
+            observed_instances = payload.get("observed_instances")
+            if isinstance(expected_instances, Iterable) and isinstance(
+                observed_instances, Iterable
+            ):
+                expected_set: set[object] = set(cast(Iterable[object], expected_instances))
+                observed_set: set[object] = set(cast(Iterable[object], observed_instances))
+                missing_count = max(missing_count, len(expected_set - observed_set))
+            sequence = _sequence(event.sequence)
+            if missing_count <= 0 or sequence is None:
+                continue
+            study_uid = _text(payload.get("study_uid") or payload.get("study_id"))
+            study_label = f"study {study_uid}" if study_uid is not None else "the study"
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.LIKELY,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"{study_label.capitalize()} appears incomplete: {missing_count} "
+                        + "instance(s) are missing from the observed evidence. This identifies "
+                        + "the problem being investigated, not its cause."
+                    ),
+                    next_steps=(
+                        "Compare the expected instance list with the sender, association, and "
+                        + "capture boundaries before concluding where data was lost.",
+                    ),
+                )
+            )
+        return tuple(findings)
+
+
 __all__: tuple[str, ...] = ()
