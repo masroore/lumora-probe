@@ -10,6 +10,7 @@ from lumora_probe.analysis.rules import (
     NoAcceptablePresentationContextRule,
     RejectedAssociationRule,
     SlowCStoreRule,
+    TimeoutRetryRule,
     TransferSyntaxMismatchRule,
 )
 from lumora_probe.analysis.service import RuleContext
@@ -193,3 +194,30 @@ def test_incomplete_study_rule_uses_instance_set_difference() -> None:
 
     assert len(findings) == 1
     assert "1 instance(s)" in findings[0].explanation
+
+
+def test_timeout_retry_rule_detects_pattern_within_association_pair() -> None:
+    events = (
+        _event({"association_pair_id": "pair-1"}, sequence=13, event_name="AssociationTimeout"),
+        _event({"association_pair_id": "pair-1"}, sequence=14, event_name="AssociationRetry"),
+        _event({"association_pair_id": "pair-2"}, sequence=15, event_name="AssociationRetry"),
+    )
+
+    findings = tuple(TimeoutRetryRule().evaluate(RuleContext(events, ())))
+
+    assert len(findings) == 1
+    assert findings[0].cited_sequences == (13, 14)
+    assert "pair-1" in findings[0].explanation
+    assert "timeout-and-retry" in findings[0].explanation
+
+
+def test_timeout_retry_rule_accepts_payload_markers() -> None:
+    events = (
+        _event({"timeout": True}, sequence=16, event_name="WarningRaised"),
+        _event({"retry_count": 2}, sequence=17, event_name="WarningRaised"),
+    )
+
+    findings = tuple(TimeoutRetryRule().evaluate(RuleContext(events, ())))
+
+    assert len(findings) == 1
+    assert findings[0].cited_sequences == (16, 17)

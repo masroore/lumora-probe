@@ -333,4 +333,78 @@ class IncompleteStudyRule:
         return tuple(findings)
 
 
+class TimeoutRetryRule:
+    """Detect a timeout followed by retry evidence within one association pair."""
+
+    rule_id = "LP-RULE-ASSOC-001"
+    rule_version = "1"
+
+    @staticmethod
+    def _pair_key(event: object) -> str:
+        payload = getattr(event, "payload", {})
+        values: Mapping[str, object] = (
+            cast(Mapping[str, object], payload) if isinstance(payload, Mapping) else {}
+        )
+        pair = _text(values.get("association_pair_id") or values.get("association_id"))
+        return pair or str(getattr(event, "correlation_id", "unknown"))
+
+    @staticmethod
+    def _kind(event: object) -> str | None:
+        name = str(getattr(event, "event_name", "")).casefold()
+        payload = getattr(event, "payload", {})
+        values: Mapping[str, object] = (
+            cast(Mapping[str, object], payload) if isinstance(payload, Mapping) else {}
+        )
+        if (
+            "timeout" in name
+            or name == "timedout"
+            or values.get("timeout") is True
+            or values.get("timed_out") is True
+        ):
+            return "timeout"
+        retry_count = values.get("retry_count")
+        if (
+            "retry" in name
+            or values.get("retry") is True
+            or (type(retry_count) is int and not isinstance(retry_count, bool) and retry_count > 0)
+        ):
+            return "retry"
+        return None
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        grouped: dict[str, dict[str, list[int]]] = {}
+        for event in context.events:
+            kind = self._kind(event)
+            sequence = _sequence(event.sequence)
+            if kind is None or sequence is None:
+                continue
+            pair = grouped.setdefault(self._pair_key(event), {"timeout": [], "retry": []})
+            pair[kind].append(sequence)
+
+        findings: list[Finding] = []
+        for pair_id, values in sorted(grouped.items()):
+            if not values["timeout"] or not values["retry"]:
+                continue
+            sequences = tuple(sorted(set(values["timeout"] + values["retry"])))
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.LIKELY,
+                    cited_sequences=sequences,
+                    explanation=(
+                        f"Association pair {pair_id} contains {len(values['timeout'])} timeout "
+                        f"event(s) and {len(values['retry'])} retry event(s), indicating a "
+                        + "timeout-and-retry pattern."
+                    ),
+                    next_steps=(
+                        "Compare timeout intervals, retry policy, and the last observed event on "
+                        + "each association leg.",
+                    ),
+                )
+            )
+        return tuple(findings)
+
+
 __all__: tuple[str, ...] = ()
