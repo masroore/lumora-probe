@@ -163,6 +163,7 @@ def create_app(
     capture_store: ResourceStore | None = None,
     retention_provider: RetentionStateProvider | None = None,
     capture_engine: CaptureRuntime | None = None,
+    ring_buffer_service: Any | None = None,
     projection_store: ResourceStore | None = None,
     association_store: ResourceStore | None = None,
     event_store: ResourceStore | None = None,
@@ -256,6 +257,18 @@ def create_app(
             settings=active_settings,
         )
     )
+    if ring_buffer_service is not None:
+        from datetime import UTC, datetime
+
+        from .retention import RingBufferRetentionMap
+
+        class _DateTimeClock:
+            def now(self) -> datetime:
+                return datetime.now(UTC)
+
+        application.state.retention_map = RingBufferRetentionMap(
+            ring_buffer_service, _DateTimeClock()
+        )
     return application
 
 
