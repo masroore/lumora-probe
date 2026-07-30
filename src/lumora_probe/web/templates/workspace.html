@@ -208,7 +208,7 @@
       <section class="bottom-dock" aria-label="Event and operational dock">
         <details open>
           <summary><span>Timeline</span><span class="summary-meta">ordered by sequence</span></summary>
-          <div class="dock-panel timeline-panel" id="timeline-panel">
+          <div class="dock-panel timeline-panel" id="timeline-panel" role="log" aria-live="polite">
             {% if workspace.timeline %}
             <ol class="event-list">
               {% for event in workspace.timeline %}

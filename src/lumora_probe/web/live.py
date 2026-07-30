@@ -19,6 +19,7 @@ from lumora_probe.shared.events import (
     EventPayloadRegistry,
 )
 
+from .resources import ResourceStore
 from .security import SecurityPolicy
 
 STREAM_VERSION = 1
@@ -237,6 +238,26 @@ class CoalescingGovernor:
 
     def unregister(self, client: LiveClient) -> None:
         self._clients.pop(client.client_id, None)
+
+    async def refresh_associations(self, association_store: ResourceStore | None) -> None:
+        """Fetch active associations and inject them into all UI clients' status state."""
+        if association_store is None:
+            return
+        associations = await association_store.list("associations")
+        for client in self._clients.values():
+            if client.kind != "ui":
+                continue
+            keys_to_remove = [key for key in client.status_state if key.startswith("assoc:")]
+            for key in keys_to_remove:
+                del client.status_state[key]
+            for assoc in associations:
+                assoc_id = str(assoc.get("association_id", ""))
+                client.status_state[f"assoc:{assoc_id}"] = {
+                    "aggregate_id": assoc_id,
+                    "event_name": "Association",
+                    "severity": "info",
+                    "sequence": None,
+                }
 
     def update_stream(
         self,
@@ -690,12 +711,25 @@ def _update_client_panel_state(
                 "severity": event.severity.value,
             }
         )
+    # Sort by sequence ascending to ensure timeline order is deterministic
+    sorted_timeline = sorted(client.timeline_state, key=lambda e: e["sequence"])
+    client.timeline_state = deque(sorted_timeline)
+    # Track dropped events before trimming
+    if len(client.timeline_state) > timeline_cap:
+        dropped = len(client.timeline_state) - timeline_cap
+        client.counter_state["events_dropped"] += dropped
     while len(client.timeline_state) > timeline_cap:
         client.timeline_state.popleft()
     return {
-        "counters": {"counters": dict(sorted(client.counter_state.items()))},
+        "counters": {
+            "counters": dict(sorted(client.counter_state.items())),
+            "events_dropped": client.counter_state["events_dropped"],
+        },
         "status": {"rows": tuple(client.status_state.values())},
-        "timeline": {"events": tuple(client.timeline_state)},
+        "timeline": {
+            "events": tuple(client.timeline_state),
+            "events_dropped": client.counter_state["events_dropped"],
+        },
     }
 
 

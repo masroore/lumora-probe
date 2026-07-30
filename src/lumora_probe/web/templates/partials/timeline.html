@@ -1,8 +1,11 @@
 <div id="panel-timeline" data-page="{{ page }}" hx-swap-oob="outerHTML">
   <h2>Timeline</h2>
+  {% if events_dropped is defined and events_dropped > 0 %}
+  <p class="timeline-dropped" role="status">{{ events_dropped }} events dropped</p>
+  {% endif %}
   <ol>
   {% for event in events %}
-    <li data-event-id="{{ event.event_id }}">
+    <li data-event-id="{{ event.event_id }}" tabindex="0" role="listitem">
       <span>{{ event.sequence if event.sequence is not none else "-" }}</span>
       <span>{{ event.event_name }}</span>
       <span>{{ event.severity }}</span>
