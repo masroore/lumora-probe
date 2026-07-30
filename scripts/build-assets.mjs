@@ -34,6 +34,17 @@ await build({
   platform: 'browser',
 });
 
+await build({
+  entryPoints: [resolve(root, 'assets/source/viewer.js')],
+  bundle: true,
+  format: 'iife',
+  globalName: 'LumoraViewer',
+  minify: true,
+  sourcemap: false,
+  outfile: resolve(staticRoot, 'js/viewer.js'),
+  platform: 'browser',
+});
+
 const copies = {
   'htmx.min.js': 'htmx.org/dist/htmx.min.js',
   'alpine.min.js': 'alpinejs/dist/cdn.min.js',

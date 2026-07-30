@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from lumora_probe.core.errors import (
     ConfigurationError,
@@ -31,6 +32,7 @@ from .client_event_routes import (
 )
 from .contracts import ErrorResponse
 from .event_routes import create_event_router
+from .frame_routes import FrameProvider, create_frame_router
 from .health_routes import HealthProvider, create_health_router
 from .live import (
     CoalescingGovernor,
@@ -45,6 +47,7 @@ from .resources import ResourceStore
 from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import create_projection_routers
+from .workspace_routes import STATIC_ROOT, WorkspaceData, create_workspace_router
 
 API_PREFIX = "/api/v1"
 
@@ -169,6 +172,8 @@ def create_app(
     event_bus: LiveEventSource | None = None,
     live_settings: LiveSettings | None = None,
     replay_runtime: ReplayRuntime | None = None,
+    workspace_data: WorkspaceData | None = None,
+    frame_provider: FrameProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -206,7 +211,11 @@ def create_app(
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(RequestValidationError, validation_exception_handler)
     application.add_middleware(SecurityMiddleware, policy=active_policy)
+    if STATIC_ROOT.is_dir():
+        application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     application.include_router(api_v1_router)
+    application.include_router(create_workspace_router(data=workspace_data))
+    application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(
         create_capture_router(capture_store, active_retention), prefix=API_PREFIX
     )

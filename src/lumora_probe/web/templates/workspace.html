@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lumora Probe engineering investigation workspace">
+    <title>{{ workspace.title }} · Lumora Probe</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+  </head>
+  <body class="workspace-shell">
+    <a class="skip-link" href="#workspace-main">Skip to workspace</a>
+    <header class="workspace-toolbar" role="banner">
+      <div class="brand-lockup">
+        <a class="brand-mark" href="/" aria-label="Lumora Probe home">L</a>
+        <div>
+          <p class="eyebrow">Lumora Probe</p>
+          <h1>{{ workspace.title }}</h1>
+        </div>
+      </div>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="#dashboard" aria-current="page">Dashboard</a>
+        <a href="#live-monitor">Live Monitor</a>
+        <a href="#captures">Captures</a>
+        <a href="#studies">Studies</a>
+        <a href="#replay">Replay</a>
+      </nav>
+      <div class="toolbar-actions">
+        <button class="button button-secondary" type="button" data-command-palette>
+          <span aria-hidden="true">⌘K</span> Commands
+        </button>
+        <button class="icon-button" type="button" data-theme-toggle aria-label="Toggle color theme">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="workspace-main" class="workspace-frame" data-explorer-collapsed="false" data-inspector-collapsed="false">
+      <div class="workspace-panels">
+        <aside id="explorer-panel" class="workspace-panel explorer-panel" aria-labelledby="explorer-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Navigate</p>
+              <h2 id="explorer-heading">Explorer</h2>
+            </div>
+            <button class="icon-button panel-toggle" type="button" data-panel-toggle="explorer"
+                    aria-controls="explorer-body" aria-expanded="true" aria-label="Collapse explorer">
+              <span aria-hidden="true">‹</span>
+            </button>
+          </div>
+          <div id="explorer-body" class="panel-body" data-panel-body>
+            <label class="search-field" for="explorer-search">
+              <span class="sr-only">Filter explorer</span>
+              <input id="explorer-search" type="search" placeholder="Filter workspace" autocomplete="off">
+            </label>
+            <nav aria-label="Workspace views">
+              <ul class="explorer-list">
+                {% for item in workspace.explorer_items %}
+                <li>
+                  <a class="explorer-item{% if item.active %} is-active{% endif %}" href="#{{ item.label|lower|replace(' ', '-') }}"
+                     {% if item.active %}aria-current="page"{% endif %}>
+                    <span class="explorer-item-label">{{ item.label }}</span>
+                    <span class="explorer-item-detail">{{ item.detail }}</span>
+                  </a>
+                </li>
+                {% endfor %}
+              </ul>
+            </nav>
+            <div class="panel-note" role="note">
+              <strong>Context</strong>
+              <span>{{ workspace.active_context }}</span>
+            </div>
+          </div>
+        </aside>
+
+        <section id="viewer-panel" class="workspace-panel viewer-panel" aria-labelledby="viewer-heading">
+          <div class="panel-heading viewer-heading">
+            <div>
+              <p class="eyebrow">Render surface</p>
+              <h2 id="viewer-heading">Viewer</h2>
+            </div>
+            <div class="viewer-tools" aria-label="Viewer tools">
+              <button class="tool-button" type="button" aria-label="Zoom in">+</button>
+              <button class="tool-button" type="button" aria-label="Zoom out">−</button>
+              <button class="tool-button" type="button">Pan</button>
+              <button class="tool-button" type="button">Window / level</button>
+              <button class="tool-button" type="button">Fullscreen</button>
+            </div>
+          </div>
+          <div class="viewer-canvas" role="img" aria-label="Empty viewer canvas">
+            <div class="empty-state">
+              <span class="empty-state-icon" aria-hidden="true">◇</span>
+              <h3>Select an instance to inspect</h3>
+              <p>This engineering render surface is ready for a capture-backed selection.</p>
+            </div>
+          </div>
+          <div class="viewer-footer" aria-label="Viewer context">
+            <span>{{ workspace.active_context }}</span>
+            <span>Renderer idle</span>
+          </div>
+        </section>
+
+        <aside id="inspector-panel" class="workspace-panel inspector-panel" aria-labelledby="inspector-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Context</p>
+              <h2 id="inspector-heading">Inspector</h2>
+            </div>
+            <button class="icon-button panel-toggle" type="button" data-panel-toggle="inspector"
+                    aria-controls="inspector-body" aria-expanded="true" aria-label="Collapse inspector">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <div id="inspector-body" class="panel-body" data-panel-body>
+            <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
+              <button type="button" role="tab" aria-selected="true" tabindex="0">Metadata</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Properties</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Transfer</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Events</button>
+            </div>
+            <div class="inspector-empty" role="tabpanel">
+              <h3>No selection</h3>
+              <p>Choose a capture-backed object to inspect its observed metadata and transfer context.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="bottom-dock" aria-label="Event and operational dock">
+        <details open>
+          <summary><span>Timeline</span><span class="summary-meta">ordered by sequence</span></summary>
+          <div class="dock-panel timeline-panel" id="timeline-panel">
+            {% if workspace.timeline %}
+            <ol class="event-list">
+              {% for event in workspace.timeline %}
+              <li><span class="event-sequence">{{ event.sequence }}</span><span>{{ event.label }}</span><span class="event-meta">{{ event.detail }}</span></li>
+              {% endfor %}
+            </ol>
+            {% else %}
+            <p class="muted">No observed events in the current context.</p>
+            {% endif %}
+          </div>
+        </details>
+        <details open>
+          <summary><span>Logs</span><span class="summary-meta">operational output</span></summary>
+          <div class="dock-panel log-panel" id="logs-panel">
+            {% if workspace.logs %}
+            <ul class="log-list">
+              {% for log in workspace.logs %}
+              <li><time>{{ log.time }}</time><span class="log-level">{{ log.level }}</span><span>{{ log.message }}</span></li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <p class="muted">Operational logs will appear here.</p>
+            {% endif %}
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer class="status-bar" role="contentinfo">
+      <div class="status-group"><span class="status-dot" aria-hidden="true"></span><strong>{{ workspace.connection_state }}</strong><span>Local application</span></div>
+      <div class="status-group"><span>Events dropped</span><strong>{{ workspace.events_dropped }}</strong><span class="status-divider" aria-hidden="true">·</span><span>Keyboard ready</span></div>
+    </footer>
+
+    <script src="/static/js/viewer.js" defer></script>
+    <script>
+      (() => {
+        const frame = document.querySelector('.workspace-frame');
+        document.querySelectorAll('[data-panel-toggle]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const panel = button.dataset.panelToggle;
+            const collapsed = frame.dataset[`${panel}Collapsed`] === 'true';
+            frame.dataset[`${panel}Collapsed`] = String(!collapsed);
+            button.setAttribute('aria-expanded', String(collapsed));
+            button.setAttribute('aria-label', `${collapsed ? 'Collapse' : 'Expand'} ${panel}`);
+            button.closest('.workspace-panel').classList.toggle('is-collapsed', !collapsed);
+            button.closest('.workspace-panel').querySelector('[data-panel-body]').hidden = !collapsed;
+          });
+        });
+        document.querySelector('[data-theme-toggle]').addEventListener('click', () => {
+          const root = document.documentElement;
+          root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        });
+      })();
+    </script>
+  </body>
+</html>
