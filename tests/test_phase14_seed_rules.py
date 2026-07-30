@@ -8,6 +8,7 @@ from lumora_probe.analysis.domain import FindingConfidence
 from lumora_probe.analysis.rules import (
     NoAcceptablePresentationContextRule,
     RejectedAssociationRule,
+    TransferSyntaxMismatchRule,
 )
 from lumora_probe.analysis.service import RuleContext
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
@@ -87,3 +88,33 @@ def test_no_acceptable_context_rule_skips_accepted_contexts() -> None:
     )
 
     assert tuple(NoAcceptablePresentationContextRule().evaluate(RuleContext((event,), ()))) == ()
+
+
+def test_transfer_syntax_mismatch_rule_reports_offered_and_accepted_values() -> None:
+    event = _event(
+        {
+            "sop_class": "1.2.3",
+            "offered_transfer_syntaxes": ("1.2.840.10008.1.2.1",),
+            "accepted_transfer_syntax": "1.2.840.10008.1.2.2",
+        },
+        sequence=9,
+    )
+
+    findings = tuple(TransferSyntaxMismatchRule().evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert findings[0].cited_sequences == (9,)
+    assert "offered 1.2.840.10008.1.2.1" in findings[0].explanation
+    assert "accepted 1.2.840.10008.1.2.2" in findings[0].explanation
+    assert "common syntax" in findings[0].next_steps[0]
+
+
+def test_transfer_syntax_mismatch_rule_ignores_common_syntax() -> None:
+    event = _event(
+        {
+            "offered_transfer_syntaxes": ("1.2.840.10008.1.2.1",),
+            "accepted_transfer_syntax": "1.2.840.10008.1.2.1",
+        }
+    )
+
+    assert tuple(TransferSyntaxMismatchRule().evaluate(RuleContext((event,), ()))) == ()

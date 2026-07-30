@@ -46,6 +46,42 @@ def _contexts_text(value: object) -> str | None:
     return _context_text(value)
 
 
+def _syntax_values(value: object) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)):
+        text = _text(value)
+        return (text,) if text is not None else ()
+    if isinstance(value, Mapping):
+        context = cast(Mapping[str, object], value)
+        nested = (
+            context.get("transfer_syntaxes")
+            or context.get("transfer_syntax")
+            or context.get("accepted_transfer_syntaxes")
+            or context.get("accepted_transfer_syntax")
+        )
+        return _syntax_values(nested)
+    if isinstance(value, Iterable):
+        values = tuple(
+            syntax for item in cast(Iterable[object], value) for syntax in _syntax_values(item)
+        )
+        return tuple(sorted(set(values)))
+    text = _text(value)
+    return (text,) if text is not None else ()
+
+
+def _payload_syntaxes(payload: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    offered = _syntax_values(
+        payload.get("offered_transfer_syntaxes")
+        or payload.get("offered_transfer_syntax")
+        or payload.get("offered_contexts")
+    )
+    accepted = _syntax_values(
+        payload.get("accepted_transfer_syntaxes")
+        or payload.get("accepted_transfer_syntax")
+        or payload.get("accepted_contexts")
+    )
+    return offered, accepted
+
+
 class RejectedAssociationRule:
     """Explain an association rejection when result, source, and reason are observed."""
 
@@ -129,6 +165,45 @@ class NoAcceptablePresentationContextRule:
                         f"offered: {offered}."
                     ),
                     next_steps=(remediation,),
+                )
+            )
+        return tuple(findings)
+
+
+class TransferSyntaxMismatchRule:
+    """Explain a negotiated transfer syntax absent from the offered syntaxes."""
+
+    rule_id = "LP-RULE-NEG-003"
+    rule_version = "1"
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            offered, accepted = _payload_syntaxes(event.payload)
+            sequence = _sequence(event.sequence)
+            if not offered or not accepted or set(offered) & set(accepted) or sequence is None:
+                continue
+            sop_class = (
+                _text(event.payload.get("sop_class") or event.payload.get("sop_class_uid"))
+                or "the negotiated SOP class"
+            )
+            offered_text = ", ".join(offered)
+            accepted_text = ", ".join(accepted)
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.CERTAIN,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"Transfer syntax mismatch for {sop_class}: offered {offered_text}; "
+                        f"accepted {accepted_text}."
+                    ),
+                    next_steps=(
+                        "Offer a transfer syntax supported by the peer, or configure both legs "
+                        + "with a common syntax.",
+                    ),
                 )
             )
         return tuple(findings)
