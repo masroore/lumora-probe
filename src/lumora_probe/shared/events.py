@@ -354,7 +354,12 @@ def build_default_event_registry() -> EventPayloadRegistry:
             "MetadataExtracted",
             "InstancePersisted",
         ),
-        EventCategory.VIEWER: ("ImageDisplayed", "WindowLevelChanged", "CineStarted"),
+        EventCategory.VIEWER: (
+            "ImageDecoded",
+            "ImageDisplayed",
+            "WindowLevelChanged",
+            "CineStarted",
+        ),
         EventCategory.CAPTURE: (
             "CaptureStarted",
             "CaptureStopped",

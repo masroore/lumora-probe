@@ -619,6 +619,23 @@
     },
     {
       "category": "Viewer",
+      "event_name": "ImageDecoded",
+      "event_version": 1,
+      "origins": [
+        "observed",
+        "client-asserted"
+      ],
+      "payload_model": "lumora_probe.shared.events.EventPayload",
+      "payload_schema": {
+        "additionalProperties": true,
+        "description": "Default open payload model for events without a narrower schema.",
+        "properties": {},
+        "title": "EventPayload",
+        "type": "object"
+      }
+    },
+    {
+      "category": "Viewer",
       "event_name": "ImageDisplayed",
       "event_version": 1,
       "origins": [
