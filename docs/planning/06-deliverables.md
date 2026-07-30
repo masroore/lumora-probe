@@ -195,7 +195,8 @@ what is additional or phase-defining.
 | Code | Client-side W/L, zoom, pan, invert, cine |
 | Code | Projection rebuild, per-instance provenance, partial marking, duplicate-UID finding |
 | Code | Folder import as synthetic capture at `fidelity: objects` |
-| Code | Workspace shell and panels: Metadata Inspector, Transfer Inspector, Event Timeline, Log Console, Live Monitor, Dashboard, Search, command palette, theming, notifications |
+| Code | Workspace shell and panels: Metadata Inspector, Transfer Inspector, Event Timeline, Live Monitor, command palette, theming |
+| Deferred | Log Console, Dashboard, Search, and notifications are additive views deferred per `phase-13-defer-audit.md` |
 | Suite | Decode timing present in an exported report; partial-study never whole; W/L within budget; decode-failure explanation |
 
 ## Phase 14 — Analysis
