@@ -22,6 +22,7 @@ from lumora_probe.core.errors import (
 )
 
 from .association_routes import create_association_router
+from .bookmark_routes import BookmarkProvider, create_bookmark_router
 from .capture_routes import RetentionStateProvider, create_capture_router
 from .client_event_routes import (
     ClientEventPublisher,
@@ -44,6 +45,7 @@ from .live import (
 )
 from .metadata_routes import MetadataProvider, create_metadata_router
 from .operation_routes import OperationRegistry, create_operation_router
+from .report_routes import CaptureSummaryProvider, create_reports_router
 from .resources import ResourceStore
 from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
@@ -182,6 +184,8 @@ def create_app(
     frame_provider: FrameProvider | None = None,
     metadata_provider: MetadataProvider | None = None,
     study_browser_provider: StudyBrowserProvider | None = None,
+    reports_provider: CaptureSummaryProvider | None = None,
+    bookmark_provider: BookmarkProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -228,6 +232,8 @@ def create_app(
     application.include_router(
         create_study_browser_router(study_browser_provider), prefix=API_PREFIX
     )
+    application.include_router(create_reports_router(reports_provider), prefix=API_PREFIX)
+    application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
     application.include_router(
         create_capture_router(capture_store, active_retention), prefix=API_PREFIX
     )

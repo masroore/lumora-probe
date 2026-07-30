@@ -43,6 +43,13 @@ Terminology should be:
 | Analysis | Automated or manual interpretation of engineering evidence. |
 | Report | Generated investigation output. |
 
+### Capture Summary Report
+
+A structured JSON document (`CaptureSummaryReport`) exported from a capture directory. Contains
+aggregated decode timing evidence (`CaptureDecodeTiming`) per instance, computed from observed
+`ImageDecoded` events only. Client-asserted events are excluded per ADR-0016 quarantine. Phase 15
+owns full report generation; this is the minimal Phase 13 evidence export.
+
 ---
 
 # 4. DICOM Terms
