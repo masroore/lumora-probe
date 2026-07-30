@@ -257,9 +257,14 @@ class Finding:
     cited_sequences: tuple[int, ...] | Iterable[int]
     explanation: str
     next_steps: tuple[str, ...] | Iterable[str]
+    rule_set_version: str = "bundled-v1"
 
     def __post_init__(self) -> None:
-        for field_name, value in (("rule_id", self.rule_id), ("rule_version", self.rule_version)):
+        for field_name, value in (
+            ("rule_id", self.rule_id),
+            ("rule_version", self.rule_version),
+            ("rule_set_version", self.rule_set_version),
+        ):
             if type(value) is not str or not value.strip():
                 raise domain_invariant(
                     f"{field_name} must be a non-empty string",
@@ -334,6 +339,7 @@ class Finding:
         return {
             "rule_id": self.rule_id,
             "rule_version": self.rule_version,
+            "rule_set_version": self.rule_set_version,
             "confidence": confidence_value,
             "cited_sequences": list(self.cited_sequences),
             "explanation": self.explanation,

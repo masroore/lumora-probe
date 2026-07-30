@@ -28,9 +28,12 @@ class AnalysisRepository:
         values = tuple(findings)
         if any(type(finding) is not Finding for finding in values):
             raise TypeError("findings must contain Finding values")
+        normalized_rule_set_version = rule_set_version.strip()
+        if any(finding.rule_set_version != normalized_rule_set_version for finding in values):
+            raise ValueError("every finding must carry the persisted rule-set version")
         document = {
             "format_version": 1,
-            "rule_set_version": rule_set_version.strip(),
+            "rule_set_version": normalized_rule_set_version,
             "findings": [finding.as_dict() for finding in values],
         }
         raw = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -53,6 +56,7 @@ class AnalysisRepository:
             Finding(
                 rule_id=value["rule_id"],
                 rule_version=value["rule_version"],
+                rule_set_version=value.get("rule_set_version", document["rule_set_version"]),
                 confidence=FindingConfidence(value["confidence"]),
                 cited_sequences=tuple(value["cited_sequences"]),
                 explanation=value["explanation"],

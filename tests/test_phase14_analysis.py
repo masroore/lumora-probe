@@ -175,6 +175,7 @@ def test_finding_model_preserves_version_confidence_and_evidence_links() -> None
     assert finding.as_dict() == {
         "rule_id": "LP-RULE-NEG-001",
         "rule_version": "2026-07-30",
+        "rule_set_version": "bundled-v1",
         "confidence": "certain",
         "cited_sequences": [2, 7],
         "explanation": "The peer rejected negotiation after no acceptable context was offered.",
@@ -229,6 +230,7 @@ def test_analysis_repository_writes_only_analysis_directory_and_round_trips(tmp_
         confidence="certain",
         cited_sequences=(7,),
         explanation="The observed negotiation was rejected.",
+        rule_set_version="rules-v1",
         next_steps=("Inspect peer negotiation",),
     )
     repository = AnalysisRepository(capture_path)
@@ -300,3 +302,10 @@ def test_rule_engine_rejects_duplicate_rules_and_unresolvable_citations() -> Non
 
     with pytest.raises(ValueError, match="citations"):
         RuleEngine([BadRule()]).evaluate([_event("CStoreReceived", {})])
+
+
+def test_rule_engine_rejects_mismatched_rule_set_version() -> None:
+    with pytest.raises(ValueError, match="rule-set version"):
+        RuleEngine([_Rule()], rule_set_version="rules-v2").evaluate(
+            [_event("AssociationRejected", {"accepted_contexts": ()})]
+        )

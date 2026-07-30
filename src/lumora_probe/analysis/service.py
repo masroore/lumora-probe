@@ -132,12 +132,16 @@ class RuleEngine:
         rules: Iterable[AnalysisRule],
         *,
         detector: ConditionDetector | None = None,
+        rule_set_version: str = "bundled-v1",
     ) -> None:
         values = tuple(rules)
         keys = [(rule.rule_id, rule.rule_version) for rule in values]
         if len(keys) != len(set(keys)):
             raise ValueError("rule IDs and versions must be unique")
+        if type(rule_set_version) is not str or not rule_set_version.strip():
+            raise ValueError("rule_set_version must be a non-empty string")
         self._rules = tuple(sorted(values, key=lambda rule: (rule.rule_id, rule.rule_version)))
+        self._rule_set_version = rule_set_version.strip()
         self._detector = detector or ConditionDetector()
 
     def evaluate(self, events: Iterable[EventEnvelope]) -> tuple[Finding, ...]:
@@ -158,6 +162,8 @@ class RuleEngine:
                     rule.rule_version,
                 ):
                     raise ValueError("finding rule identity must match its evaluating rule")
+                if finding.rule_set_version != self._rule_set_version:
+                    raise ValueError("finding rule-set version must match the evaluating rule set")
                 if not set(finding.cited_sequences).issubset(sequences):
                     raise ValueError("finding citations must resolve to observed event sequences")
                 findings.append(finding)
