@@ -309,3 +309,67 @@ def test_rule_engine_rejects_mismatched_rule_set_version() -> None:
         RuleEngine([_Rule()], rule_set_version="rules-v2").evaluate(
             [_event("AssociationRejected", {"accepted_contexts": ()})]
         )
+
+
+def test_analysis_purity_delete_rerun_is_byte_identical_and_newer_rules_add_findings(
+    tmp_path: Path,
+) -> None:
+    from lumora_probe.analysis.repository import AnalysisRepository
+
+    capture_path = tmp_path / "capture"
+    capture_path.mkdir()
+    events_path = capture_path / "events.jsonl"
+    events_path.write_text('{"sequence":7,"event_name":"AssociationRejected"}\n', encoding="utf-8")
+    repository = AnalysisRepository(capture_path)
+    events = [_event("AssociationRejected", {"accepted_contexts": ()})]
+
+    first_findings = RuleEngine([_Rule()]).evaluate(events)
+    findings_path = repository.write_findings(first_findings, rule_set_version="bundled-v1")
+    first_bytes = findings_path.read_bytes()
+    repository.delete_findings()
+    rerun_findings = RuleEngine([_Rule()]).evaluate(events)
+    repository.write_findings(rerun_findings, rule_set_version="bundled-v1")
+
+    assert findings_path.read_bytes() == first_bytes
+    assert (
+        events_path.read_text(encoding="utf-8")
+        == '{"sequence":7,"event_name":"AssociationRejected"}\n'
+    )
+
+    class ImprovedRule(_Rule):
+        rule_version = "2"
+
+        def evaluate(self, context: RuleContext) -> tuple[Finding, ...]:
+            return (
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version="rules-v2",
+                    confidence="certain",
+                    cited_sequences=(7,),
+                    explanation="The observed association had no acceptable context.",
+                    next_steps=("Compare offered contexts",),
+                ),
+            )
+
+    class SecondImprovedRule:
+        rule_id = "LP-RULE-NEG-002"
+        rule_version = "2"
+
+        def evaluate(self, context: RuleContext) -> tuple[Finding, ...]:
+            return (
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version="rules-v2",
+                    confidence="likely",
+                    cited_sequences=(7,),
+                    explanation="The rejection is consistent with a negotiation mismatch.",
+                    next_steps=("Review peer negotiation settings",),
+                ),
+            )
+
+    improved = RuleEngine(
+        [ImprovedRule(), SecondImprovedRule()], rule_set_version="rules-v2"
+    ).evaluate(events)
+    assert len(improved) > len(first_findings)
