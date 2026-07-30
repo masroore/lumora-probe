@@ -242,10 +242,27 @@
       <div class="status-group"><span>Events dropped</span><strong>{{ workspace.events_dropped }}</strong><span class="status-divider" aria-hidden="true">·</span><span>Keyboard ready</span></div>
     </footer>
 
+    <div data-palette-overlay hidden role="dialog" aria-modal="true" aria-label="Command palette" class="palette-overlay">
+      <div class="palette-dialog">
+        <input data-palette-input type="text" placeholder="Type a command…" aria-label="Command search" role="combobox" aria-expanded="false" aria-controls="palette-listbox" />
+        <div data-palette-list id="palette-listbox" role="listbox" aria-label="Available commands"></div>
+      </div>
+    </div>
+
     <script src="/static/js/viewer.js" defer></script>
+    <script src="/static/js/command-palette.js" defer></script>
     <script>
       (() => {
         const frame = document.querySelector('.workspace-frame');
+        if (window.LumoraCommandPalette) {
+          window.LumoraCommandPalette.createCommandPalette({
+            root: document.body,
+            onNavigate: (target) => {
+              const anchor = document.querySelector(`[href="#${target}"]`);
+              if (anchor) anchor.click();
+            },
+          });
+        }
         document.querySelectorAll('[data-panel-toggle]').forEach((button) => {
           button.addEventListener('click', () => {
             const panel = button.dataset.panelToggle;

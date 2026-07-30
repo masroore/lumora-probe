@@ -44,6 +44,16 @@ await build({
   outfile: resolve(staticRoot, 'js/viewer.js'),
   platform: 'browser',
 });
+await build({
+  entryPoints: [resolve(root, 'assets/source/command-palette.js')],
+  bundle: true,
+  format: 'iife',
+  globalName: 'LumoraCommandPalette',
+  minify: true,
+  sourcemap: false,
+  outfile: resolve(staticRoot, 'js/command-palette.js'),
+  platform: 'browser',
+});
 
 const copies = {
   'htmx.min.js': 'htmx.org/dist/htmx.min.js',

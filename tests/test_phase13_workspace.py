@@ -128,3 +128,22 @@ async def test_workspace_renders_cine_and_fullscreen_controls() -> None:
     assert 'aria-label="Toggle cine playback"' in response.text
     assert 'id="fullscreen-toggle"' in response.text
     assert 'aria-label="Toggle fullscreen viewer"' in response.text
+
+
+@pytest.mark.asyncio
+async def test_workspace_renders_command_palette_markup() -> None:
+    """Command palette overlay, ARIA roles, and input are present in workspace HTML."""
+    application = create_app()
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert "data-palette-overlay" in response.text
+    assert 'role="dialog"' in response.text
+    assert 'aria-modal="true"' in response.text
+    assert "data-palette-input" in response.text
+    assert 'role="combobox"' in response.text
+    assert "data-palette-list" in response.text
+    assert 'role="listbox"' in response.text
+    assert "command-palette.js" in response.text
