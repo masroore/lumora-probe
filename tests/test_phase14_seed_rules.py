@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from lumora_probe.analysis.domain import FindingConfidence
-from lumora_probe.analysis.rules import RejectedAssociationRule
+from lumora_probe.analysis.rules import (
+    NoAcceptablePresentationContextRule,
+    RejectedAssociationRule,
+)
 from lumora_probe.analysis.service import RuleContext
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
 
@@ -48,3 +51,39 @@ def test_rejected_association_rule_does_not_infer_without_complete_triplet() -> 
     event = _event({"result": "0x0122", "reason": "not authorized"})
 
     assert tuple(RejectedAssociationRule().evaluate(RuleContext((event,), ()))) == ()
+
+
+def test_no_acceptable_context_rule_names_sop_class_and_offered_contexts() -> None:
+    event = _event(
+        {
+            "accepted_contexts": (),
+            "sop_class": "1.2.840.10008.5.1.4.1.1.2",
+            "offered_contexts": (
+                {
+                    "sop_class": "1.2.840.10008.5.1.4.1.1.2",
+                    "transfer_syntaxes": ("1.2.840.10008.1.2.1",),
+                },
+            ),
+        },
+        sequence=8,
+    )
+
+    findings = tuple(NoAcceptablePresentationContextRule().evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert findings[0].cited_sequences == (8,)
+    assert "1.2.840.10008.5.1.4.1.1.2" in findings[0].explanation
+    assert "1.2.840.10008.1.2.1" in findings[0].explanation
+    assert "Offer a presentation context" in findings[0].next_steps[0]
+
+
+def test_no_acceptable_context_rule_skips_accepted_contexts() -> None:
+    event = _event(
+        {
+            "accepted_contexts": ({"sop_class": "1.2.3"},),
+            "sop_class": "1.2.3",
+            "offered_contexts": ({"sop_class": "1.2.3"},),
+        }
+    )
+
+    assert tuple(NoAcceptablePresentationContextRule().evaluate(RuleContext((event,), ()))) == ()

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import cast
 
 from .domain import Finding, FindingConfidence
 from .service import RuleContext
@@ -19,6 +20,30 @@ def _text(value: object) -> str | None:
 
 def _sequence(value: object) -> int | None:
     return value if type(value) is int and not isinstance(value, bool) and value >= 0 else None
+
+
+def _context_text(value: object) -> str | None:
+    if isinstance(value, Mapping):
+        context = cast(Mapping[str, object], value)
+        sop_class = _text(context.get("sop_class") or context.get("abstract_syntax"))
+        transfer_syntaxes = context.get("transfer_syntaxes") or context.get("transfer_syntax")
+        if sop_class is not None and transfer_syntaxes:
+            return f"{sop_class} ({transfer_syntaxes})"
+        return sop_class or _text(context)
+    return _text(value)
+
+
+def _contexts_text(value: object) -> str | None:
+    if isinstance(value, (str, bytes)):
+        return _text(value)
+    if isinstance(value, Iterable):
+        values = tuple(
+            context
+            for context in (_context_text(item) for item in cast(Iterable[object], value))
+            if context is not None
+        )
+        return ", ".join(values) or None
+    return _context_text(value)
 
 
 class RejectedAssociationRule:
@@ -55,6 +80,55 @@ class RejectedAssociationRule:
                     next_steps=(
                         "Compare the rejection result and source with the peer's negotiation logs.",
                     ),
+                )
+            )
+        return tuple(findings)
+
+
+class NoAcceptablePresentationContextRule:
+    """Explain a rejection where no offered presentation context was accepted."""
+
+    rule_id = "LP-RULE-NEG-002"
+    rule_version = "1"
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            if event.event_name != "AssociationRejected":
+                continue
+            accepted_contexts = event.payload.get("accepted_contexts")
+            sop_class = _text(event.payload.get("sop_class") or event.payload.get("sop_class_uid"))
+            offered = _contexts_text(
+                event.payload.get("offered_contexts")
+                or event.payload.get("presentation_contexts")
+                or event.payload.get("offered")
+            )
+            sequence = _sequence(event.sequence)
+            if (
+                accepted_contexts is None
+                or accepted_contexts
+                or sop_class is None
+                or sequence is None
+            ):
+                continue
+            if offered is None:
+                offered = "no offered contexts"
+            remediation = (
+                f"Offer a presentation context for SOP class {sop_class} with a "
+                + "transfer syntax accepted by the peer."
+            )
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.CERTAIN,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"No acceptable presentation context was negotiated for SOP class {sop_class}; "
+                        f"offered: {offered}."
+                    ),
+                    next_steps=(remediation,),
                 )
             )
         return tuple(findings)
