@@ -8,5 +8,6 @@ ConditionDefinition = _domain.ConditionDefinition
 ConditionId = _domain.ConditionId
 ConditionIdRegistry = _domain.ConditionIdRegistry
 ConditionRegistry = _domain.ConditionRegistry
+ConditionObservation = _domain.ConditionObservation
 
 __all__: tuple[str, ...] = ()

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 
 from lumora_probe.shared.errors import domain_invariant
 
@@ -66,18 +66,18 @@ class ConditionDefinition:
                 field="condition_id",
                 value=self.condition_id,
             )
-        for field, value in (
+        for field_name, value in (
             ("name", self.name),
             ("description", self.description),
             ("remediation", self.remediation),
         ):
             if type(value) is not str or not value.strip():
                 raise domain_invariant(
-                    f"{field} must be a non-empty string",
-                    field=field,
+                    f"{field_name} must be a non-empty string",
+                    field=field_name,
                     value=value,
                 )
-            object.__setattr__(self, field, value.strip())
+            object.__setattr__(self, field_name, value.strip())
 
 
 class ConditionIdRegistry:
@@ -147,6 +147,75 @@ class ConditionIdRegistry:
 
     def __len__(self) -> int:
         return len(self._definitions)
+
+
+@dataclass(frozen=True, slots=True)
+class ConditionObservation:
+    """Deterministic observed condition normalized into a diagnostic event payload."""
+
+    condition_id: ConditionId | str
+    event_name: str
+    source_event_id: str
+    source_sequence: int | None
+    aggregate_id: str
+    message: str
+    details: Mapping[str, object] = field(default_factory=dict[str, object])
+
+    def __post_init__(self) -> None:
+        if isinstance(self.condition_id, str):
+            object.__setattr__(self, "condition_id", ConditionId(self.condition_id))
+        elif type(self.condition_id) is not ConditionId:
+            raise domain_invariant(
+                "condition_id must be a ConditionId or string",
+                field="condition_id",
+                value=self.condition_id,
+            )
+        if self.event_name not in {"WarningRaised", "ErrorRaised"}:
+            raise domain_invariant(
+                "condition event must be WarningRaised or ErrorRaised",
+                field="event_name",
+                value=self.event_name,
+            )
+        for field_name, value in (
+            ("source_event_id", self.source_event_id),
+            ("aggregate_id", self.aggregate_id),
+            ("message", self.message),
+        ):
+            if type(value) is not str or not value.strip():
+                raise domain_invariant(
+                    f"{field_name} must be a non-empty string",
+                    field=field_name,
+                    value=value,
+                )
+            object.__setattr__(self, field_name, value.strip())
+        if self.source_sequence is not None and (
+            type(self.source_sequence) is not int or self.source_sequence < 0
+        ):
+            raise domain_invariant(
+                "source_sequence must be a non-negative integer or None",
+                field="source_sequence",
+                value=self.source_sequence,
+            )
+        object.__setattr__(self, "details", dict(self.details))
+
+    @property
+    def code(self) -> str:
+        """Return the stable condition code used by WarningRaised/ErrorRaised."""
+        condition_id = self.condition_id
+        if not isinstance(condition_id, ConditionId):
+            raise TypeError("condition observation ID was not validated")
+        return condition_id.value
+
+    def as_payload(self, *, name: str) -> dict[str, object]:
+        """Return the normalized diagnostic event payload."""
+        return {
+            "code": self.code,
+            "condition_name": name,
+            "message": self.message,
+            "source_event_id": self.source_event_id,
+            "source_sequence": self.source_sequence,
+            "details": dict(self.details),
+        }
 
 
 ConditionRegistry = ConditionIdRegistry

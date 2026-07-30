@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import Any
+
 import pytest
 
 from lumora_probe.analysis.contracts import (
@@ -9,7 +12,9 @@ from lumora_probe.analysis.contracts import (
     ConditionId,
     ConditionIdRegistry,
 )
+from lumora_probe.analysis.service import ConditionDetector
 from lumora_probe.shared.errors import DomainInvariantError
+from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
 pytestmark = pytest.mark.unit
 
@@ -71,3 +76,71 @@ def test_condition_definition_normalizes_text_and_registry_contains_only_typed_i
     assert definition.remediation == "inspect negotiation"
     assert ConditionId("LP-NEG-004") in registry
     assert "LP-NEG-004" not in registry
+
+
+UUIDS = (
+    "018f0d4e-7b6a-7000-8000-000000000011",
+    "018f0d4e-7b6a-7000-8000-000000000012",
+    "018f0d4e-7b6a-7000-8000-000000000013",
+)
+
+
+def _event(
+    name: str,
+    payload: dict[str, Any],
+    *,
+    event_id: str = UUIDS[0],
+    origin: EventOrigin = EventOrigin.OBSERVED,
+) -> EventEnvelope:
+    return EventEnvelope(
+        event_id=event_id,
+        event_name=name,
+        event_version=1,
+        occurred_at=datetime(2026, 7, 30, tzinfo=UTC),
+        correlation_id=UUIDS[1],
+        aggregate_type="Association",
+        aggregate_id="association-1",
+        producer="test",
+        payload=payload,
+        origin=origin,
+        monotonic_ns=1,
+        sequence=7,
+    )
+
+
+def test_condition_detector_maps_observed_rejection_without_acceptable_context() -> None:
+    condition = ConditionDetector().detect(
+        [_event("AssociationRejected", {"accepted_contexts": (), "reason": "no context"})]
+    )[0]
+
+    assert condition.code == "LP-NEG-004"
+    assert condition.event_name == "WarningRaised"
+    assert condition.source_sequence == 7
+    assert condition.as_payload(name="No acceptable presentation context")["code"] == "LP-NEG-004"
+
+
+def test_condition_detector_keeps_explicit_codes_and_is_idempotent() -> None:
+    event = _event("WarningRaised", {"code": "LP-NEG-001", "reason": "peer rejected"})
+    conditions = ConditionDetector().detect([event, event])
+
+    assert len(conditions) == 1
+    assert conditions[0].code == "LP-NEG-001"
+    assert conditions[0].message == "peer rejected"
+
+
+def test_condition_detector_excludes_client_asserted_and_unknown_codes() -> None:
+    detector = ConditionDetector()
+
+    assert (
+        detector.detect(
+            [
+                _event(
+                    "AssociationRejected",
+                    {"accepted_contexts": ()},
+                    origin=EventOrigin.CLIENT_ASSERTED,
+                )
+            ]
+        )
+        == ()
+    )
+    assert detector.detect([_event("WarningRaised", {"code": "LP-UNK-001"})]) == ()
