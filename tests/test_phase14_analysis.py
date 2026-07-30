@@ -209,3 +209,34 @@ def test_finding_model_requires_sorted_unique_evidence_and_next_steps() -> None:
             explanation="Observed explanation",
             next_steps=("",),
         )
+
+
+def test_analysis_repository_writes_only_analysis_directory_and_round_trips(tmp_path: Path) -> None:
+    from lumora_probe.analysis.repository import AnalysisRepository
+
+    capture_path = tmp_path / "capture"
+    capture_path.mkdir()
+    events_path = capture_path / "events.jsonl"
+    events_path.write_text('{"event_name":"AssociationRejected"}\n', encoding="utf-8")
+    finding = Finding(
+        rule_id="LP-RULE-NEG-001",
+        rule_version="1",
+        confidence="certain",
+        cited_sequences=(7,),
+        explanation="The observed negotiation was rejected.",
+        next_steps=("Inspect peer negotiation",),
+    )
+    repository = AnalysisRepository(capture_path)
+
+    path = repository.write_findings((finding,), rule_set_version="rules-v1")
+
+    assert path == capture_path / "analysis" / "findings.json"
+    assert repository.read_findings() == (finding,)
+    assert events_path.read_text(encoding="utf-8") == '{"event_name":"AssociationRejected"}\n'
+    assert not (capture_path / "events.jsonl.tmp").exists()
+
+    first_bytes = path.read_bytes()
+    repository.delete_findings()
+    assert not path.exists()
+    repository.write_findings((finding,), rule_set_version="rules-v1")
+    assert path.read_bytes() == first_bytes
