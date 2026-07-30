@@ -43,6 +43,12 @@ def default_condition_registry() -> ConditionIdRegistry:
     return ConditionIdRegistry(DEFAULT_CONDITION_DEFINITIONS)
 
 
+def _observed_events(events: Iterable[EventEnvelope]) -> tuple[EventEnvelope, ...]:
+    """Return only server-observed evidence admitted to analysis."""
+
+    return tuple(event for event in events if event.origin is EventOrigin.OBSERVED)
+
+
 class ConditionDetector:
     """Normalize mechanically observed facts into diagnostic condition events."""
 
@@ -53,8 +59,8 @@ class ConditionDetector:
         """Return deterministic conditions without mutating or inferring from events."""
         result: list[ConditionObservation] = []
         seen_event_ids: set[str] = set()
-        for event in events:
-            if event.event_id in seen_event_ids or event.origin is EventOrigin.CLIENT_ASSERTED:
+        for event in _observed_events(events):
+            if event.event_id in seen_event_ids:
                 continue
             seen_event_ids.add(event.event_id)
             observation = self._detect_one(event)
@@ -146,7 +152,7 @@ class RuleEngine:
 
     def evaluate(self, events: Iterable[EventEnvelope]) -> tuple[Finding, ...]:
         """Return findings sorted by rule identity and cited evidence."""
-        observed = tuple(event for event in events if event.origin is EventOrigin.OBSERVED)
+        observed = _observed_events(events)
         context = RuleContext(
             events=observed,
             conditions=self._detector.detect(observed),

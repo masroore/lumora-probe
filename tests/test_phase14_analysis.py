@@ -100,6 +100,8 @@ def _event(
     *,
     event_id: str = UUIDS[0],
     origin: EventOrigin = EventOrigin.OBSERVED,
+    monotonic_ns: int = 1,
+    sequence: int = 7,
 ) -> EventEnvelope:
     return EventEnvelope(
         event_id=event_id,
@@ -112,8 +114,8 @@ def _event(
         producer="test",
         payload=payload,
         origin=origin,
-        monotonic_ns=1,
-        sequence=7,
+        monotonic_ns=monotonic_ns,
+        sequence=sequence,
     )
 
 
@@ -281,6 +283,29 @@ def test_rule_engine_excludes_client_asserted_events_and_validates_citations() -
 
     assert len(findings) == 1
     assert findings[0].rule_id == "LP-RULE-TEST-001"
+
+
+def test_analysis_context_excludes_client_asserted_events_from_inference_and_timing() -> None:
+    observed = _event("CStoreReceived", {}, sequence=10, monotonic_ns=100)
+    client = _event(
+        "ImageDisplayed",
+        {"condition_code": "LP-NEG-004"},
+        event_id=UUIDS[2],
+        origin=EventOrigin.CLIENT_ASSERTED,
+        sequence=11,
+        monotonic_ns=9_999_999_999,
+    )
+
+    class ContextRule:
+        rule_id = "LP-RULE-TEST-OBSERVED-001"
+        rule_version = "1"
+
+        def evaluate(self, context: RuleContext) -> tuple[Finding, ...]:
+            assert context.events == (observed,)
+            assert context.conditions == ()
+            return ()
+
+    assert RuleEngine([ContextRule()]).evaluate([observed, client]) == ()
 
 
 def test_rule_engine_rejects_duplicate_rules_and_unresolvable_citations() -> None:
