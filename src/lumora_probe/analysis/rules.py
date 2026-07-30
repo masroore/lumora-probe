@@ -407,4 +407,57 @@ class TimeoutRetryRule:
         return tuple(findings)
 
 
+class OversizedDatasetRule:
+    """Flag an observed dataset whose size exceeds a configured byte threshold."""
+
+    rule_id = "LP-RULE-DATA-001"
+    rule_version = "1"
+    _EVENT_NAMES = frozenset({"CStoreReceived", "DatasetLoaded", "InstancePersisted"})
+
+    def __init__(self, *, threshold_bytes: int = 100_000_000) -> None:
+        if (
+            type(threshold_bytes) is not int
+            or isinstance(threshold_bytes, bool)
+            or threshold_bytes <= 0
+        ):
+            raise ValueError("threshold_bytes must be a positive integer")
+        self.threshold_bytes = threshold_bytes
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            if event.event_name not in self._EVENT_NAMES:
+                continue
+            size_bytes = _non_negative_int(
+                event.payload.get("size_bytes")
+                or event.payload.get("dataset_size_bytes")
+                or event.payload.get("bytes")
+            )
+            sequence = _sequence(event.sequence)
+            if size_bytes is None or size_bytes <= self.threshold_bytes or sequence is None:
+                continue
+            instance = _text(
+                event.payload.get("sop_instance_uid") or event.payload.get("instance_id")
+            )
+            subject = f"instance {instance}" if instance is not None else "the dataset"
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.LIKELY,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"{subject.capitalize()} is {size_bytes} bytes, above the configured "
+                        f"{self.threshold_bytes}-byte dataset threshold."
+                    ),
+                    next_steps=(
+                        "Confirm the expected object size, transfer syntax, and peer limits "
+                        + "before changing the threshold or transport configuration.",
+                    ),
+                )
+            )
+        return tuple(findings)
+
+
 __all__: tuple[str, ...] = ()

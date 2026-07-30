@@ -8,6 +8,7 @@ from lumora_probe.analysis.domain import FindingConfidence
 from lumora_probe.analysis.rules import (
     IncompleteStudyRule,
     NoAcceptablePresentationContextRule,
+    OversizedDatasetRule,
     RejectedAssociationRule,
     SlowCStoreRule,
     TimeoutRetryRule,
@@ -221,3 +222,29 @@ def test_timeout_retry_rule_accepts_payload_markers() -> None:
 
     assert len(findings) == 1
     assert findings[0].cited_sequences == (16, 17)
+
+
+def test_oversized_dataset_rule_uses_configurable_threshold() -> None:
+    event = _event(
+        {"sop_instance_uid": "1.2.3.4.5", "dataset_size_bytes": 1_001},
+        sequence=18,
+        event_name="DatasetLoaded",
+    )
+
+    findings = tuple(
+        OversizedDatasetRule(threshold_bytes=1_000).evaluate(RuleContext((event,), ()))
+    )
+
+    assert len(findings) == 1
+    assert findings[0].cited_sequences == (18,)
+    assert "1.2.3.4.5" in findings[0].explanation
+    assert "1,001" not in findings[0].explanation
+    assert "1000-byte" in findings[0].explanation
+
+
+def test_oversized_dataset_rule_ignores_values_at_threshold() -> None:
+    event = _event({"bytes": 1_000}, event_name="CStoreReceived")
+
+    assert (
+        tuple(OversizedDatasetRule(threshold_bytes=1_000).evaluate(RuleContext((event,), ()))) == ()
+    )
