@@ -375,7 +375,7 @@ def build_default_event_registry() -> EventPayloadRegistry:
             "ReplayFinished",
         ),
         EventCategory.ANALYSIS: ("AnalysisCompleted",),
-        EventCategory.REPORTING: ("ReportGenerated", "ReportExported"),
+        EventCategory.REPORTING: ("ReportGenerated", "ReportProgressed", "ReportExported"),
         EventCategory.PLUGIN: ("PluginLoaded",),
         EventCategory.SYSTEM: (
             "ApplicationStarted",

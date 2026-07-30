@@ -57,6 +57,7 @@ class JobRecord:
     outcome: str | None = None
     progress: dict[str, Any] = field(default_factory=dict)
     interruption_reason: str | None = None
+    progress_event_name: str = "ReplayProgressed"
 
 
 JobWorker = Callable[["JobContext"], Awaitable[str | None]]
@@ -114,10 +115,13 @@ class InMemoryJobRegistry:
         worker: JobWorker,
         *,
         parameters: Mapping[str, Any] = {},
+        progress_event_name: str = "ReplayProgressed",
     ) -> JobRecord:
         """Start one job without blocking the caller."""
         if not job_type.strip():
             raise ValueError("job_type must be a non-empty string")
+        if not progress_event_name.strip():
+            raise ValueError("progress_event_name must be a non-empty string")
         limit = self.concurrency_limits.get(job_type)
         active = self._active_by_type.get(job_type, 0)
         if limit is not None and active >= limit:
@@ -129,6 +133,7 @@ class InMemoryJobRegistry:
             parameters=dict(parameters),
             state=JobState.RUNNING,
             started_at=self.clock.now(),
+            progress_event_name=progress_event_name,
         )
         token = CancellationToken()
         self._records[operation_id] = record
@@ -231,7 +236,7 @@ class InMemoryJobRegistry:
             await self.durable.update_progress(operation_id, progress)
         if self.progress_publisher is not None:
             event = EventEnvelope.create(
-                event_name="ReplayProgressed",
+                event_name=record.progress_event_name,
                 event_version=1,
                 correlation_id=operation_id,
                 aggregate_type="Operation",

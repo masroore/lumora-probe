@@ -46,7 +46,7 @@ from .live import (
 )
 from .metadata_routes import MetadataProvider, create_metadata_router
 from .operation_routes import OperationRegistry, create_operation_router
-from .report_routes import CaptureSummaryProvider, create_reports_router
+from .report_routes import CaptureSummaryProvider, ReportJobProvider, create_reports_router
 from .resources import ResourceStore
 from .retention import RetentionClock, RingBufferRetentionMap
 from .security import SecurityMiddleware, SecurityPolicy
@@ -196,6 +196,7 @@ def create_app(
     metadata_provider: MetadataProvider | None = None,
     study_browser_provider: StudyBrowserProvider | None = None,
     reports_provider: CaptureSummaryProvider | None = None,
+    report_job_provider: ReportJobProvider | None = None,
     bookmark_provider: BookmarkProvider | None = None,
     transfer_inspector: TransferInspectorService | None = None,
 ) -> FastAPI:
@@ -255,7 +256,9 @@ def create_app(
     application.include_router(
         create_study_browser_router(study_browser_provider, study_retention_map), prefix=API_PREFIX
     )
-    application.include_router(create_reports_router(reports_provider), prefix=API_PREFIX)
+    application.include_router(
+        create_reports_router(reports_provider, report_job_provider), prefix=API_PREFIX
+    )
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
     application.include_router(
         create_transfer_inspector_router(transfer_inspector), prefix=API_PREFIX

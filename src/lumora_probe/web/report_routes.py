@@ -1,20 +1,36 @@
-"""REST routes for capture summary reports."""
+"""REST routes for capture reports and background report generation."""
 
 from __future__ import annotations
 
 from typing import Any, Protocol
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 
 class CaptureSummaryProvider(Protocol):
-    """Application provider for capture summary report generation."""
+    """Application provider for the synchronous capture summary compatibility route."""
 
     async def build(self, capture_id: str) -> Any | None: ...
 
 
-def create_reports_router(provider: CaptureSummaryProvider | None = None) -> APIRouter:
-    """Expose capture summary reports under /captures/{capture_id}/report."""
+class ReportJobProvider(Protocol):
+    """Application provider for asynchronous HTML/Markdown/JSON report generation."""
+
+    async def start(
+        self,
+        capture_id: str,
+        *,
+        format: str = "html",
+        rule_set_version: str | None = None,
+    ) -> Any: ...
+
+
+def create_reports_router(
+    provider: CaptureSummaryProvider | None = None,
+    job_provider: ReportJobProvider | None = None,
+) -> APIRouter:
+    """Expose report compatibility and asynchronous generation endpoints."""
 
     router = APIRouter(prefix="/captures", tags=["reports"])
 
@@ -26,6 +42,32 @@ def create_reports_router(provider: CaptureSummaryProvider | None = None) -> API
         if report is None:
             raise HTTPException(status_code=404, detail="Capture not found")
         return report.model_dump(mode="json")
+
+    @router.post("/{capture_id}/report", status_code=202)
+    async def start_capture_report(
+        capture_id: str,
+        format: str = "html",
+        rule_set_version: str | None = None,
+    ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        if job_provider is None:
+            raise HTTPException(status_code=404, detail="Report job provider is not configured")
+        try:
+            record = await job_provider.start(
+                capture_id,
+                format=format,
+                rule_set_version=rule_set_version,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            status_code=202,
+            content={
+                "operation_id": record.operation_id,
+                "job_type": record.job_type,
+                "state": record.state.value,
+                "parameters": record.parameters,
+            },
+        )
 
     return router
 

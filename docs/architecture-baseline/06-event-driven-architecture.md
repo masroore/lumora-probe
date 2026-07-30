@@ -75,7 +75,7 @@ Every event belongs to exactly one category.
 | Capture | CaptureStarted |
 | Replay | ReplayFinished |
 | Analysis | AnalysisCompleted |
-| Reporting | ReportGenerated |
+| Reporting | ReportProgressed, ReportGenerated |
 | Plugin | PluginLoaded |
 | System | ApplicationStarted |
 
@@ -381,6 +381,7 @@ The implementation is compliant when:
 
 ## Reporting
 
+- ReportProgressed
 - ReportGenerated
 - ReportExported
 
