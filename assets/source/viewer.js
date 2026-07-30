@@ -1,6 +1,20 @@
 /* Lumora Probe viewer client: renderer state only; no DICOM parsing. */
 
-export function createLumoraImageLoader({ fetchFrame, canvas }) {
+function postImageDisplayed(instanceId, frameNumber, captureId) {
+  fetch("/api/v1/events/client-asserted", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event_name: "ImageDisplayed",
+      event_version: 1,
+      aggregate_type: "instance",
+      aggregate_id: instanceId,
+      payload: { instance_id: instanceId, frame_number: frameNumber, capture_id: captureId },
+    }),
+  }).catch(() => {});
+}
+
+export function createLumoraImageLoader({ fetchFrame, canvas, captureId = null }) {
   const context = canvas.getContext("2d", { alpha: false });
   const state = { windowCenter: 32768, windowWidth: 65535, zoom: 1, panX: 0, panY: 0, invert: false };
 
@@ -78,6 +92,7 @@ export function createViewerControls({ loader, viewerPanel, fetchFrame, frameCou
     cineState.currentFrame = wrapped;
     const imageId = `lumora:${instanceId}:${wrapped}`;
     const image = await loader.load(imageId);
+    postImageDisplayed(instanceId, wrapped, captureId);
     return image;
   }
 
