@@ -42,7 +42,6 @@ regenerated `docs/generated/openapi-v1.json`.
 
 - Ring-buffer retention state contract, study browser serialization, and accessible inline promotion action (live ring-buffer-to-provider composition remains).
 - Capture-scoped bookmark UI and API action.
-- Full Metadata Inspector (tag search/copy/JSON/raw/private toggle).
 - Transfer Inspector with per-leg association and decode/receive evidence.
 - Event Timeline synchronization over the live bus, Log Console, Live Monitor, Dashboard, Search,
   command palette, notifications, and client-asserted `ImageDisplayed` post-back.

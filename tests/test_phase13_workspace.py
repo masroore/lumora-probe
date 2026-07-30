@@ -83,3 +83,34 @@ async def test_workspace_renders_inline_ring_buffer_promotion_control() -> None:
     assert "Promote to capture" in response.text
     assert 'data-promotion-aggregate="association-1"' in response.text
     assert "/api/v1/captures/ring-buffer/promote" in response.text
+
+
+@pytest.mark.asyncio
+async def test_workspace_renders_metadata_inspector_actions_and_private_toggle() -> None:
+    application = create_app(
+        workspace_data={
+            "metadata": {
+                "tags": (
+                    {
+                        "tag": "(0010,0010)",
+                        "keyword": "PatientName",
+                        "vr": "PN",
+                        "value": "Synthetic^Patient",
+                        "private": False,
+                    },
+                ),
+                "raw_dump": "(0010,0010) PN PatientName: Synthetic^Patient",
+            }
+        }
+    )
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert "Search tags or values" in response.text
+    assert "Show private tags" in response.text
+    assert "Copy JSON" in response.text
+    assert "Copy raw" in response.text
+    assert "Synthetic^Patient" in response.text
+    assert "Raw dump" in response.text

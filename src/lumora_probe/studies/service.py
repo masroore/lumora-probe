@@ -30,6 +30,8 @@ from .contracts import (
     ImageDecodeIdGenerator,
     InstanceProvenance,
     InstanceRetention,
+    MetadataInspection,
+    MetadataTag,
     SyntheticCaptureWriter,
 )
 from .domain import DecodeError, failure
@@ -114,6 +116,65 @@ class StudyBrowserService:
             )
             for item in cls.provenance(instances, retention_by_digest)
             if item.duplicate
+        )
+
+
+class MetadataInspectorService:
+    """Parse searchable metadata without decoding pixel data on the event loop."""
+
+    async def inspect(
+        self,
+        source: DicomObjectSource,
+        *,
+        include_private: bool = False,
+        query: str | None = None,
+    ) -> MetadataInspection:
+        """Build an inspector result in a worker thread."""
+        return await asyncio.to_thread(
+            self._inspect_sync,
+            source,
+            include_private=include_private,
+            query=query,
+        )
+
+    @staticmethod
+    def _inspect_sync(
+        source: DicomObjectSource,
+        *,
+        include_private: bool,
+        query: str | None,
+    ) -> MetadataInspection:
+        try:
+            dataset = dcmread(BytesIO(source.raw_bytes), stop_before_pixels=True, force=False)
+        except Exception as error:
+            raise ValueError(f"metadata inspection rejected invalid DICOM: {error}") from error
+        normalized_query = query.casefold().strip() if query else None
+        tags: list[MetadataTag] = []
+        for element in dataset.iterall():
+            private = bool(element.tag.is_private)
+            if private and not include_private:
+                continue
+            tag = f"({element.tag.group:04X},{element.tag.element:04X})"
+            keyword = element.keyword or ""
+            value = str(element.value)
+            if normalized_query and normalized_query not in (f"{tag} {keyword} {value}".casefold()):
+                continue
+            tags.append(
+                MetadataTag(
+                    tag=tag,
+                    keyword=keyword,
+                    vr=str(element.VR),
+                    value=value,
+                    private=private,
+                )
+            )
+        raw_dump = "\n".join(
+            f"{item.tag} {item.vr} {item.keyword or '-'}: {item.value}" for item in tags
+        )
+        return MetadataInspection(
+            instance_id=source.instance_id or source.object_digest,
+            tags=tuple(tags),
+            raw_dump=raw_dump,
         )
 
 

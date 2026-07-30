@@ -927,6 +927,77 @@
         ]
       }
     },
+    "/api/v1/instances/{instance_id}/metadata": {
+      "get": {
+        "operationId": "get_metadata_api_v1_instances__instance_id__metadata_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_private",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Private",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Metadata Api V1 Instances  Instance Id  Metadata Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Metadata",
+        "tags": [
+          "metadata"
+        ]
+      }
+    },
     "/api/v1/instances/{resource_id}": {
       "get": {
         "operationId": "get_resource_api_v1_instances__resource_id__get",

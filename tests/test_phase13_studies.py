@@ -113,3 +113,50 @@ def test_study_browser_exposes_ring_buffer_retention_and_promotion_window() -> N
         "aggregate_id": "association-1",
         "promotable": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_metadata_inspector_filters_private_tags_and_searches() -> None:
+    from lumora_probe.studies.contracts import DicomObjectSource
+    from lumora_probe.studies.service import MetadataInspectorService
+
+    result = await MetadataInspectorService().inspect(
+        DicomObjectSource(
+            object_digest="m" * 64,
+            raw_bytes=make_dicom(),
+            instance_id="instance-1",
+        ),
+        query="SOPInstanceUID",
+    )
+
+    assert result.instance_id == "instance-1"
+    assert len(result.tags) == 1
+    assert result.tags[0].keyword == "SOPInstanceUID"
+    assert "(0008,0018)" in result.raw_dump
+
+
+@pytest.mark.asyncio
+async def test_metadata_inspector_endpoint_preserves_private_toggle_and_query() -> None:
+    class Provider:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, bool, str | None]] = []
+
+        async def get_metadata(self, instance_id: str, *, include_private: bool, query: str | None):
+            self.calls.append((instance_id, include_private, query))
+            return {
+                "instance_id": instance_id,
+                "tags": [],
+                "raw_dump": "",
+            }
+
+    provider = Provider()
+    application = create_app(metadata_provider=provider)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application), base_url="http://localhost"
+    ) as client:
+        response = await client.get(
+            "/api/v1/instances/instance-1/metadata?include_private=true&query=PatientName"
+        )
+
+    assert response.status_code == 200
+    assert provider.calls == [("instance-1", True, "PatientName")]

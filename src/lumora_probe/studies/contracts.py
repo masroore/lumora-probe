@@ -181,6 +181,44 @@ class DuplicateInstanceFinding:
 
 
 @dataclass(frozen=True, slots=True)
+class MetadataTag:
+    """One searchable DICOM metadata element exposed by the inspector."""
+
+    tag: str
+    keyword: str
+    vr: str
+    value: str
+    private: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the stable JSON representation used by the inspector."""
+        return {
+            "tag": self.tag,
+            "keyword": self.keyword,
+            "vr": self.vr,
+            "value": self.value,
+            "private": self.private,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataInspection:
+    """Metadata inspector result for one capture-owned DICOM object."""
+
+    instance_id: str
+    tags: tuple[MetadataTag, ...]
+    raw_dump: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-compatible inspector data."""
+        return {
+            "instance_id": self.instance_id,
+            "tags": [tag.as_dict() for tag in self.tags],
+            "raw_dump": self.raw_dump,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class FolderImportObject:
     """Verified object discovered during offline folder import."""
 

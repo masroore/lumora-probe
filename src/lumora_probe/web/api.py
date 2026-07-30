@@ -42,6 +42,7 @@ from .live import (
     NullEventSource,
     create_live_router,
 )
+from .metadata_routes import MetadataProvider, create_metadata_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .resources import ResourceStore
 from .security import SecurityMiddleware, SecurityPolicy
@@ -178,6 +179,7 @@ def create_app(
     replay_runtime: ReplayRuntime | None = None,
     workspace_data: WorkspaceData | None = None,
     frame_provider: FrameProvider | None = None,
+    metadata_provider: MetadataProvider | None = None,
     study_browser_provider: StudyBrowserProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
@@ -221,6 +223,7 @@ def create_app(
     application.include_router(api_v1_router)
     application.include_router(create_workspace_router(data=workspace_data))
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
+    application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)
     application.include_router(
         create_study_browser_router(study_browser_provider), prefix=API_PREFIX
     )

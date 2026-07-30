@@ -151,9 +151,50 @@
               <button type="button" role="tab" aria-selected="false" tabindex="-1">Transfer</button>
               <button type="button" role="tab" aria-selected="false" tabindex="-1">Events</button>
             </div>
-            <div class="inspector-empty" role="tabpanel">
-              <h3>No selection</h3>
-              <p>Choose a capture-backed object to inspect its observed metadata and transfer context.</p>
+            <div class="metadata-inspector" role="tabpanel" aria-label="Metadata inspector">
+              <div class="metadata-actions">
+                <label class="search-field" for="metadata-search">
+                  <span class="sr-only">Search metadata tags</span>
+                  <input id="metadata-search" type="search" placeholder="Search tags or values" autocomplete="off" data-metadata-search>
+                </label>
+                <label class="metadata-private-toggle">
+                  <input type="checkbox" data-metadata-private>
+                  <span>Show private tags</span>
+                </label>
+                <div class="metadata-copy-actions" aria-label="Metadata export actions">
+                  <button class="button button-secondary" type="button" data-copy-metadata-json>Copy JSON</button>
+                  <button class="button button-secondary" type="button" data-copy-metadata-raw>Copy raw</button>
+                </div>
+              </div>
+              {% if workspace.metadata and workspace.metadata.tags %}
+              <div class="metadata-table-wrap">
+                <table class="metadata-table">
+                  <caption class="sr-only">DICOM metadata tags</caption>
+                  <thead><tr><th scope="col">Tag</th><th scope="col">Keyword</th><th scope="col">VR</th><th scope="col">Value</th><th scope="col"><span class="sr-only">Copy</span></th></tr></thead>
+                  <tbody data-metadata-rows>
+                    {% for tag in workspace.metadata.tags %}
+                    <tr data-metadata-row data-private="{{ 'true' if tag.private else 'false' }}" data-search-text="{{ tag.tag }} {{ tag.keyword }} {{ tag.vr }} {{ tag.value }}">
+                      <td><button class="metadata-copy" type="button" data-copy-text="{{ tag.tag }}">{{ tag.tag }}</button></td>
+                      <td>{{ tag.keyword or '—' }}</td>
+                      <td>{{ tag.vr }}</td>
+                      <td class="metadata-value">{{ tag.value }}</td>
+                      <td><button class="metadata-copy" type="button" data-copy-text="{{ tag.value }}">Copy</button></td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <details class="metadata-raw">
+                <summary>Raw dump</summary>
+                <pre data-metadata-raw>{{ workspace.metadata.raw_dump }}</pre>
+              </details>
+              {% else %}
+              <div class="inspector-empty">
+                <h3>No metadata selected</h3>
+                <p>Choose a capture-backed object to inspect its observed tags and values.</p>
+              </div>
+              {% endif %}
+              <span class="metadata-action-status" data-metadata-status role="status" aria-live="polite"></span>
             </div>
           </div>
         </aside>
@@ -214,6 +255,51 @@
         document.querySelector('[data-theme-toggle]').addEventListener('click', () => {
           const root = document.documentElement;
           root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        });
+        const metadataSearch = document.querySelector('[data-metadata-search]');
+        const metadataPrivate = document.querySelector('[data-metadata-private]');
+        const metadataRows = document.querySelectorAll('[data-metadata-row]');
+        const updateMetadataRows = () => {
+          const query = (metadataSearch?.value || '').toLowerCase().trim();
+          const includePrivate = metadataPrivate?.checked || false;
+          metadataRows.forEach((row) => {
+            const matchesQuery = row.dataset.searchText.toLowerCase().includes(query);
+            const matchesPrivate = includePrivate || row.dataset.private !== 'true';
+            row.hidden = !(matchesQuery && matchesPrivate);
+          });
+        };
+        metadataSearch?.addEventListener('input', updateMetadataRows);
+        metadataPrivate?.addEventListener('change', updateMetadataRows);
+        document.querySelectorAll('[data-copy-text]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const status = document.querySelector('[data-metadata-status]');
+            try {
+              await navigator.clipboard.writeText(button.dataset.copyText || '');
+              status.textContent = 'Copied';
+            } catch (_) {
+              status.textContent = 'Clipboard unavailable';
+            }
+          });
+        });
+        document.querySelector('[data-copy-metadata-json]')?.addEventListener('click', async () => {
+          const status = document.querySelector('[data-metadata-status]');
+          const rows = [...metadataRows].map((row) => [...row.cells].slice(0, 4).map((cell) => cell.textContent.trim()));
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(rows));
+            status.textContent = 'Metadata JSON copied';
+          } catch (_) {
+            status.textContent = 'Clipboard unavailable';
+          }
+        });
+        document.querySelector('[data-copy-metadata-raw]')?.addEventListener('click', async () => {
+          const status = document.querySelector('[data-metadata-status]');
+          const raw = document.querySelector('[data-metadata-raw]')?.textContent || '';
+          try {
+            await navigator.clipboard.writeText(raw);
+            status.textContent = 'Raw metadata copied';
+          } catch (_) {
+            status.textContent = 'Clipboard unavailable';
+          }
         });
         document.querySelectorAll('[data-promote-instance]').forEach((button) => {
           button.addEventListener('click', async () => {
