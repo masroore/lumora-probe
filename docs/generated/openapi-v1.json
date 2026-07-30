@@ -785,6 +785,103 @@
         ]
       }
     },
+    "/api/v1/instances/{instance_id}/frames/{frame_number}": {
+      "get": {
+        "operationId": "get_frame_api_v1_instances__instance_id__frames__frame_number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_number",
+            "required": true,
+            "schema": {
+              "title": "Frame Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Frame",
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/instances/{instance_id}/frames/{frame_number}/metadata": {
+      "get": {
+        "operationId": "get_frame_metadata_api_v1_instances__instance_id__frames__frame_number__metadata_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "title": "Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_number",
+            "required": true,
+            "schema": {
+              "title": "Frame Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Frame Metadata Api V1 Instances  Instance Id  Frames  Frame Number  Metadata Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Frame Metadata",
+        "tags": [
+          "instances"
+        ]
+      }
+    },
     "/api/v1/instances/{resource_id}": {
       "get": {
         "operationId": "get_resource_api_v1_instances__resource_id__get",
