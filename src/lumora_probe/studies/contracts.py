@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
@@ -96,12 +96,57 @@ class DecodeFailure:
 
 
 @dataclass(frozen=True, slots=True)
+class InstanceRetention:
+    """Retention and promotion metadata for one capture-backed instance."""
+
+    source: str = "capture"
+    expires_at: datetime | None = None
+    promotion_start: datetime | None = None
+    promotion_end: datetime | None = None
+    aggregate_id: str | None = None
+
+    @classmethod
+    def permanent(cls) -> InstanceRetention:
+        """Return retention metadata for an already materialized capture object."""
+        return cls()
+
+    @property
+    def state(self) -> str:
+        """Return the user-facing retention state."""
+        if self.source == "ring-buffer":
+            return "retained" if self.expires_at is not None else "expiring"
+        return "permanent"
+
+    @property
+    def promotable(self) -> bool:
+        """Return whether the browser can offer inline ring-buffer promotion."""
+        return (
+            self.source == "ring-buffer"
+            and self.promotion_start is not None
+            and self.promotion_end is not None
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-compatible retention metadata for browser clients."""
+        return {
+            "source": self.source,
+            "state": self.state,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "promotion_start": (self.promotion_start.isoformat() if self.promotion_start else None),
+            "promotion_end": self.promotion_end.isoformat() if self.promotion_end else None,
+            "aggregate_id": self.aggregate_id,
+            "promotable": self.promotable,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class InstanceProvenance:
     """Capture provenance for one SOP Instance UID in the Study Browser."""
 
     sop_instance_uid: str
     capture_ids: tuple[str, ...]
     object_digests: tuple[str, ...]
+    retention: InstanceRetention = field(default_factory=InstanceRetention.permanent)
 
     @property
     def present_in_capture_count(self) -> int:
@@ -112,6 +157,17 @@ class InstanceProvenance:
     def duplicate(self) -> bool:
         """Return whether one SOP Instance UID has differing bytes."""
         return len(self.object_digests) > 1
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the stable browser representation for this instance."""
+        return {
+            "sop_instance_uid": self.sop_instance_uid,
+            "capture_ids": list(self.capture_ids),
+            "object_digests": list(self.object_digests),
+            "present_in_capture_count": self.present_in_capture_count,
+            "duplicate": self.duplicate,
+            "retention": self.retention.as_dict(),
+        }
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections import OrderedDict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Executor
 from io import BytesIO
 from pathlib import Path
@@ -29,6 +29,7 @@ from .contracts import (
     ImageDecodeEventPublisher,
     ImageDecodeIdGenerator,
     InstanceProvenance,
+    InstanceRetention,
     SyntheticCaptureWriter,
 )
 from .domain import DecodeError, failure
@@ -36,29 +37,74 @@ from .repository import InstanceProjection
 
 
 class StudyBrowserService:
-    """Build capture provenance and duplicate-UID findings from projection rows."""
+    """Build capture provenance, retention state, and duplicate-UID findings."""
 
     @staticmethod
-    def provenance(instances: Iterable[InstanceProjection]) -> tuple[InstanceProvenance, ...]:
+    def provenance(
+        instances: Iterable[InstanceProjection],
+        retention_by_digest: Mapping[str, InstanceRetention] | None = None,
+    ) -> tuple[InstanceProvenance, ...]:
         grouped: dict[str, dict[str, set[str]]] = {}
+        retention_by_digest = retention_by_digest or {}
         for instance in instances:
             values = grouped.setdefault(
                 instance.sop_instance_uid, {"captures": set(), "digests": set()}
             )
             values["captures"].add(instance.capture_id)
             values["digests"].add(instance.object_digest)
-        return tuple(
-            InstanceProvenance(
-                sop_instance_uid=uid,
-                capture_ids=tuple(sorted(values["captures"])),
-                object_digests=tuple(sorted(values["digests"])),
+        result: list[InstanceProvenance] = []
+        for uid, values in sorted(grouped.items()):
+            digests = tuple(sorted(values["digests"]))
+            retention = next(
+                (
+                    retention_by_digest[digest]
+                    for digest in digests
+                    if digest in retention_by_digest
+                ),
+                InstanceRetention.permanent(),
             )
-            for uid, values in sorted(grouped.items())
-        )
+            result.append(
+                InstanceProvenance(
+                    sop_instance_uid=uid,
+                    capture_ids=tuple(sorted(values["captures"])),
+                    object_digests=digests,
+                    retention=retention,
+                )
+            )
+        return tuple(result)
+
+    @classmethod
+    def browser(
+        cls,
+        study_uid: str,
+        instances: Iterable[InstanceProjection],
+        retention_by_digest: Mapping[str, InstanceRetention] | None = None,
+    ) -> dict[str, Any]:
+        """Build the capture-scoped browser payload consumed by the workspace."""
+        rows = tuple(instance for instance in instances if instance.study_uid == study_uid)
+        provenance = cls.provenance(rows, retention_by_digest)
+        capture_ids = tuple(sorted({instance.capture_id for instance in rows}))
+        return {
+            "study_uid": study_uid,
+            "partial": len(capture_ids) > 1,
+            "present_in_capture_count": len(capture_ids),
+            "instances": [item.as_dict() for item in provenance],
+            "duplicate_findings": [
+                {
+                    "sop_instance_uid": finding.sop_instance_uid,
+                    "object_digests": list(finding.object_digests),
+                    "capture_ids": list(finding.capture_ids),
+                    "kind": finding.kind,
+                }
+                for finding in cls.duplicate_findings(rows, retention_by_digest)
+            ],
+        }
 
     @classmethod
     def duplicate_findings(
-        cls, instances: Iterable[InstanceProjection]
+        cls,
+        instances: Iterable[InstanceProjection],
+        retention_by_digest: Mapping[str, InstanceRetention] | None = None,
     ) -> tuple[DuplicateInstanceFinding, ...]:
         return tuple(
             DuplicateInstanceFinding(
@@ -66,7 +112,7 @@ class StudyBrowserService:
                 object_digests=item.object_digests,
                 capture_ids=item.capture_ids,
             )
-            for item in cls.provenance(instances)
+            for item in cls.provenance(instances, retention_by_digest)
             if item.duplicate
         )
 

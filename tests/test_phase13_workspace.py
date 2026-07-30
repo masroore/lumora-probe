@@ -51,3 +51,35 @@ async def test_workspace_data_is_optional_and_escaped() -> None:
     assert "Events dropped" in response.text
     assert ">3<" in response.text
     assert "C-STORE" in response.text
+
+
+@pytest.mark.asyncio
+async def test_workspace_renders_inline_ring_buffer_promotion_control() -> None:
+    application = create_app(
+        workspace_data={
+            "study_instances": (
+                {
+                    "sop_instance_uid": "1.2.3",
+                    "present_in_capture_count": 1,
+                    "retention": {
+                        "state": "retained",
+                        "expires_at": "2026-07-30T00:05:00+00:00",
+                        "promotion_start": "2026-07-30T00:00:00+00:00",
+                        "promotion_end": "2026-07-30T00:01:00+00:00",
+                        "aggregate_id": "association-1",
+                        "promotable": True,
+                    },
+                },
+            )
+        }
+    )
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert "1.2.3" in response.text
+    assert "retained" in response.text
+    assert "Promote to capture" in response.text
+    assert 'data-promotion-aggregate="association-1"' in response.text
+    assert "/api/v1/captures/ring-buffer/promote" in response.text

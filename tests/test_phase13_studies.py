@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from lumora_probe.studies.contracts import FolderImportObject
+from lumora_probe.studies.contracts import FolderImportObject, InstanceRetention
 from lumora_probe.studies.repository import InstanceProjection
 from lumora_probe.studies.service import FolderImportService, StudyBrowserService
 from lumora_probe.web.api import create_app
@@ -88,3 +88,28 @@ async def test_study_browser_endpoint_exposes_partial_provenance() -> None:
     assert response.status_code == 200
     assert response.json()["partial"] is True
     assert response.json()["present_in_capture_count"] == 3
+
+
+def test_study_browser_exposes_ring_buffer_retention_and_promotion_window() -> None:
+    row = instance("capture-ring", "r" * 64)
+    retention = {
+        row.object_digest: InstanceRetention(
+            source="ring-buffer",
+            expires_at=datetime(2026, 7, 30, 0, 5, tzinfo=UTC),
+            promotion_start=datetime(2026, 7, 30, 0, tzinfo=UTC),
+            promotion_end=datetime(2026, 7, 30, 0, 1, tzinfo=UTC),
+            aggregate_id="association-1",
+        )
+    }
+
+    browser = StudyBrowserService.browser("study-1", [row], retention)
+
+    assert browser["instances"][0]["retention"] == {
+        "source": "ring-buffer",
+        "state": "retained",
+        "expires_at": "2026-07-30T00:05:00+00:00",
+        "promotion_start": "2026-07-30T00:00:00+00:00",
+        "promotion_end": "2026-07-30T00:01:00+00:00",
+        "aggregate_id": "association-1",
+        "promotable": True,
+    }

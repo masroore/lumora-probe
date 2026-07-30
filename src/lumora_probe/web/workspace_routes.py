@@ -29,6 +29,7 @@ _DEFAULT_WORKSPACE: dict[str, Any] = {
     ),
     "timeline": (),
     "logs": (),
+    "study_instances": (),
 }
 
 

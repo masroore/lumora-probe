@@ -69,6 +69,40 @@
               <strong>Context</strong>
               <span>{{ workspace.active_context }}</span>
             </div>
+            {% if workspace.study_instances %}
+            <section class="retention-panel" aria-labelledby="retention-heading">
+              <div class="retention-heading">
+                <h3 id="retention-heading">Study objects</h3>
+                <span class="summary-meta">capture-scoped</span>
+              </div>
+              <ul class="retention-list">
+                {% for instance in workspace.study_instances %}
+                <li class="retention-item" data-study-instance>
+                  <div class="retention-item-heading">
+                    <strong>{{ instance.sop_instance_uid }}</strong>
+                    <span class="retention-state retention-state-{{ instance.retention.state }}">
+                      {{ instance.retention.state }}
+                    </span>
+                  </div>
+                  <span class="retention-detail">
+                    Present in {{ instance.present_in_capture_count }} capture{% if instance.present_in_capture_count != 1 %}s{% endif %}
+                    {% if instance.retention.expires_at %}· expires {{ instance.retention.expires_at }}{% endif %}
+                  </span>
+                  {% if instance.retention.promotable %}
+                  <button class="button button-secondary retention-promote" type="button"
+                          data-promote-instance
+                          data-promotion-start="{{ instance.retention.promotion_start }}"
+                          data-promotion-end="{{ instance.retention.promotion_end }}"
+                          {% if instance.retention.aggregate_id %}data-promotion-aggregate="{{ instance.retention.aggregate_id }}"{% endif %}>
+                    Promote to capture
+                  </button>
+                  <span class="retention-action-status" data-promotion-status role="status" aria-live="polite"></span>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            </section>
+            {% endif %}
           </div>
         </aside>
 
@@ -180,6 +214,36 @@
         document.querySelector('[data-theme-toggle]').addEventListener('click', () => {
           const root = document.documentElement;
           root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        });
+        document.querySelectorAll('[data-promote-instance]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const status = button.parentElement.querySelector('[data-promotion-status]');
+            button.disabled = true;
+            status.textContent = 'Promoting…';
+            try {
+              const payload = {
+                start: button.dataset.promotionStart,
+                end: button.dataset.promotionEnd,
+              };
+              if (button.dataset.promotionAggregate) {
+                payload.aggregate_id = button.dataset.promotionAggregate;
+              }
+              const response = await fetch('/api/v1/captures/ring-buffer/promote', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+              });
+              const result = await response.json();
+              if (!response.ok) {
+                throw new Error(result.detail || 'Promotion failed');
+              }
+              status.textContent = `Promoted as ${result.capture_id || 'a capture'}`;
+              button.textContent = 'Promoted';
+            } catch (error) {
+              button.disabled = false;
+              status.textContent = error instanceof Error ? error.message : 'Promotion failed';
+            }
+          });
         });
       })();
     </script>
