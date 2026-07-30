@@ -54,6 +54,7 @@ from .study_routes import (
     create_projection_routers,
     create_study_browser_router,
 )
+from .transfer_inspector import TransferInspectorService, create_transfer_inspector_router
 from .workspace_routes import STATIC_ROOT, WorkspaceData, create_workspace_router
 
 API_PREFIX = "/api/v1"
@@ -186,6 +187,7 @@ def create_app(
     study_browser_provider: StudyBrowserProvider | None = None,
     reports_provider: CaptureSummaryProvider | None = None,
     bookmark_provider: BookmarkProvider | None = None,
+    transfer_inspector: TransferInspectorService | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -234,6 +236,9 @@ def create_app(
     )
     application.include_router(create_reports_router(reports_provider), prefix=API_PREFIX)
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
+    application.include_router(
+        create_transfer_inspector_router(transfer_inspector), prefix=API_PREFIX
+    )
     application.include_router(
         create_capture_router(capture_store, active_retention), prefix=API_PREFIX
     )
