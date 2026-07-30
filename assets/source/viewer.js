@@ -55,3 +55,103 @@ export function registerCornerstoneLoader(cornerstone, loader) {
   if (!cornerstone || typeof cornerstone.registerImageLoader !== "function") return;
   cornerstone.registerImageLoader("lumora", (imageId) => ({ promise: loader.load(imageId) }));
 }
+
+export function createViewerControls({ loader, viewerPanel, fetchFrame, frameCount, instanceId }) {
+  const cineState = {
+    playing: false,
+    fps: 10,
+    currentFrame: 0,
+    animationId: null,
+    lastFrameTime: 0,
+  };
+
+  function clampFps(fps) {
+    return Math.min(60, Math.max(1, Math.round(fps)));
+  }
+
+  function setCineFps(fps) {
+    cineState.fps = clampFps(fps);
+  }
+
+  async function showFrame(frameNumber) {
+    const wrapped = ((frameNumber % frameCount) + frameCount) % frameCount;
+    cineState.currentFrame = wrapped;
+    const imageId = `lumora:${instanceId}:${wrapped}`;
+    const image = await loader.load(imageId);
+    return image;
+  }
+
+  function startCine() {
+    if (cineState.playing || frameCount <= 1) return;
+    cineState.playing = true;
+    cineState.lastFrameTime = performance.now();
+    const intervalMs = 1000 / cineState.fps;
+
+    function tick(now) {
+      if (!cineState.playing) return;
+      if (now - cineState.lastFrameTime >= intervalMs) {
+        cineState.lastFrameTime = now;
+        showFrame(cineState.currentFrame + 1).catch(() => {});
+      }
+      cineState.animationId = requestAnimationFrame(tick);
+    }
+    cineState.animationId = requestAnimationFrame(tick);
+    // T6 will add CineStarted event post-back here; guarded call site:
+    // if (window.__lumoraPostClientEvent) window.__lumoraPostClientEvent("CineStarted", {...});
+  }
+
+  function stopCine() {
+    cineState.playing = false;
+    if (cineState.animationId !== null) {
+      cancelAnimationFrame(cineState.animationId);
+      cineState.animationId = null;
+    }
+  }
+
+  function toggleCine() {
+    if (cineState.playing) {
+      stopCine();
+    } else {
+      startCine();
+    }
+    return cineState.playing;
+  }
+
+  function toggleFullscreen() {
+    if (!viewerPanel) return false;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+      return false;
+    }
+    viewerPanel.requestFullscreen().catch(() => {});
+    return true;
+  }
+
+  function handleKeydown(event) {
+    if (event.key === "f" || event.key === "F") {
+      if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA")) {
+        return;
+      }
+      event.preventDefault();
+      toggleFullscreen();
+    }
+  }
+
+  document.addEventListener("keydown", handleKeydown);
+
+  function destroy() {
+    stopCine();
+    document.removeEventListener("keydown", handleKeydown);
+  }
+
+  return {
+    cineState,
+    setCineFps,
+    startCine,
+    stopCine,
+    toggleCine,
+    toggleFullscreen,
+    showFrame,
+    destroy,
+  };
+}

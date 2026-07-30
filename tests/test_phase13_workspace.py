@@ -114,3 +114,17 @@ async def test_workspace_renders_metadata_inspector_actions_and_private_toggle()
     assert "Copy raw" in response.text
     assert "Synthetic^Patient" in response.text
     assert "Raw dump" in response.text
+
+
+@pytest.mark.asyncio
+async def test_workspace_renders_cine_and_fullscreen_controls() -> None:
+    application = create_app()
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert 'id="cine-toggle"' in response.text
+    assert 'aria-label="Toggle cine playback"' in response.text
+    assert 'id="fullscreen-toggle"' in response.text
+    assert 'aria-label="Toggle fullscreen viewer"' in response.text
