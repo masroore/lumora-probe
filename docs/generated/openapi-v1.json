@@ -1303,6 +1303,50 @@
           "studies"
         ]
       }
+    },
+    "/api/v1/studies/{study_uid}/browser": {
+      "get": {
+        "operationId": "get_study_browser_api_v1_studies__study_uid__browser_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "study_uid",
+            "required": true,
+            "schema": {
+              "title": "Study Uid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Study Browser Api V1 Studies  Study Uid  Browser Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Study Browser",
+        "tags": [
+          "studies"
+        ]
+      }
     }
   }
 }

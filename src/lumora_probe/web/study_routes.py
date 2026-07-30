@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from collections.abc import Mapping
+from typing import Any, Protocol
+
+from fastapi import APIRouter, HTTPException
 
 from .collection_routes import create_collection_router
 from .query import QueryPolicy
 from .resources import ResourceStore
+
+
+class StudyBrowserProvider(Protocol):
+    """Application provider for capture-scoped study browser evidence."""
+
+    async def get_study_browser(self, study_uid: str) -> Mapping[str, Any] | None: ...
+
 
 _PROJECTION_POLICIES = {
     "studies": QueryPolicy.from_fields(
@@ -40,3 +50,20 @@ def create_projection_routers(store: ResourceStore | None = None) -> tuple[APIRo
 
 
 __all__: tuple[str, ...] = ()
+
+
+def create_study_browser_router(provider: StudyBrowserProvider | None = None) -> APIRouter:
+    """Expose provenance and duplicate-UID data without making Study authoritative."""
+
+    router = APIRouter(prefix="/studies", tags=["studies"])
+
+    @router.get("/{study_uid}/browser")
+    async def get_study_browser(study_uid: str) -> Mapping[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        if provider is None:
+            raise HTTPException(status_code=404, detail="Study browser provider is not configured")
+        result = await provider.get_study_browser(study_uid)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Study not found")
+        return result
+
+    return router

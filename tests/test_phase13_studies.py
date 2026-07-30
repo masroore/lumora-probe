@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pytest
 
 from lumora_probe.studies.contracts import FolderImportObject
 from lumora_probe.studies.repository import InstanceProjection
 from lumora_probe.studies.service import FolderImportService, StudyBrowserService
+from lumora_probe.web.api import create_app
 from tests.test_phase13_decode import make_dicom
 
 
@@ -63,3 +65,26 @@ async def test_folder_import_materializes_objects_fidelity(tmp_path: Path) -> No
     assert result.fidelity == "objects"
     assert result.capture_id == "018f0d4e-7b6a-7000-8000-000000000801"
     assert len(result.objects) == 1
+
+
+@pytest.mark.asyncio
+async def test_study_browser_endpoint_exposes_partial_provenance() -> None:
+    class Provider:
+        async def get_study_browser(self, study_uid: str):
+            return {
+                "study_uid": study_uid,
+                "partial": True,
+                "present_in_capture_count": 3,
+                "instances": [],
+                "duplicate_findings": [],
+            }
+
+    application = create_app(study_browser_provider=Provider())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application), base_url="http://localhost"
+    ) as client:
+        response = await client.get("/api/v1/studies/study-1/browser")
+
+    assert response.status_code == 200
+    assert response.json()["partial"] is True
+    assert response.json()["present_in_capture_count"] == 3

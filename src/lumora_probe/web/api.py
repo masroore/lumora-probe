@@ -46,7 +46,11 @@ from .operation_routes import OperationRegistry, create_operation_router
 from .resources import ResourceStore
 from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
-from .study_routes import create_projection_routers
+from .study_routes import (
+    StudyBrowserProvider,
+    create_projection_routers,
+    create_study_browser_router,
+)
 from .workspace_routes import STATIC_ROOT, WorkspaceData, create_workspace_router
 
 API_PREFIX = "/api/v1"
@@ -174,6 +178,7 @@ def create_app(
     replay_runtime: ReplayRuntime | None = None,
     workspace_data: WorkspaceData | None = None,
     frame_provider: FrameProvider | None = None,
+    study_browser_provider: StudyBrowserProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -216,6 +221,9 @@ def create_app(
     application.include_router(api_v1_router)
     application.include_router(create_workspace_router(data=workspace_data))
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
+    application.include_router(
+        create_study_browser_router(study_browser_provider), prefix=API_PREFIX
+    )
     application.include_router(
         create_capture_router(capture_store, active_retention), prefix=API_PREFIX
     )
