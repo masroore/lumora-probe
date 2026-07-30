@@ -8,6 +8,7 @@ from lumora_probe.analysis.domain import FindingConfidence
 from lumora_probe.analysis.rules import (
     NoAcceptablePresentationContextRule,
     RejectedAssociationRule,
+    SlowCStoreRule,
     TransferSyntaxMismatchRule,
 )
 from lumora_probe.analysis.service import RuleContext
@@ -17,10 +18,12 @@ EVENT_ID = "018f0d4e-7b6a-7000-8000-000000000001"
 CORRELATION_ID = "018f0d4e-7b6a-7000-8000-000000000002"
 
 
-def _event(payload: dict[str, object], *, sequence: int = 7) -> EventEnvelope:
+def _event(
+    payload: dict[str, object], *, sequence: int = 7, event_name: str = "AssociationRejected"
+) -> EventEnvelope:
     return EventEnvelope(
         event_id=EVENT_ID,
-        event_name="AssociationRejected",
+        event_name=event_name,
         event_version=1,
         occurred_at=datetime(2026, 7, 30, tzinfo=UTC),
         correlation_id=CORRELATION_ID,
@@ -118,3 +121,38 @@ def test_transfer_syntax_mismatch_rule_ignores_common_syntax() -> None:
     )
 
     assert tuple(TransferSyntaxMismatchRule().evaluate(RuleContext((event,), ()))) == ()
+
+
+def test_slow_c_store_rule_attributes_delay_to_one_leg() -> None:
+    events = (
+        _event(
+            {"leg": "downstream", "duration_ns": 2_000},
+            sequence=10,
+            event_name="CStoreReceived",
+        ),
+        _event(
+            {"leg": "upstream", "duration_ns": 100},
+            sequence=11,
+            event_name="CStoreReceived",
+        ),
+    )
+
+    findings = tuple(SlowCStoreRule(threshold_ns=1_000).evaluate(RuleContext(events, ())))
+
+    assert len(findings) == 1
+    assert findings[0].confidence is FindingConfidence.LIKELY
+    assert findings[0].cited_sequences == (10,)
+    assert "downstream leg" in findings[0].explanation
+    assert "end-to-end" in findings[0].explanation
+
+
+def test_slow_c_store_rule_can_derive_duration_from_monotonic_summary() -> None:
+    event = _event(
+        {"leg_name": "probe-hop", "first_monotonic_ns": 100, "last_monotonic_ns": 1_500},
+        event_name="CStoreReceived",
+    )
+
+    findings = tuple(SlowCStoreRule(threshold_ns=1_000).evaluate(RuleContext((event,), ())))
+
+    assert len(findings) == 1
+    assert "probe-hop leg" in findings[0].explanation

@@ -22,6 +22,10 @@ def _sequence(value: object) -> int | None:
     return value if type(value) is int and not isinstance(value, bool) and value >= 0 else None
 
 
+def _non_negative_int(value: object) -> int | None:
+    return _sequence(value)
+
+
 def _context_text(value: object) -> str | None:
     if isinstance(value, Mapping):
         context = cast(Mapping[str, object], value)
@@ -203,6 +207,61 @@ class TransferSyntaxMismatchRule:
                     next_steps=(
                         "Offer a transfer syntax supported by the peer, or configure both legs "
                         + "with a common syntax.",
+                    ),
+                )
+            )
+        return tuple(findings)
+
+
+class SlowCStoreRule:
+    """Attribute a slow C-STORE observation to its explicitly named leg."""
+
+    rule_id = "LP-RULE-PERF-001"
+    rule_version = "1"
+
+    def __init__(self, *, threshold_ns: int = 1_000_000_000) -> None:
+        if type(threshold_ns) is not int or isinstance(threshold_ns, bool) or threshold_ns <= 0:
+            raise ValueError("threshold_ns must be a positive integer")
+        self.threshold_ns = threshold_ns
+
+    def evaluate(self, context: RuleContext) -> Iterable[Finding]:
+        findings: list[Finding] = []
+        for event in context.events:
+            if event.event_name != "CStoreReceived":
+                continue
+            leg = _text(
+                event.payload.get("leg")
+                or event.payload.get("leg_name")
+                or event.payload.get("direction")
+            )
+            duration = _non_negative_int(
+                event.payload.get("duration_ns")
+                or event.payload.get("receive_duration_ns")
+                or event.payload.get("transfer_duration_ns")
+            )
+            if duration is None:
+                first = _non_negative_int(event.payload.get("first_monotonic_ns"))
+                last = _non_negative_int(event.payload.get("last_monotonic_ns"))
+                if first is not None and last is not None and last >= first:
+                    duration = last - first
+            sequence = _sequence(event.sequence)
+            if leg is None or duration is None or duration < self.threshold_ns or sequence is None:
+                continue
+            findings.append(
+                Finding(
+                    rule_id=self.rule_id,
+                    rule_version=self.rule_version,
+                    rule_set_version=BUNDLED_RULE_SET_VERSION,
+                    confidence=FindingConfidence.LIKELY,
+                    cited_sequences=(sequence,),
+                    explanation=(
+                        f"The C-STORE duration on the {leg} leg was {duration} ns, above the "
+                        f"{self.threshold_ns} ns threshold. This attributes delay to that leg "
+                        "without asserting end-to-end modality-to-PACS slowness."
+                    ),
+                    next_steps=(
+                        f"Inspect the {leg} leg's PDU gaps, receive path, and peer timing "
+                        + "before comparing it with the other legs.",
                     ),
                 )
             )
