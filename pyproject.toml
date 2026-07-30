@@ -22,6 +22,8 @@ dependencies = [
     "uvicorn>=0.35,<1.0",
     "jinja2>=3.1,<4.0",
     "websockets>=14,<16",
+    "pylibjpeg>=2.0,<3.0",
+    "pylibjpeg-openjpeg>=2.4,<3.0",
 ]
 
 [project.scripts]

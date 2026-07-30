@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol
 
 from lumora_probe.core.config import is_uuid7
 from lumora_probe.core.errors import PathSecurityError
 from lumora_probe.core.paths import assert_contained
 from lumora_probe.core.storage import StorageDatabases, rebuild_study_projection
+
+from .contracts import DicomObjectSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +264,22 @@ def _is_contained(path: Path, root: Path) -> bool:
     except PathSecurityError:
         return False
     return True
+
+
+class InstanceSourceRepository(Protocol):
+    """Application composition seam for verified capture-owned DICOM objects."""
+
+    async def get_instance_source(self, instance_id: str) -> DicomObjectSource | None: ...
+
+
+class InMemoryInstanceSourceRepository:
+    """Deterministic source provider used by tests and lightweight app assembly."""
+
+    def __init__(self, sources: Mapping[str, DicomObjectSource] | None = None) -> None:
+        self._sources = dict(sources or {})
+
+    async def get_instance_source(self, instance_id: str) -> DicomObjectSource | None:
+        return self._sources.get(instance_id)
 
 
 __all__: tuple[str, ...] = ()

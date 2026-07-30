@@ -1,3 +1,23 @@
-"""Public api boundary for the ``studies`` slice."""
+"""Public API boundary for the study viewer slice."""
 
-__all__: tuple[str, ...] = ()
+from __future__ import annotations
+
+from .contracts import (
+    DecodedFrame,
+    DecodedFrameMetadata,
+    DecodeFailure,
+    DecodeFailureKind,
+    DicomObjectSource,
+)
+from .service import DecodeService, LRUFrameCache, PydicomFrameDecoder
+
+__all__ = [
+    "DecodeFailure",
+    "DecodeFailureKind",
+    "DecodeService",
+    "DecodedFrame",
+    "DecodedFrameMetadata",
+    "DicomObjectSource",
+    "LRUFrameCache",
+    "PydicomFrameDecoder",
+]
