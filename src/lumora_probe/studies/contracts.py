@@ -95,6 +95,64 @@ class DecodeFailure:
     context: Mapping[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class InstanceProvenance:
+    """Capture provenance for one SOP Instance UID in the Study Browser."""
+
+    sop_instance_uid: str
+    capture_ids: tuple[str, ...]
+    object_digests: tuple[str, ...]
+
+    @property
+    def present_in_capture_count(self) -> int:
+        """Return the number of captures containing this instance identity."""
+        return len(self.capture_ids)
+
+    @property
+    def duplicate(self) -> bool:
+        """Return whether one SOP Instance UID has differing bytes."""
+        return len(self.object_digests) > 1
+
+
+@dataclass(frozen=True, slots=True)
+class DuplicateInstanceFinding:
+    """Deterministic finding data for conflicting SOP Instance bytes."""
+
+    sop_instance_uid: str
+    object_digests: tuple[str, ...]
+    capture_ids: tuple[str, ...]
+    kind: str = "duplicate-sop-instance-uid"
+
+
+@dataclass(frozen=True, slots=True)
+class FolderImportObject:
+    """Verified object discovered during offline folder import."""
+
+    path: str
+    object_digest: str
+    study_uid: str
+    series_uid: str
+    sop_instance_uid: str
+    raw_bytes: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class FolderImportResult:
+    """Synthetic object-fidelity capture request produced by folder import."""
+
+    capture_id: str
+    fidelity: str
+    objects: tuple[FolderImportObject, ...]
+
+
+class SyntheticCaptureWriter(Protocol):
+    """Application seam that materializes an offline folder as a capture."""
+
+    async def write_synthetic_capture(
+        self, objects: tuple[FolderImportObject, ...], *, fidelity: str
+    ) -> str: ...
+
+
 class ImageDecodeEventPublisher(Protocol):
     """Minimal event bus contract used by decode evidence."""
 

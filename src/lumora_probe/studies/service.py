@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from concurrent.futures import Executor
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -20,11 +22,95 @@ from .contracts import (
     DecodedFrameMetadata,
     DecodeFailureKind,
     DicomObjectSource,
+    DuplicateInstanceFinding,
+    FolderImportObject,
+    FolderImportResult,
     ImageDecodeClock,
     ImageDecodeEventPublisher,
     ImageDecodeIdGenerator,
+    InstanceProvenance,
+    SyntheticCaptureWriter,
 )
 from .domain import DecodeError, failure
+from .repository import InstanceProjection
+
+
+class StudyBrowserService:
+    """Build capture provenance and duplicate-UID findings from projection rows."""
+
+    @staticmethod
+    def provenance(instances: Iterable[InstanceProjection]) -> tuple[InstanceProvenance, ...]:
+        grouped: dict[str, dict[str, set[str]]] = {}
+        for instance in instances:
+            values = grouped.setdefault(
+                instance.sop_instance_uid, {"captures": set(), "digests": set()}
+            )
+            values["captures"].add(instance.capture_id)
+            values["digests"].add(instance.object_digest)
+        return tuple(
+            InstanceProvenance(
+                sop_instance_uid=uid,
+                capture_ids=tuple(sorted(values["captures"])),
+                object_digests=tuple(sorted(values["digests"])),
+            )
+            for uid, values in sorted(grouped.items())
+        )
+
+    @classmethod
+    def duplicate_findings(
+        cls, instances: Iterable[InstanceProjection]
+    ) -> tuple[DuplicateInstanceFinding, ...]:
+        return tuple(
+            DuplicateInstanceFinding(
+                sop_instance_uid=item.sop_instance_uid,
+                object_digests=item.object_digests,
+                capture_ids=item.capture_ids,
+            )
+            for item in cls.provenance(instances)
+            if item.duplicate
+        )
+
+
+class FolderImportService:
+    """Validate an offline DICOM folder before injected capture materialization."""
+
+    def __init__(self, writer: SyntheticCaptureWriter) -> None:
+        self.writer = writer
+
+    async def import_folder(self, folder: Path) -> FolderImportResult:
+        objects = await asyncio.to_thread(self._read_folder, folder)
+        capture_id = await self.writer.write_synthetic_capture(objects, fidelity="objects")
+        return FolderImportResult(capture_id=capture_id, fidelity="objects", objects=objects)
+
+    @staticmethod
+    def _read_folder(folder: Path) -> tuple[FolderImportObject, ...]:
+        folder = folder.expanduser().resolve()
+        if not folder.is_dir():
+            raise ValueError(f"offline import folder does not exist: {folder}")
+        objects: list[FolderImportObject] = []
+        for path in sorted(folder.iterdir(), key=lambda item: item.name):
+            if not path.is_file():
+                continue
+            raw_bytes = path.read_bytes()
+            try:
+                dataset = dcmread(BytesIO(raw_bytes), stop_before_pixels=True, force=False)
+            except Exception as exc:
+                raise ValueError(
+                    f"offline import rejected {path.name}: invalid DICOM: {exc}"
+                ) from exc
+            objects.append(
+                FolderImportObject(
+                    path=str(path),
+                    object_digest=hashlib.sha256(raw_bytes).hexdigest(),
+                    study_uid=str(dataset.StudyInstanceUID),
+                    series_uid=str(dataset.SeriesInstanceUID),
+                    sop_instance_uid=str(dataset.SOPInstanceUID),
+                    raw_bytes=raw_bytes,
+                )
+            )
+        if not objects:
+            raise ValueError("offline import folder contains no DICOM files")
+        return tuple(objects)
 
 
 class LRUFrameCache:
