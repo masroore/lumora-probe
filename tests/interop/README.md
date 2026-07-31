@@ -13,9 +13,10 @@ Implemented scenarios:
 - **DCMTK 3.6.8:** positive C-ECHO and C-STORE through the Lumora relay to the
   DCMTK SCP using the committed synthetic Explicit VR Little Endian fixture, plus
   negative calling-AE rejection followed by a successful association proving relay recovery.
+- **dcm4che 5.33.1:** the same positive C-ECHO, positive C-STORE, and negative
+  calling-AE rejection/recovery scenarios using dcm4che's `storescu`.
 
-The dcm4che, Orthanc, and full transfer-syntax matrix scenarios belong to subsequent
-Phase 20 tasks.
+The Orthanc and full transfer-syntax matrix scenarios belong to subsequent Phase 20 tasks.
 
 ## Prerequisites
 
@@ -29,8 +30,8 @@ Phase 20 tasks.
 ## Run
 
 ```console
-docker compose -f tests/interop/docker-compose.yml --profile interop up -d --wait dcmtk
-LUMORA_INTEROP=1 uv run pytest tests/interop/test_dcmtk.py -m interop -q
+docker compose -f tests/interop/docker-compose.yml --profile interop up -d --wait dcmtk dcm4che
+LUMORA_INTEROP=1 uv run pytest tests/interop/test_dcmtk.py tests/interop/test_dcm4che.py -m interop -q
 docker compose -f tests/interop/docker-compose.yml --profile interop down -v
 ```
 

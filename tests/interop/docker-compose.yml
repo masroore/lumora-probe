@@ -22,6 +22,10 @@ services:
     profiles: [interop]
 
   dcm4che:
-    image: dcm4che/dcm4che-tools:5.34.1
-    command: ["storescu", "--version"]
+    image: dcm4che/dcm4che-tools@sha256:c8fbede4a6cf6047370ad21ce12fcc6be7ab013ff4996f1d032eb55239f870ed
+    command: ["sleep", "infinity"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../fixtures/dicom/synthetic_study:/fixtures:ro
     profiles: [interop]
