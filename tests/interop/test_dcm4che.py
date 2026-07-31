@@ -104,7 +104,9 @@ async def test_dcm4che_storescu_verifies_lumora_relay(free_port: int) -> None:
         await relay.stop()
 
     _assert_succeeded(result)
-    assert "C-ECHO-RSP" in result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert "C-ECHO-RSP" in output
+    assert "status=0H" in output
 
 
 @pytest.mark.asyncio
@@ -131,7 +133,9 @@ async def test_dcm4che_storescu_sends_synthetic_instance_through_relay(
         await relay.stop()
 
     _assert_succeeded(result)
-    assert "C-STORE-RSP" in result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert "C-STORE-RSP" in output
+    assert "status=0H" in output
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ../fixtures/dicom/synthetic_study:/fixtures:ro
+      - interop_matrix:/matrix
     profiles: [interop]
 
   dcm4che:
@@ -26,6 +27,15 @@ services:
     command: ["sleep", "infinity"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "storescu", "--version"]
+      interval: 1s
+      timeout: 5s
+      retries: 20
     volumes:
       - ../fixtures/dicom/synthetic_study:/fixtures:ro
+      - interop_matrix:/matrix
     profiles: [interop]
+
+volumes:
+  interop_matrix:

@@ -50,7 +50,7 @@
 | dcm4che interoperability suite | `3 passed` |
 | Default-gate exclusion | `3 skipped` without `LUMORA_INTEROP=1` |
 | DCMTK interoperability suite | `3 passed` |
-| Compose readiness | DCMTK and dcm4che healthy |
+| Compose readiness | DCMTK and dcm4che healthy; dcm4che tooling healthcheck enabled |
 | Full test suite | `496 passed, 9 skipped` |
 | Ruff, import-linter, basedpyright, assets | Pass |
 
