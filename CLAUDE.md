@@ -2,14 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 17 complete; Phase 18 not started
+## Status: Phase 18 complete; Phase 19 not started
 
-Phase 17 (Observability) is accepted. Event-derived metrics, production plugin bootstrap,
-per-service and per-plugin health, operational logging discipline, configurable alerts, incident
-investigation filters, audit coverage, and the metrics dashboard are implemented. Phase 18
-(Production Hardening) has not started. Completion reports in
-`docs/planning/phase-*-completion-report.md` are the current status record; do not begin Phase 18
-until a new phase plan is approved.
+Phase 18 (Production Hardening) is accepted under Option B. Performance dimensions were
+measured without inventing unratified gates; Search + Tabulator virtualization shipped;
+security/path/secret reviews and dependency audits were recorded; high-contrast theme and
+keyboard e2e coverage landed; operator/user/compliance guides and glossary reconciliation
+closed F-05 (F-06 remains OPEN with measurement evidence). Phase 19 (Packaging / install)
+has not started. Completion reports in `docs/planning/phase-*-completion-report.md` are the
+current status record; do not begin Phase 19 until a new phase plan is approved.
 
 ## What the product is
 
