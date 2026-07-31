@@ -63,3 +63,5 @@ found `running` after restart become `Interrupted` and are never auto-resumed (A
 Cross-links: [capture-engine.md](../capture-engine.md), [vendor-handover.md](vendor-handover.md),
 [deployment-topologies.md](deployment-topologies.md),
 [privacy-and-compliance-posture.md](privacy-and-compliance-posture.md).
+
+Upgrade and recovery details: [upgrade-and-migration.md](upgrade-and-migration.md).
