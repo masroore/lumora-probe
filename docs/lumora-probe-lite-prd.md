@@ -26,7 +26,7 @@ actually delivering instances, and what exactly is it sending?"*
 ## 1.2 Relationship to Lumora Probe
 
 Lumora Probe Lite lives in the same repository as Lumora Probe but is an **independent
-codebase**. It shares no source code with `src/lumora_probe/`, but Probe Lite and Sender Lite share the small `src/lumora_lite_common/` helper package. It does not use the parent's
+codebase**. It shares no product/application source code with `src/lumora_probe/`. Probe Lite and Sender Lite share the small `src/lumora_lite_common/` helper package, and all three products may use the narrowly scoped, neutral `src/lumora_dicom_common/` mechanical DICOM package authorized by ADR-0034. It does not use the parent's
 event bus, capture format, plugin system, web UI, or database layer.
 
 It may informally validate assumptions that later feed into the full Lumora Probe, but it
@@ -263,7 +263,7 @@ explicitly in `--help` output: *"No security. Use on trusted networks only."*
 ## TC-01: Repository Layout
 
 Lumora Probe Lite is an independent package within the `lumora-probe` repository. It does
-not import from or share code with the parent `lumora/` package.
+not import from or share product workflow code with the parent `lumora/` package. The only permitted cross-product exception is the neutral, standard-library-only DICOM mechanics package defined by ADR-0034; `lumora_lite_common` remains Lite-only.
 
 Proposed layout:
 

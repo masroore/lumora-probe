@@ -57,6 +57,7 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | [0030](ADR-0030-ratified-performance-budgets.md) | Ratified capture volume and rolling-retention budgets |
 | [0031](ADR-0031-browser-e2e-test-tooling.md) | Playwright as dev-only browser e2e test tooling |
 | [0033](ADR-0033-analysis-ownership-and-transfer-boundary.md) | Analysis ownership and Transfer Analysis boundary |
+| [0034](ADR-0034-neutral-dicom-common-infrastructure.md) | Neutral DICOM mechanics shared without sharing product workflows |
 
 ## Probe Lite tools
 

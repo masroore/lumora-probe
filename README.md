@@ -77,6 +77,7 @@ contracts:
 - [Sender Lite guide](docs/sender_lite/README.md)
 - [Lite vocabulary](CONTEXT.md)
 - [Lite shared-library decision](docs/adr/ADR-0028-lite-shared-common-library.md)
+- [Neutral DICOM infrastructure decision](docs/adr/ADR-0034-neutral-dicom-common-infrastructure.md)
 
 ## Install from a built distribution
 
