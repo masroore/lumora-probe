@@ -2,15 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 18 complete; Phase 19 not started
+## Status: Phase 19 complete; Phase 20 in progress
 
-Phase 18 (Production Hardening) is accepted under Option B. Performance dimensions were
-measured without inventing unratified gates; Search + Tabulator virtualization shipped;
-security/path/secret reviews and dependency audits were recorded; high-contrast theme and
-keyboard e2e coverage landed; operator/user/compliance guides and glossary reconciliation
-closed F-05 (F-06 remains OPEN with measurement evidence). Phase 19 (Packaging / install)
-has not started. Completion reports in `docs/planning/phase-*-completion-report.md` are the
-current status record; do not begin Phase 19 until a new phase plan is approved.
+Phase 19 packaging is complete. Phase 20 release work has started with the DCMTK
+interoperability suite (`T-20-01-01`). Completion reports in
+`docs/planning/phase-*-completion-report.md` and Phase 20 task reports are the current
+status record. Do not begin work outside Phase 20 before its release exit criteria pass.
 
 ## What the product is
 

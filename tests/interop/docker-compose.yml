@@ -6,8 +6,19 @@ services:
     profiles: [interop]
 
   dcmtk:
-    image: dcmtk/dcmtk:3.6.8
-    command: ["storescp", "--version"]
+    image: nbelakovskiatmssm/dcmtk@sha256:f66d95cad6bf0f361ddd6c46bf7c6563319b8d7bf284ad3d345b8d7ee04a2ab8
+    command: ["storescp", "-aet", "DCMTK-SCP", "-od", "/tmp", "11112"]
+    ports:
+      - "127.0.0.1:11113:11112"
+    healthcheck:
+      test: ["CMD", "echoscu", "-aet", "HEALTHCHECK", "-aec", "DCMTK-SCP", "127.0.0.1", "11112"]
+      interval: 1s
+      timeout: 5s
+      retries: 20
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../fixtures/dicom/synthetic_study:/fixtures:ro
     profiles: [interop]
 
   dcm4che:
