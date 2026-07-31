@@ -16,7 +16,9 @@ Implemented scenarios:
 - **dcm4che 5.33.1:** the same positive C-ECHO, positive C-STORE, and negative
   calling-AE rejection/recovery scenarios using dcm4che's `storescu`.
 
-The Orthanc and full transfer-syntax matrix scenarios belong to subsequent Phase 20 tasks.
+Orthanc relay and the five-syntax transfer matrix are implemented and were included in the
+Phase 20 release run. See `docs/planning/phase-20-interop-results.md` for pinned image
+digests, the complete matrix, and triage notes.
 
 ## Prerequisites
 
@@ -37,7 +39,9 @@ docker compose -f tests/interop/docker-compose.yml --profile interop down -v
 
 ## Expected outcomes
 
-All enabled implementation scenarios execute; no interop test is skipped. Positive cases traverse the Lumora relay and receive DICOM success responses. Negative cases
+All enabled implementation scenarios execute; no interop test is skipped. The release run
+recorded 14 passed and 0 failed. Positive cases traverse the Lumora relay and receive DICOM
+success responses. Negative cases
 fail for the asserted protocol reason and leave the Lumora relay able to accept the next valid
 association.
 
@@ -46,5 +50,4 @@ association.
 Keep implementation images immutable by digest. Update the documented implementation
 version and rerun every scenario when changing a digest. Fixtures remain synthetic-only
 and must be regenerated through `scripts/generate_fixtures.py`; never add clinical or
-"de-identified" patient data. Publish Phase 20 matrix results separately, including any
-failures and triage.
+"de-identified" patient data. Keep the Phase 20 matrix results in sync with the suite, including any failures and triage.

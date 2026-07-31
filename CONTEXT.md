@@ -1,6 +1,7 @@
 # Probe Lite Tools
 
-Vocabulary shared by the lightweight DICOM receiver and its planned sender counterpart.
+Vocabulary shared by the shipping lightweight DICOM receiver and one-shot sender. Both are
+part of the v0.1.0 distribution and are intended for trusted engineering networks only.
 
 ## Language
 

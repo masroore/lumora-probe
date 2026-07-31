@@ -19,6 +19,8 @@ artifacts govern compatibility changes.
   distribution.
 - Scheduled interoperability suites against DCMTK, dcm4che, and Orthanc, including the release
   transfer-syntax matrix.
+- Probe Lite receiver and Sender Lite one-shot sender with cross-platform module and console
+  entry points, deterministic Lite logging, and trusted-network exit-code contracts.
 
 ### Verification
 

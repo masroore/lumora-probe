@@ -4,7 +4,7 @@
 >
 > **Document:** Product Requirements Document (PRD)
 >
-> **Status:** Draft v0.1
+> **Status:** Implemented in v0.1.0 (GA sign-off: July 31, 2026)
 >
 > **Audience:** Engineering, QA, Claude Code, Codex
 >
@@ -26,7 +26,7 @@ actually delivering instances, and what exactly is it sending?"*
 ## 1.2 Relationship to Lumora Probe
 
 Lumora Probe Lite lives in the same repository as Lumora Probe but is an **independent
-codebase**. It shares no source code with the parent project. It does not use the parent's
+codebase**. It shares no source code with `src/lumora_probe/`, but Probe Lite and Sender Lite share the small `src/lumora_lite_common/` helper package. It does not use the parent's
 event bus, capture format, plugin system, web UI, or database layer.
 
 It may informally validate assumptions that later feed into the full Lumora Probe, but it
@@ -67,7 +67,7 @@ All users are technical. No clinical users.
 
 # 3. Product Principles
 
-1. **Zero config to start.** `probe-lite` with no arguments listens and receives.
+1. **Zero-argument receiver startup.** `probe-lite` listens and receives with safe local defaults for the Lite utility; it still has no authentication or TLS.
 2. **Stdout is the UI.** No log files, no database, no web dashboard.
 3. **Fail loudly.** Errors go to stdout with cause and context. Never swallow.
 4. **No magic.** What arrives on the wire is what lands on disk. No transformation, no
@@ -127,7 +127,7 @@ Received instances shall be stored in a three-level hierarchy:
       <SOPInstanceUID>.dcm
 ```
 
-- Default output directory: `./received` (current working directory).
+- Default output directory: `storage/inbox` (relative to the current working directory).
 - Configurable via `--output` / `-o` flag or `PROBE_LITE_OUTPUT` env var.
 - Directories are created on demand.
 - The `.dcm` extension is always appended.
@@ -194,7 +194,7 @@ Invocation: `probe-lite`
 |----------|-------|---------|---------|-------------|
 | `--port` | `-p` | `PROBE_LITE_PORT` | `11112` | TCP listen port |
 | `--ae` | `-a` | `PROBE_LITE_AE` | `PROBE_LITE` | Called AE Title |
-| `--output` | `-o` | `PROBE_LITE_OUTPUT` | `./received` | Instance storage directory |
+| `--output` | `-o` | `PROBE_LITE_OUTPUT` | `storage/inbox` | Instance storage directory |
 | `--accept-ae` | | `PROBE_LITE_ACCEPT_AE` | *(any)* | Comma-separated Calling AE whitelist |
 | `--format` | `-f` | `PROBE_LITE_FORMAT` | `text` | Log format: `text` or `json` |
 | `--max-pdu` | | `PROBE_LITE_MAX_PDU` | `16382` | Maximum PDU length in bytes |
@@ -331,7 +331,7 @@ Document as a manual verification step.
 Lumora Probe Lite v1 is complete when:
 
 1. `probe-lite` with no arguments starts a C-STORE + C-ECHO SCP on port 11112.
-2. Instances sent by `storescu` (or equivalent) land in `./received/<Study>/<Series>/<Instance>.dcm`.
+2. Instances sent by `storescu` (or equivalent) land in `storage/inbox/<Study>/<Series>/<Instance>.dcm`.
 3. All events from FR-07 appear on stdout in the selected format.
 4. `--format json` produces valid JSON Lines parseable by `jq`.
 5. Multiple simultaneous associations are handled without error.

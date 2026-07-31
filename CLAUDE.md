@@ -22,7 +22,7 @@ platform. Reject scope creep toward clinical use.
 
 Three layers, in precedence order:
 
-1. `docs/adr/` — **the authoritative resolution layer.** 26 ADRs. Start at
+1. `docs/adr/` — **the authoritative resolution layer.** 32 ADRs. Start at
    `docs/adr/README.md`, which indexes them and lists every recorded deviation from the
    baseline. Where an ADR contradicts a baseline document, the ADR wins.
 2. `docs/architecture-baseline/` — 21 numbered documents, binding where specific and silent
@@ -42,9 +42,8 @@ analysis), pytest + pytest-asyncio, import-linter for boundary contracts. FastAP
 Uvicorn, Pydantic v2, pydantic-settings, structlog, orjson, SQLAlchemy **Core only — no
 ORM** (`04` §6), pydicom + pynetdicom.
 
-No build/test/lint command strings are pinned in the docs yet; `pyproject.toml` has no dev
-dependencies or tool config. Establishing these is Phase 02/03 work. Once they exist,
-record them here.
+The repository has locked development commands and tool configuration in `pyproject.toml`;
+use the commands in `AGENTS.md` and the root `README.md` for the current quality gates.
 
 Frontend: HTMX + Alpine.js + Chart.js + Tabulator vendored as single-file dists;
 Cornerstone3D and Tailwind CSS 4 are the only two things needing a Node build. Built assets
@@ -54,14 +53,14 @@ require Node.
 
 ## Package layout and import boundaries
 
-Top-level package `lumora/` (ADR-0012). Module-first slices, not layer-first directories:
+Implemented package `src/lumora_probe/` (ADR-0012). Module-first slices, not layer-first directories:
 
 ```
-lumora/core/          bus, config, ids, clock, errors, storage primitives
-lumora/shared/        DICOM value objects, event envelope + payload registry
-lumora/associations/  captures/  replay/  studies/
-lumora/analysis/      reports/   plugins/  settings/
-lumora/web/           Jinja/HTMX templates, view composition, UI socket adapter
+src/lumora_probe/core/          bus, config, ids, clock, errors, storage primitives
+src/lumora_probe/shared/        DICOM value objects, event envelope + payload registry
+src/lumora_probe/associations/  captures/  replay/  studies/
+src/lumora_probe/analysis/      reports/   plugins/  settings/
+src/lumora_probe/web/           Jinja/HTMX templates, view composition, UI socket adapter
 ```
 
 Each slice holds `domain.py`, `service.py`, `repository.py`, `api.py`, and a public

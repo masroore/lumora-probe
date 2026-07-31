@@ -1,206 +1,183 @@
-# Lumora Probe Lite
+# Lumora Probe
 
-Cross-platform CPython command-line DICOM tools. Two utilities ship in this package:
+Lumora Probe is an engineering observability platform for DICOM network traffic: capture,
+replay, analyze, and troubleshoot — **browser devtools for DICOM**.
 
-- **Probe Lite** — a C-STORE/C-ECHO receiver that writes each received instance to disk.
-- **Sender Lite** — a one-shot C-STORE/C-ECHO sender for trusted engineering networks.
+The repository also ships two standalone Lite command-line utilities for small, trusted
+network tests:
 
-Supported platforms: **Windows, macOS, and Linux**. Supported runtime: **CPython
-3.13 or newer**. Both tools are trusted-network debugging utilities and provide no
-authentication or TLS.
+- **Probe Lite** — C-STORE/C-ECHO receiver that writes received instances to disk.
+- **Sender Lite** — one-shot C-STORE/C-ECHO sender that catalogs a directory and sends one
+  Study Batch per DICOM association.
 
-## Install
+Release `0.1.0` reached GA sign-off on **July 31, 2026** for trusted engineering
+deployments. The release is not a clinical workstation, PACS archive, RIS/EMR, reporting
+system, or AI diagnostic platform. See [known limitations](docs/guides/known-limitations.md).
 
-Create a virtual environment with the Python launcher for your platform, then install
-from this repository:
+## Quick start: Lumora Probe
+
+Requirements: CPython 3.13+, `uv`, and a supported Unix-like or Windows environment.
+Node is not required to install or run the application; committed frontend assets are
+included in the wheel and container image.
+
+```console
+uv sync --locked
+uv run lumora serve
+```
+
+The server binds HTTP to `127.0.0.1:8000` and the DICOM listener to
+`127.0.0.1:11112` by default. Open the local UI at `http://127.0.0.1:8000/` or use the
+CLI/API against that server:
+
+```console
+uv run lumora health
+uv run lumora captures list
+uv run lumora capture inspect path/to/capture.lpcap
+```
+
+The default data directory is platform-specific:
+
+- Linux: `$XDG_DATA_HOME/lumora-probe`, or `~/.local/share/lumora-probe`.
+- macOS: `~/Library/Application Support/Lumora Probe`.
+- Windows: `%APPDATA%\\Lumora Probe`.
+
+Set `LUMORA_DATA_DIR` to choose another root. Startup configuration precedence is
+**environment > `.env` > `lumora.toml`/`lumora.yaml` > defaults**. Non-loopback HTTP or
+DICOM binds require an explicit trust acknowledgment:
+
+```console
+uv run lumora serve --trust-network --host 0.0.0.0
+```
+
+Lumora Probe provides no authentication, RBAC, or in-process TLS in v1. Put a reverse
+proxy or another trusted network boundary in front of any non-loopback deployment.
+
+## Quick start: Lite utilities
+
+Both utilities are included in the same distribution and require only CPython plus the
+project dependencies:
+
+```console
+uv run probe-lite
+uv run sender-lite --echo
+```
+
+For a local receiver/sender round trip:
+
+```console
+uv run probe-lite --output ./storage/inbox
+uv run sender-lite --input ./storage/outbox --host 127.0.0.1 --port 11112
+```
+
+Lite utilities bind or connect without authentication or TLS. Use them only on a trusted
+engineering network. Full command, configuration, storage, catalog, logging, and exit-code
+contracts:
+
+- [Probe Lite guide](docs/probe_lite/README.md)
+- [Sender Lite guide](docs/sender_lite/README.md)
+- [Lite vocabulary](CONTEXT.md)
+- [Lite shared-library decision](docs/adr/ADR-0028-lite-shared-common-library.md)
+
+## Install from a built distribution
+
+For an editable development install:
+
+```console
+uv sync --locked
+```
+
+For a normal wheel/sdist install:
 
 ```console
 python -m pip install .
 ```
 
-For development and tests:
+The package metadata exposes these console entry points:
+
+| Command | Purpose |
+| --- | --- |
+| `lumora` | Lumora Probe server and live/offline CLI |
+| `probe-lite` | Minimal DICOM receiver |
+| `sender-lite` | One-shot DICOM sender |
+
+Python module invocation is available for both Lite utilities:
+`python -m probe_lite` and `python -m sender_lite`.
+
+## Development
+
+All locked Python commands run through `uv`:
 
 ```console
-python -m pip install . pytest ruff
+uv run pytest -q
+uv run pytest -m unit -q
+uv run ruff check .
+uv run ruff format --check .
+uv run lint-imports --no-cache
+uv run basedpyright src/lumora_probe/core src/lumora_probe/shared
 ```
 
-The package has no platform-specific runtime dependencies or shell requirements.
+Interop tests are opt-in:
 
-## Probe Lite
+```console
+LUMORA_INTEROP=1 uv run pytest -m interop
+# Start the external peers first when required:
+# docker compose -f tests/interop/docker-compose.yml --profile interop up -d
+```
 
-Probe Lite accepts C-ECHO and C-STORE associations and writes each received instance to:
+Frontend assets are committed and CI checks for drift. Rebuild them only when changing
+asset sources:
+
+```console
+npm ci
+npm run build:assets
+npm run check:assets
+```
+
+Synthetic DICOM fixtures are generated with `scripts/generate_fixtures.py`. Never add real
+or de-identified patient data to the repository.
+
+## Repository layout
 
 ```text
-<output>/<StudyInstanceUID>/<SeriesInstanceUID>/<SOPInstanceUID>.dcm
-```
-
-### Run
-
-Start the receiver with the default port (`11112`) and output directory (`./received`):
-
-```console
-probe-lite
-```
-
-Equivalent module invocation works on every supported platform:
-
-```console
-python -m probe_lite
-```
-
-Use an explicit output path when needed. `pathlib` handles native separators on all
-supported platforms:
-
-```console
-probe-lite --output ./received --port 11112
-```
-
-On Windows, `probe-lite.exe` is installed in the virtual environment's `Scripts` folder;
-on macOS and Linux, the executable is in `bin`. Activating the environment or invoking
-`python -m probe_lite` avoids PATH differences.
-
-Press **Ctrl+C** (or **Ctrl+Break** on Windows) to request a clean shutdown. Logs are
-written to stdout. Use
-`--format json` for JSON Lines output.
-
-### Configuration
-
-Command-line arguments override environment variables, which override defaults:
-
-| Argument | Environment variable | Default |
-| --- | --- | --- |
-| `--port` / `-p` | `PROBE_LITE_PORT` | `11112` |
-| `--ae` / `-a` | `PROBE_LITE_AE` | `PROBE_LITE` |
-| `--output` / `-o` | `PROBE_LITE_OUTPUT` | `./received` |
-| `--accept-ae` | `PROBE_LITE_ACCEPT_AE` | any calling AE |
-| `--format` / `-f` | `PROBE_LITE_FORMAT` | `text` |
-| `--max-pdu` | `PROBE_LITE_MAX_PDU` | `16382` |
-| `--verbose` / `-v` | `PROBE_LITE_VERBOSE` | `false` |
-
-## Sender Lite
-
-Sender Lite is a one-shot sender. It scans an input directory, builds an in-memory
-catalog grouped by Study, and sends each Study Batch over exactly one DICOM association,
-waiting a configurable delay between Studies. Malformed, inconsistent, or duplicate
-files are rejected without stopping the scan.
-
-### Run
-
-Send every DICOM instance found under an input directory:
-
-```console
-sender-lite --input ./dicom
-```
-
-Equivalent module invocation works on every supported platform:
-
-```console
-python -m sender_lite
-```
-
-Target an explicit peer and AE titles:
-
-```console
-sender-lite --input ./dicom --host 127.0.0.1 --port 11112 \
-    --calling-ae SENDER_LITE --called-ae PROBE_LITE
-```
-
-Run a connectivity check with C-ECHO instead of sending:
-
-```console
-sender-lite --echo --host 127.0.0.1 --port 11112
-```
-
-On Windows, `sender-lite.exe` is installed in the virtual environment's `Scripts`
-folder; on macOS and Linux, the executable is in `bin`.
-
-Press **Ctrl+C** (or **Ctrl+Break** on Windows) to request cancellation. The first
-signal stops cleanly after the current operation; a second signal terminates
-immediately. Logs are written to stdout. Use `--format json` for JSON Lines output.
-
-### Configuration
-
-Command-line arguments override a TOML config file, which overrides defaults. With no
-arguments, Sender Lite loads `./sender-lite.toml` if present and errors otherwise; use
-`--config PATH` to point at another file.
-
-| Argument | TOML key | Default |
-| --- | --- | --- |
-| `--input` | `input` | *(required)* |
-| `--host` | `host` | `127.0.0.1` |
-| `--port` / `-p` | `port` | `11112` |
-| `--calling-ae` | `calling_ae` | `SENDER_LITE` |
-| `--called-ae` | `called_ae` | `PROBE_LITE` |
-| `--study-delay` | `study_delay` | `1.0` |
-| `--connect-timeout` | `connect_timeout` | `10.0` |
-| `--dimse-timeout` | `dimse_timeout` | `30.0` |
-| `--max-pdu` | `max_pdu` | `16382` |
-| `--format` / `-f` | `log_format` | `text` |
-| `--echo` | — | `false` |
-
-### Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| `0` | all attempted Instances succeeded or warned; or Echo succeeded |
-| `1` | any Instance/Study failed, empty Catalog, Echo failure, or runtime error |
-| `2` | invalid CLI/TOML configuration or usage |
-| `130` | interrupted/cancelled before completion |
-
-## Project layout
-
-```
 src/
-├── probe_lite/          Probe Lite CLI receiver
-├── sender_lite/         Sender Lite CLI sender
-├── lumora_lite_common/  Shared helpers (logger, signals, validators, UIDs)
-└── lumora_probe/        Lumora Probe application (incremental build)
+├── lumora_probe/        Lumora Probe application, module-first slices
+├── probe_lite/          Probe Lite receiver
+├── sender_lite/         Sender Lite sender
+└── lumora_lite_common/  Shared Lite logger, signals, validators, and UID checks
+
+docs/
+├── adr/                 Authoritative architecture decisions
+├── architecture-baseline/  Product and architecture baseline
+├── generated/           OpenAPI, AsyncAPI, event, and condition artifacts
+├── guides/              Operator, deployment, privacy, troubleshooting, and handover guides
+├── probe_lite/          Probe Lite documentation
+├── sender_lite/         Sender Lite documentation
+└── planning/            Historical plans, completion reports, and release evidence
 ```
 
-Lumora Probe and all three Lite packages ship in a single wheel (`lumora-probe`). Python import
-names are `probe_lite`, `sender_lite`, and `lumora_lite_common` (no `src.` prefix).
+Start at [the documentation index](docs/README.md). Architecture decisions in `docs/adr/`
+precede the architecture baseline and planning documents when they conflict.
 
-## Shared library
+## Architecture and security posture
 
-Both Lite tools share `src/lumora_lite_common`, which holds the
-genuinely duplicated helpers: the event-logger engine (an `EventLogger` base class that
-`ProbeLogger` and `SenderLogger` extend), portable signal install/restore, config leaf
-validators (port, max PDU, log format, AE title), and DICOM UID validation. See
-ADR-0028 for the scope and the pragmatic-OOP boundary. This is internal to the Lite
-tools and does not share code with `src/lumora_probe/`.
+Lumora Probe is a single-process application with an asyncio event bus, threaded
+pynetdicom boundary, SQLite Core storage, and server-side DICOM decoding. Captures are
+authoritative evidence; the derived index is rebuildable. Plugins are trusted in-process
+code, not sandboxed extensions.
 
-## Verify locally
+Important v1 boundaries:
 
-```console
-python -m pytest -q
-python -m ruff check .
-python -m ruff format --check .
-```
+- No authentication, RBAC, or TLS termination.
+- Non-loopback exposure is denied unless explicitly acknowledged.
+- C-MOVE sub-operations, PCAP import, remote collectors, byte-exact mock-peer replay,
+  Prometheus exposition, and PS3.15 de-identification remain deferred.
+- The application is for engineering observability, not clinical use.
 
-CI runs these checks on CPython 3.13 for Ubuntu, macOS, and Windows.
+See [operator guide](docs/guides/operator-guide.md),
+[deployment topologies](docs/guides/deployment-topologies.md),
+[privacy posture](docs/guides/privacy-and-compliance-posture.md), and
+[known limitations](docs/guides/known-limitations.md).
 
-## DICOM networking
+## License
 
-The Phase 10 DICOM plane uses pynetdicom and binds `127.0.0.1:11112` by default. The DICOM
-bind interface is independent of the HTTP interface:
-
-| Setting | Environment variable | Default |
-| --- | --- | --- |
-| `dicom_bind_host` | `LUMORA_DICOM_BIND_HOST` | `127.0.0.1` |
-| `dicom_port` | `LUMORA_DICOM_PORT` | `11112` |
-
-Non-loopback DICOM or HTTP binds require the explicit `allow_unauthenticated_network` gate.
-Association lifecycle events use the canonical bus ingress; PDU traces are written separately
-from domain events. See `docs/planning/phase-10-completion-report.md` for relay modes and
-known limitations.
-
-## Lumora Probe application
-
-The broader Lumora Probe application is being implemented incrementally under
-`src/lumora_probe/`. Its module-first structure follows ADR-0012: each application slice
-owns `domain`, `service`, `repository`, `api`, and `contracts` boundaries. Import-linter
-contracts run with the development quality gates and prevent slices from reaching into
-another slice's internals.
-
-The Lite command-line tools remain separate packages under `src/`. Their shared helpers
-stay in `src/lumora_lite_common` under ADR-0028 and do not cross into `src/lumora_probe/`.
+See [LICENSE](LICENSE).

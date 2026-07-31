@@ -1,10 +1,11 @@
 # Lumora Sender Lite — Detailed Implementation Plan
 
-- **Status:** Approved for implementation
+- **Status:** Implemented in v0.1.0; see [Sender Lite guide](README.md)
 - **Plan date:** 2026-07-28
 - **Target repository:** `lumora-probe`
 - **Implementation target:** a less-capable coding model
-- **Instruction:** implement only this plan; do not broaden scope
+- **Historical instruction:** implementation was constrained to this plan; current behavior is
+  documented in [README.md](README.md) and the source package.
 
 ## 1. Objective
 
@@ -955,7 +956,7 @@ python -m zipfile -l dist/*.whl
 Then perform a manual smoke test:
 
 ```console
-probe-lite --output ./received --port 11112
+probe-lite --output ./storage/inbox --port 11112
 sender-lite --input ./sample-dicom --host 127.0.0.1 --port 11112 --called-ae PROBE_LITE
 sender-lite --echo --host 127.0.0.1 --port 11112 --called-ae PROBE_LITE
 ```

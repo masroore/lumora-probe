@@ -10,7 +10,7 @@ Two related codebases in one distribution (`lumora-probe`, CPython 3.13+, `uv` +
    `src/sender_lite/` (one-shot C-STORE/C-ECHO sender), sharing `src/lumora_lite_common/`.
    Entry points: `probe-lite`, `sender-lite` (also `python -m probe_lite` / `python -m sender_lite`).
    Vocabulary for these tools lives in `CONTEXT.md` (Catalog, Study Batch, Study Association, etc.) — use it.
-2. **Lumora Probe application** (being built incrementally, currently through Phase 07):
+2. **Lumora Probe application** (Phase 20 complete; v0.1.0 GA signed off July 31, 2026):
    `src/lumora_probe/`, module-first slices per ADR-0012. See `CLAUDE.md` for the full
    architecture briefing — it is required reading before touching `src/`.
 
@@ -83,7 +83,7 @@ Event system (`shared/events.py`, `core/bus.py`):
 
 ## Documentation governance (do not skip)
 
-Three layers, in precedence order: `docs/adr/` (authoritative, 29 ADRs, index in
+Three layers, in precedence order: `docs/adr/` (authoritative, 32 ADRs, index in
 `docs/adr/README.md`) > `docs/architecture-baseline/` (21 numbered docs) > `docs/planning/`.
 
 - **Deviating from an accepted decision requires a new ADR before the code change** —
@@ -92,9 +92,9 @@ Three layers, in precedence order: `docs/adr/` (authoritative, 29 ADRs, index in
   plugin install over API, Prometheus exposition, PS3.15 de-identification, ...) — do not implement them.
 - Contract changes regenerate their artifact (event catalog, etc.) and new domain terms go in
   `docs/architecture-baseline/19-glossary.md`.
-- `CLAUDE.md`'s "Status: documentation-only" note is stale — implementation has begun;
-  check `docs/planning/phase-*-completion-report.md` for what exists. It also says the
-  package is `lumora/`; the actual package is `src/lumora_probe/`.
+- `CLAUDE.md` contains the architecture briefing and current v0.1.0 GA status. The
+  implemented application package is `src/lumora_probe/`; older conceptual `lumora/` paths
+  in historical ADRs and plans are not filesystem paths.
 
 ## Style conventions observed
 
