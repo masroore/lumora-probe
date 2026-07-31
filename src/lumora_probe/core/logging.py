@@ -13,7 +13,19 @@ import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars, unbind_contextvars
 
 _SENSITIVE_KEYS = frozenset(
-    {"password", "secret", "token", "authorization", "api_key", "access_key", "private_key"}
+    {
+        "password",
+        "secret",
+        "token",
+        "authorization",
+        "api_key",
+        "access_key",
+        "private_key",
+        "credential",
+        "certificate",
+        "client_secret",
+        "refresh_token",
+    }
 )
 _EVENT_MIRROR_KEYS = frozenset({"event", "envelope", "payload", "event_payload", "event_json"})
 

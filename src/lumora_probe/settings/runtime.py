@@ -9,12 +9,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lumora_probe.core.errors import ConfigurationError, RestartRequiredError, SettingLockedError
 from lumora_probe.shared.events import EventClock, EventEnvelope, EventIdGenerator, EventOrigin
+
+ThemeName = Literal["system", "light", "dark", "high-contrast"]
+THEME_VALUES: tuple[ThemeName, ...] = ("system", "light", "dark", "high-contrast")
 
 
 class ConfigurationEventPublisher(Protocol):
@@ -40,7 +43,7 @@ class RuntimeSettings(BaseModel):
     ae_allowlist: tuple[str, ...] = ()
     ip_allowlist: tuple[str, ...] = ()
     read_only: bool = False
-    theme: str = "system"
+    theme: ThemeName = "system"
     rule_set_toggles: dict[str, bool] = Field(default_factory=dict)
 
 
@@ -265,8 +268,18 @@ class RuntimeSettingsStore:
 
 def _redact_setting_value(name: str, value: Any) -> Any:
     """Redact values whose setting names conventionally carry secrets."""
-    lowered = name.casefold()
-    sensitive_tokens = ("password", "secret", "token", "credential", "private_key")
+    lowered = name.casefold().replace("-", "_")
+    sensitive_tokens = (
+        "password",
+        "secret",
+        "token",
+        "credential",
+        "private_key",
+        "api_key",
+        "access_key",
+        "authorization",
+        "certificate",
+    )
     if any(token in lowered for token in sensitive_tokens):
         return "[REDACTED]"
     return value
