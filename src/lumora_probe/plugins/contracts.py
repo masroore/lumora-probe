@@ -129,6 +129,23 @@ class PluginDiagnostic:
     budget_ns: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PluginHookObservation:
+    """Timing fact emitted for every implemented hook, including successful calls."""
+
+    plugin_id: str
+    hook: str
+    elapsed_ns: int
+    failed: bool = False
+    budget_breach: bool = False
+
+
+class HookObservationSink(Protocol):
+    """Application-owned observer for plugin timing metrics."""
+
+    def __call__(self, observation: PluginHookObservation) -> None: ...
+
+
 class DiagnosticSink(Protocol):
     """Application-owned sink for plugin diagnostics."""
 

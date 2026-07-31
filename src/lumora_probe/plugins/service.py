@@ -15,13 +15,15 @@ from .contracts import (
     DiagnosticSink,
     EventDTO,
     FindingDTO,
+    HookObservationSink,
     PluginDiagnostic,
     PluginHookName,
+    PluginHookObservation,
     ReportContextDTO,
     ReportContributionDTO,
     SettingDTO,
 )
-from .domain import PluginManifest, PluginPolicy, PluginRecord, PluginStatus
+from .domain import PluginHealth, PluginManifest, PluginPolicy, PluginRecord, PluginStatus
 from .repository import PluginRepository
 
 
@@ -49,11 +51,13 @@ class PluginService:
         policy: PluginPolicy | None = None,
         clock: MonotonicClock | None = None,
         diagnostic_sink: DiagnosticSink | None = None,
+        timing_sink: HookObservationSink | None = None,
     ) -> None:
         self.repository = repository
         self.policy = policy or PluginPolicy()
         self.clock = clock
         self.diagnostic_sink = diagnostic_sink
+        self.timing_sink = timing_sink
         self._manager = build_plugin_manager()
         self._plugins: dict[str, Any] = {}
         self._records: dict[str, PluginRecord] = {}
@@ -78,6 +82,23 @@ class PluginService:
         """Return deterministic plugin health and trust metadata."""
 
         return tuple(self._records[key] for key in sorted(self._records))
+
+    def health(self) -> PluginHealth:
+        """Return aggregate plugin-host health and name failing plugins."""
+        records = self.records()
+        unhealthy = tuple(
+            record.manifest.plugin_id for record in records if record.health_state == "unhealthy"
+        )
+        degraded = tuple(
+            record.manifest.plugin_id for record in records if record.health_state == "degraded"
+        )
+        ready = not unhealthy
+        detail = None
+        if unhealthy:
+            detail = f"unhealthy plugins: {', '.join(unhealthy)}"
+        elif degraded:
+            detail = f"degraded plugins: {', '.join(degraded)}"
+        return PluginHealth("plugin-host", ready, True, detail)
 
     def inspect(self, plugin_id: str) -> PluginRecord:
         """Return one plugin record."""
@@ -212,9 +233,19 @@ class PluginService:
                 elapsed_ns = end - start
             except Exception as error:  # noqa: BLE001 - plugin code is an isolation boundary
                 end = self.clock.monotonic_ns() if self.clock is not None else start
+                if self.timing_sink is not None:
+                    self.timing_sink(
+                        PluginHookObservation(current_id, hook.value, end - start, failed=True)
+                    )
                 self._fail(current_id, hook, error, elapsed_ns=end - start)
                 continue
             if elapsed_ns > self.policy.hook_budget_ns:
+                if self.timing_sink is not None:
+                    self.timing_sink(
+                        PluginHookObservation(
+                            current_id, hook.value, elapsed_ns, budget_breach=True
+                        )
+                    )
                 self._fail(
                     current_id,
                     hook,
@@ -223,6 +254,8 @@ class PluginService:
                     budget_breach=True,
                 )
             else:
+                if self.timing_sink is not None:
+                    self.timing_sink(PluginHookObservation(current_id, hook.value, elapsed_ns))
                 self._update_record(current_id, last_elapsed_ns=elapsed_ns)
             if plugin_id is not None:
                 return result

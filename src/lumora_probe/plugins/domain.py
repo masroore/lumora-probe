@@ -77,6 +77,7 @@ class PluginRecord:
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-compatible plugin inspection data."""
 
+        state = self.health_state
         return {
             **self.manifest.as_dict(),
             "status": self.status.value,
@@ -85,7 +86,35 @@ class PluginRecord:
             "last_elapsed_ns": self.last_elapsed_ns,
             "trusted_code": True,
             "capabilities_enforced": False,
+            "health": {
+                "state": state,
+                "ready": state in {"healthy", "disabled"},
+                "alive": state != "unhealthy",
+            },
         }
+
+    @property
+    def health_state(self) -> str:
+        """Map plugin lifecycle metadata to an operator-facing health state."""
+        if self.status is PluginStatus.FAILED:
+            return "unhealthy"
+        if self.failure_count > 0:
+            return "degraded"
+        if self.status is PluginStatus.DISABLED:
+            return "disabled"
+        if self.status in {PluginStatus.LOADED, PluginStatus.ENABLED}:
+            return "healthy"
+        return "unhealthy"
+
+
+@dataclass(frozen=True, slots=True)
+class PluginHealth:
+    """Structural health result used by composition roots."""
+
+    name: str
+    ready: bool
+    alive: bool
+    detail: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import inspect
+from collections.abc import Awaitable, Mapping, Sequence
 from typing import Any, Protocol
 
 from fastapi import APIRouter, HTTPException
@@ -15,7 +16,9 @@ class PluginProvider(Protocol):
 
     def inspect(self, plugin_id: str) -> Mapping[str, Any]: ...
 
-    def set_enabled(self, plugin_id: str, enabled: bool) -> Mapping[str, Any]: ...
+    def set_enabled(
+        self, plugin_id: str, enabled: bool
+    ) -> Mapping[str, Any] | Awaitable[Mapping[str, Any]]: ...
 
 
 class EmptyPluginProvider:
@@ -53,19 +56,20 @@ def create_plugin_router(provider: PluginProvider | None = None) -> APIRouter:
             raise HTTPException(status_code=404, detail="Plugin not found") from error
 
     @router.post("/{plugin_id}/enable")
-    def enable_plugin(plugin_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
-        return _set_enabled(active_provider, plugin_id, True)
+    async def enable_plugin(plugin_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return await _set_enabled(active_provider, plugin_id, True)
 
     @router.post("/{plugin_id}/disable")
-    def disable_plugin(plugin_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
-        return _set_enabled(active_provider, plugin_id, False)
+    async def disable_plugin(plugin_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        return await _set_enabled(active_provider, plugin_id, False)
 
     return router
 
 
-def _set_enabled(provider: PluginProvider, plugin_id: str, enabled: bool) -> dict[str, Any]:
+async def _set_enabled(provider: PluginProvider, plugin_id: str, enabled: bool) -> dict[str, Any]:
     try:
-        record = dict(provider.set_enabled(plugin_id, enabled))
+        result = provider.set_enabled(plugin_id, enabled)
+        record = dict(await result if inspect.isawaitable(result) else result)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Plugin not found") from error
     return {"plugin": record, "restart_required": True}
