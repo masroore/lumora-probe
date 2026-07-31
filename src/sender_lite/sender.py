@@ -11,6 +11,8 @@ from typing import Any
 
 from pydicom import dcmread
 
+from lumora_dicom_common.constants import DICOM_SUCCESS_STATUS
+
 from .catalog import CatalogInstance, StudyBatch
 from .config import Config
 from .log import SenderLogger
@@ -124,7 +126,7 @@ class Sender:
             response = assoc.send_c_echo()
             duration = time.monotonic() - started
             status_code = _read_status(response)
-            success = status_code == 0x0000
+            success = status_code == DICOM_SUCCESS_STATUS
             if assoc.is_established:
                 assoc.release()
             return EchoResult(
@@ -361,7 +363,7 @@ class Sender:
                                 reason="association_lost",
                             )
                         continue
-                    if status_code == 0x0000:
+                    if status_code == DICOM_SUCCESS_STATUS:
                         self.logger.info(
                             "instance_sent",
                             **_instance_fields(inst),

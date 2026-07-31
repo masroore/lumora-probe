@@ -10,6 +10,8 @@ ADR-0028.
 
 from __future__ import annotations
 
+from lumora_dicom_common.identifiers import inspect_ae_title
+
 MIN_PORT = 1
 MAX_PORT = 65535
 MIN_MAX_PDU = 1
@@ -44,9 +46,8 @@ def validate_ae_title(value: str, name: str) -> None:
     human label (for example ``"AE title"`` or ``"calling-ae"``), matching the
     wording each tool already produced.
     """
-    try:
-        encoded = value.encode("ascii")
-    except UnicodeEncodeError as exc:
-        raise ValueError(f"{name} must contain only ASCII characters") from exc
-    if not MIN_AE_BYTES <= len(encoded) <= MAX_AE_BYTES:
+    inspection = inspect_ae_title(value)
+    if inspection.reason == "non_ascii":
+        raise ValueError(f"{name} must contain only ASCII characters")
+    if inspection.reason == "invalid_length":
         raise ValueError(f"{name} must be 1 to 16 ASCII characters")

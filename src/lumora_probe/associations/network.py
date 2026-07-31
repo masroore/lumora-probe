@@ -13,13 +13,17 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Protocol, cast
 
+from lumora_dicom_common.constants import (
+    DEFAULT_DICOM_MAX_PDU,
+    DEFAULT_DICOM_PORT,
+    DICOM_SUCCESS_STATUS,
+)
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
 from lumora_probe.shared.value_objects import AETitle
 
-DICOM_SUCCESS = 0x0000
-DEFAULT_DICOM_PORT = 11112
-DEFAULT_MAX_PDU = 16_382
+DICOM_SUCCESS = DICOM_SUCCESS_STATUS
+DEFAULT_MAX_PDU = DEFAULT_DICOM_MAX_PDU
 
 
 class AssociationClock(Protocol):

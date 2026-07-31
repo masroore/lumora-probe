@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from lumora_dicom_common.constants import DEFAULT_DICOM_MAX_PDU, DEFAULT_DICOM_PORT
 from lumora_lite_common.config_validators import (
     validate_ae_title,
     validate_log_format,
@@ -14,10 +15,10 @@ from lumora_lite_common.config_validators import (
     validate_port,
 )
 
-DEFAULT_PORT = 11112
+DEFAULT_PORT = DEFAULT_DICOM_PORT
 DEFAULT_AE_TITLE = "PROBE_LITE"
 DEFAULT_OUTPUT = Path("storage/inbox")
-DEFAULT_MAX_PDU = 16382
+DEFAULT_MAX_PDU = DEFAULT_DICOM_MAX_PDU
 
 
 @dataclass(frozen=True, slots=True)

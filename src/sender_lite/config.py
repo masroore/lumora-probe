@@ -9,6 +9,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from lumora_dicom_common.constants import DEFAULT_DICOM_MAX_PDU, DEFAULT_DICOM_PORT
 from lumora_lite_common.config_validators import (
     validate_ae_title,
     validate_log_format,
@@ -17,13 +18,13 @@ from lumora_lite_common.config_validators import (
 )
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 11112
+DEFAULT_PORT = DEFAULT_DICOM_PORT
 DEFAULT_CALLING_AE = "SENDER_LITE"
 DEFAULT_CALLED_AE = "PROBE_LITE"
 DEFAULT_STUDY_DELAY = 1.0
 DEFAULT_CONNECT_TIMEOUT = 10.0
 DEFAULT_DIMSE_TIMEOUT = 30.0
-DEFAULT_MAX_PDU = 16382
+DEFAULT_MAX_PDU = DEFAULT_DICOM_MAX_PDU
 DEFAULT_LOG_FORMAT = "text"
 
 DEFAULT_INPUT = Path("storage/outbox")

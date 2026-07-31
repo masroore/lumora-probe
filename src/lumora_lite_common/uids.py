@@ -18,8 +18,9 @@ ADR-0028.
 
 from __future__ import annotations
 
-import re
 from typing import Literal
+
+from lumora_dicom_common.identifiers import inspect_uid
 
 #: Stable, generic reason categories for :func:`validate_uid`. Callers map these
 #: to their own reason codes (Sender) or treat any failure uniformly (Probe).
@@ -29,60 +30,20 @@ REASON_INVALID = "invalid"
 
 UidReason = Literal["missing", "multi_valued", "invalid"]
 
-_MAX_UID_LENGTH = 64
-# DICOM UI VR shape: numeric org root plus one or more numeric suffix segments.
-_UID_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
-_pydicom_uid = None
-
-
-def _load_uid():
-    """Return pydicom's ``UID`` class, or ``None`` if pydicom is unavailable."""
-    global _pydicom_uid
-    if _pydicom_uid is None:
-        try:
-            from pydicom.uid import UID as _pydicom_uid
-        except ImportError:
-            _pydicom_uid = False
-    return _pydicom_uid or None
+_MULTI_VALUE_TYPE_NAME = "MultiValue"
 
 
 def validate_uid(value: object) -> tuple[str | None, UidReason | None]:
-    """Validate a UID-valued attribute.
-
-    Accepts raw strings, pydicom ``DataElement`` (unwraps ``.value``), and
-    detects pydicom ``MultiValue``. Returns ``(uid_str, None)`` on success or
-    ``(None, reason)`` on failure, where ``reason`` is one of the
-    :data:`REASON_*` categories.
-    """
+    """Validate a UID-valued attribute while preserving Lite reason categories."""
     if value is None:
         return None, REASON_MISSING
-    # pydicom DataElement: unwrap .value
     if hasattr(value, "value"):
         value = value.value
-    # Detect multi-valued (pydicom MultiValue)
-    if isinstance(value, list) or type(value).__name__ == "MultiValue":
+    if isinstance(value, list) or type(value).__name__ == _MULTI_VALUE_TYPE_NAME:
         return None, REASON_MULTI_VALUED
-    try:
-        text = str(value)
-    except (TypeError, ValueError):
-        return None, REASON_INVALID
-    if not text:
-        return None, REASON_MISSING
 
-    uid_cls = _load_uid()
-    if uid_cls is not None:
-        try:
-            uid = uid_cls(text)
-        except (TypeError, ValueError):
-            return None, REASON_INVALID
-        if not uid.is_valid or len(uid) > _MAX_UID_LENGTH:
-            return None, REASON_INVALID
-        return str(uid), None
-
-    # Regex fallback (pydicom unavailable): same shape + length rule.
-    if len(text) > _MAX_UID_LENGTH or not _UID_PATTERN.fullmatch(text):
-        return None, REASON_INVALID
-    return text, None
+    result = inspect_uid(value)
+    return result.value, result.reason
 
 
 def is_valid_uid(value: object) -> bool:

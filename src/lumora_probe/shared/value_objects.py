@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .errors import domain_invariant
+from lumora_dicom_common.identifiers import inspect_ae_title, inspect_uid
 
-_UID_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
-_MAX_UID_LENGTH = 64
+from .errors import domain_invariant
 
 
 def _as_uid(value: DICOMUID | str, *, field: str = "uid") -> DICOMUID:
@@ -35,13 +33,10 @@ class AETitle:
                 field="value",
                 value=self.value,
             )
-        try:
-            encoded = self.value.encode("ascii")
-        except UnicodeEncodeError as exc:
-            raise domain_invariant(
-                "AE title must contain only ASCII characters", field="value"
-            ) from exc
-        if not 1 <= len(encoded) <= 16:
+        inspection = inspect_ae_title(self.value)
+        if inspection.reason == "non_ascii":
+            raise domain_invariant("AE title must contain only ASCII characters", field="value")
+        if inspection.reason == "invalid_length":
             raise domain_invariant(
                 "AE title must be 1 to 16 ASCII bytes", field="value", value=self.value
             )
@@ -57,13 +52,8 @@ class DICOMUID:
     value: str
 
     def __post_init__(self) -> None:
-        components = self.value.split(".") if type(self.value) is str else []
-        if (
-            type(self.value) is not str
-            or len(self.value) > _MAX_UID_LENGTH
-            or _UID_PATTERN.fullmatch(self.value) is None
-            or any(len(component) > 1 and component.startswith("0") for component in components)
-        ):
+        inspection = inspect_uid(self.value) if type(self.value) is str else None
+        if inspection is None or inspection.reason is not None:
             raise domain_invariant(
                 "UID must be dotted decimal digits and at most 64 characters",
                 field="value",

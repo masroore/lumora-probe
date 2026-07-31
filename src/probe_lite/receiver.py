@@ -8,11 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from lumora_dicom_common.constants import DICOM_SUCCESS_STATUS
+
 from .config import Config
 from .log import ProbeLogger
 from .storage import InvalidDatasetError, Storage, StorageError
 
-SUCCESS = 0x0000
+SUCCESS = DICOM_SUCCESS_STATUS
 OUT_OF_RESOURCES = 0xA700
 DATASET_DOES_NOT_MATCH_SOP_CLASS = 0xA900
 CANNOT_UNDERSTAND = 0xC000

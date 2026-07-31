@@ -44,6 +44,7 @@ packages = [
     "src/probe_lite",
     "src/sender_lite",
     "src/lumora_lite_common",
+    "src/lumora_dicom_common",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
