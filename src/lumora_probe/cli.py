@@ -91,6 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(os.environ.get("LUMORA_DATA_DIR", "~/.local/share/lumora-probe")),
     )
     install.set_defaults(handler=_run_plugin_install)
+
+    serve = subparsers.add_parser("serve", help="run the Lumora Probe HTTP application")
+    serve.add_argument(
+        "--trust-network", action="store_true", help="acknowledge non-loopback exposure"
+    )
+    serve.add_argument("--host", help="override the configured HTTP bind host")
+    serve.add_argument("--port", type=int, help="override the configured HTTP port")
+    serve.set_defaults(handler=_run_serve)
     return parser
 
 
@@ -101,12 +109,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ApiClientError, OSError, ValueError) as error:
         print(json.dumps({"error": str(error)}), file=sys.stderr)
         return 1
+    if isinstance(result, int):
+        return result
     print(json.dumps(result, sort_keys=True))
     return 0
 
 
 def _run_health(args: argparse.Namespace) -> dict[str, Any]:
     return ApiClient(args.server).get("/api/v1/health")
+
+
+def _run_serve(args: argparse.Namespace) -> int:
+    """Start the production composition root; this is intentionally the only server entry."""
+    if args.trust_network:
+        os.environ["LUMORA_ALLOW_UNAUTHENTICATED_NETWORK"] = "true"
+    if args.host:
+        os.environ["LUMORA_BIND_HOST"] = args.host
+    if args.port:
+        os.environ["LUMORA_PORT"] = str(args.port)
+    import uvicorn
+
+    from lumora_probe.bootstrap import build_production_app
+    from lumora_probe.core.config import load_startup_config
+
+    config, _sources = load_startup_config()
+    uvicorn.run(build_production_app(config), host=config.bind_host, port=config.port)
+    return 0
 
 
 def _run_captures_list(args: argparse.Namespace) -> dict[str, Any]:
@@ -132,6 +160,23 @@ def _run_plugin_install(args: argparse.Namespace) -> dict[str, Any]:
     destination_root.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, destination)
     PluginRepository(destination_root).read_manifest(destination)
+    from lumora_probe.core.audit import AuditCategory, AuditLog
+    from lumora_probe.core.clock import SystemClock
+    from lumora_probe.core.config import StartupConfig
+    from lumora_probe.core.paths import DataPaths
+    from lumora_probe.core.storage import StorageDatabases
+
+    paths = DataPaths.from_config(StartupConfig(data_dir=args.data_dir))
+    paths.initialise()
+    databases = StorageDatabases.from_paths(paths)
+    databases.app.initialise()
+    AuditLog(databases.app).append_sync(
+        AuditCategory.PLUGIN_INSTALLATION,
+        entity_type="plugin",
+        entity_id=manifest.plugin_id,
+        occurred_at=SystemClock().now(),
+        payload={"path": str(destination), "version": manifest.version},
+    )
     return {
         "installed": manifest.plugin_id,
         "path": str(destination),
