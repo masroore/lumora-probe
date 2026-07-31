@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from lumora_probe.plugins.contracts import AnalysisContextDTO, EventDTO, FindingDTO
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
 from .domain import (
@@ -173,6 +174,62 @@ class RuleEngine:
                 if not set(finding.cited_sequences).issubset(sequences):
                     raise ValueError("finding citations must resolve to observed event sequences")
                 findings.append(finding)
+        return tuple(
+            sorted(
+                findings,
+                key=lambda finding: (
+                    finding.rule_id,
+                    finding.rule_version,
+                    finding.cited_sequences,
+                    finding.explanation,
+                ),
+            )
+        )
+
+    def evaluate_plugin(
+        self,
+        analyzer: Callable[[AnalysisContextDTO], Iterable[FindingDTO]],
+        events: Iterable[EventEnvelope],
+    ) -> tuple[Finding, ...]:
+        """Evaluate a public-SDK analyzer and apply the same evidence validation."""
+
+        observed = _observed_events(events)
+        context = AnalysisContextDTO(
+            events=tuple(
+                EventDTO(
+                    event_id=event.event_id,
+                    event_name=event.event_name,
+                    event_version=event.event_version,
+                    sequence=event.sequence,
+                    aggregate_type=event.aggregate_type,
+                    aggregate_id=event.aggregate_id,
+                    producer=event.producer,
+                    payload=event.payload,
+                    origin=event.origin.value,
+                )
+                for event in observed
+            )
+        )
+        sequences = {event.sequence for event in observed if event.sequence is not None}
+        findings: list[Finding] = []
+        for contribution in analyzer(context):
+            if type(contribution) is not FindingDTO:
+                raise TypeError("plugin analyzers must return FindingDTO values")
+            if not set(contribution.cited_sequences).issubset(sequences):
+                raise ValueError(
+                    "plugin finding citations must resolve to observed event sequences"
+                )
+            findings.append(
+                Finding(
+                    rule_id=contribution.rule_id,
+                    rule_version=contribution.rule_version,
+                    rule_set_version=contribution.rule_set_version,
+                    confidence=contribution.confidence,
+                    cited_sequences=contribution.cited_sequences,
+                    explanation=contribution.explanation,
+                    next_steps=contribution.next_steps,
+                )
+            )
         return tuple(
             sorted(
                 findings,
