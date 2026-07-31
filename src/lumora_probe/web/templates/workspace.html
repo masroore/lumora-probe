@@ -6,6 +6,7 @@
     <meta name="description" content="Lumora Probe engineering investigation workspace">
     <title>{{ workspace.title }} · Lumora Probe</title>
     <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/vendor/tabulator.min.css">
   </head>
   <body class="workspace-shell">
     <a class="skip-link" href="#workspace-main">Skip to workspace</a>
@@ -22,15 +23,22 @@
         <a href="#live-monitor">Live Monitor</a>
         <a href="#captures">Captures</a>
         <a href="#studies">Studies</a>
+        <a href="#search">Search</a>
         <a href="#replay">Replay</a>
       </nav>
       <div class="toolbar-actions">
         <button class="button button-secondary" type="button" data-command-palette>
           <span aria-hidden="true">⌘K</span> Commands
         </button>
-        <button class="icon-button" type="button" data-theme-toggle aria-label="Toggle color theme">
-          <span aria-hidden="true">◐</span>
-        </button>
+        <label class="theme-control" for="theme-select">
+          <span class="sr-only">Color theme</span>
+          <select id="theme-select" data-theme-select aria-label="Color theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="high-contrast">High contrast</option>
+          </select>
+        </label>
       </div>
     </header>
 
@@ -248,6 +256,27 @@
       </div>
 
       <section class="bottom-dock" aria-label="Event and operational dock">
+        <details open id="search">
+          <summary><span>Search</span><span class="summary-meta" data-search-status>incremental results</span></summary>
+          <div class="dock-panel search-panel" id="search-panel" role="search" aria-label="Workspace search">
+            <div class="search-controls">
+              <label class="search-field" for="workspace-search">
+                <span class="sr-only">Search studies, series, instances, events, and logs</span>
+                <input id="workspace-search" type="search" placeholder="Search studies, series, instances, events, logs"
+                       autocomplete="off" data-search-input>
+              </label>
+              <fieldset class="search-kinds" data-search-kinds>
+                <legend class="sr-only">Result kinds</legend>
+                <label><input type="checkbox" value="studies" checked> Studies</label>
+                <label><input type="checkbox" value="series" checked> Series</label>
+                <label><input type="checkbox" value="instances" checked> Instances</label>
+                <label><input type="checkbox" value="events" checked> Events</label>
+                <label><input type="checkbox" value="logs" checked> Logs</label>
+              </fieldset>
+            </div>
+            <div data-search-table class="search-table" aria-live="polite"></div>
+          </div>
+        </details>
         <details open>
           <summary><span>Timeline</span><span class="summary-meta">ordered by sequence</span></summary>
           <div class="dock-panel timeline-panel" id="timeline-panel" role="log" aria-live="polite">
@@ -306,17 +335,68 @@
       </div>
     </div>
 
+    <script src="/static/vendor/tabulator.min.js" defer></script>
     <script src="/static/js/viewer.js" defer></script>
     <script src="/static/js/command-palette.js" defer></script>
+    <script src="/static/js/search-panel.js" defer></script>
     <script>
-      (() => {
+      document.addEventListener('DOMContentLoaded', () => {
         const frame = document.querySelector('.workspace-frame');
+        const themeSelect = document.querySelector('[data-theme-select]');
+        const root = document.documentElement;
+        const themeOrder = ['system', 'light', 'dark', 'high-contrast'];
+        const applyTheme = (value) => {
+          const theme = themeOrder.includes(value) ? value : 'system';
+          root.dataset.theme = theme;
+          if (themeSelect) themeSelect.value = theme;
+        };
+        applyTheme(root.dataset.theme || 'system');
+        themeSelect?.addEventListener('change', () => {
+          applyTheme(themeSelect.value);
+          fetch('/api/v1/settings', {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({theme: themeSelect.value}),
+          }).catch(() => {});
+        });
         if (window.LumoraCommandPalette) {
-          window.LumoraCommandPalette.createCommandPalette({
+          const palette = window.LumoraCommandPalette.createCommandPalette({
             root: document.body,
             onNavigate: (target) => {
+              if (target === 'theme') {
+                const current = themeSelect?.value || root.dataset.theme || 'system';
+                const next = themeOrder[(themeOrder.indexOf(current) + 1) % themeOrder.length];
+                applyTheme(next);
+                themeSelect?.focus();
+                return;
+              }
+              if (target === 'search') {
+                document.querySelector('#search')?.setAttribute('open', '');
+                document.querySelector('[data-search-input]')?.focus();
+                return;
+              }
+              if (target === 'timeline') {
+                document.querySelector('#timeline-panel')?.focus();
+                const first = document.querySelector('#timeline-panel [data-event-sequence], #timeline-panel .event-list li');
+                first?.focus?.();
+                first?.scrollIntoView({block: 'nearest'});
+                return;
+              }
               const anchor = document.querySelector(`[href="#${target}"]`);
               if (anchor) anchor.click();
+            },
+          });
+          document.querySelector('[data-command-palette]')?.addEventListener('click', () => {
+            palette.open();
+          });
+        }
+        if (window.LumoraSearchPanel) {
+          window.LumoraSearchPanel.createSearchPanel({
+            root: document.body,
+            fetchResults: async (url) => {
+              const response = await fetch(url);
+              if (!response.ok) throw new Error('Search request failed');
+              return response.json();
             },
           });
         }
@@ -330,10 +410,6 @@
             button.closest('.workspace-panel').classList.toggle('is-collapsed', !collapsed);
             button.closest('.workspace-panel').querySelector('[data-panel-body]').hidden = !collapsed;
           });
-        });
-        document.querySelector('[data-theme-toggle]').addEventListener('click', () => {
-          const root = document.documentElement;
-          root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
         });
         const metadataSearch = document.querySelector('[data-metadata-search]');
         const metadataPrivate = document.querySelector('[data-metadata-private]');
@@ -410,7 +486,7 @@
             }
           });
         });
-      })();
+      });
     </script>
   </body>
 </html>

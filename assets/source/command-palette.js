@@ -4,9 +4,10 @@ export function createCommandPalette({ root, onNavigate }) {
   const actions = [
     { id: "open-studies", label: "Open Studies", shortcut: "", run: () => onNavigate("studies") },
     { id: "open-captures", label: "Open Captures", shortcut: "", run: () => onNavigate("captures") },
+    { id: "open-search", label: "Open Search", shortcut: "", run: () => onNavigate("search") },
     { id: "focus-viewer", label: "Focus Viewer", shortcut: "", run: () => onNavigate("viewer") },
     { id: "focus-timeline", label: "Focus Timeline", shortcut: "", run: () => onNavigate("timeline") },
-    { id: "toggle-theme", label: "Toggle Theme", shortcut: "", run: () => onNavigate("theme") },
+    { id: "cycle-theme", label: "Cycle Theme", shortcut: "", run: () => onNavigate("theme") },
   ];
 
   let open = false;

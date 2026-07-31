@@ -53,6 +53,7 @@ from .plugin_routes import PluginProvider, create_plugin_router
 from .report_routes import CaptureSummaryProvider, ReportJobProvider, create_reports_router
 from .resources import ResourceStore
 from .retention import RetentionClock, RingBufferRetentionMap
+from .search_routes import LogSearchProvider, create_search_router
 from .security import SecurityMiddleware, SecurityPolicy
 from .settings_routes import SettingsProvider, create_settings_router
 from .study_routes import (
@@ -208,6 +209,7 @@ def create_app(
     alert_provider: AlertProvider | None = None,
     audit_provider: AuditProvider | None = None,
     security_audit_sink: Any | None = None,
+    log_search_provider: LogSearchProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -292,6 +294,14 @@ def create_app(
     )
     for router in create_projection_routers(projection_store):
         application.include_router(router, prefix=API_PREFIX)
+    application.include_router(
+        create_search_router(
+            projection_store=projection_store,
+            event_store=event_store,
+            log_provider=log_search_provider,
+        ),
+        prefix=API_PREFIX,
+    )
     application.include_router(create_association_router(association_store), prefix=API_PREFIX)
     application.include_router(create_event_router(event_store), prefix=API_PREFIX)
     application.include_router(create_operation_router(operation_registry), prefix=API_PREFIX)

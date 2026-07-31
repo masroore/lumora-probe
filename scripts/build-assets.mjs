@@ -54,6 +54,16 @@ await build({
   outfile: resolve(staticRoot, 'js/command-palette.js'),
   platform: 'browser',
 });
+await build({
+  entryPoints: [resolve(root, 'assets/source/search-panel.js')],
+  bundle: true,
+  format: 'iife',
+  globalName: 'LumoraSearchPanel',
+  minify: true,
+  sourcemap: false,
+  outfile: resolve(staticRoot, 'js/search-panel.js'),
+  platform: 'browser',
+});
 
 const copies = {
   'htmx.min.js': 'htmx.org/dist/htmx.min.js',
@@ -63,7 +73,9 @@ const copies = {
   'tabulator.min.css': 'tabulator-tables/dist/css/tabulator.min.css',
 };
 for (const [output, source] of Object.entries(copies)) {
-  await cp(resolve(root, 'node_modules', source), resolve(vendorRoot, output));
+  const sourcePath = resolve(root, 'node_modules', source);
+  await cp(sourcePath, resolve(vendorRoot, output));
+  await cp(sourcePath, resolve(staticRoot, 'vendor', output));
 }
 
 const packageNames = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies }).sort();

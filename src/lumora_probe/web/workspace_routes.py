@@ -25,6 +25,7 @@ _DEFAULT_WORKSPACE: dict[str, Any] = {
         {"label": "Live Monitor", "detail": "Associations and throughput", "active": False},
         {"label": "Captures", "detail": "Capture sessions", "active": False},
         {"label": "Studies", "detail": "Projection browser", "active": False},
+        {"label": "Search", "detail": "Studies, series, instances, events, logs", "active": False},
         {"label": "Replay", "detail": "Replay jobs", "active": False},
     ),
     "timeline": (),
