@@ -4,7 +4,7 @@ Guidance for AI agents working in this repository.
 
 ## What this repo is
 
-Two related codebases in one package (`lumora-probe-lite`, CPython 3.13+, `uv` + Hatchling):
+Two related codebases in one distribution (`lumora-probe`, CPython 3.13+, `uv` + Hatchling):
 
 1. **Lite CLI tools** (shipping): `src/probe_lite/` (DICOM C-STORE/C-ECHO receiver),
    `src/sender_lite/` (one-shot C-STORE/C-ECHO sender), sharing `src/lumora_lite_common/`.

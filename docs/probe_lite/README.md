@@ -9,7 +9,7 @@ local filesystem in a Study/Series/Instance hierarchy.
 > **all network interfaces**. Run it only on trusted, isolated networks.
 > (This matches the program's own help text and `ADR-0009` / `ADR-0010`.)
 
-Package: `lumora-probe-lite` · Version: `0.1.0` · Requires: **Python ≥ 3.13**
+Distribution: `lumora-probe` · Version: `0.1.0` · Requires: **Python ≥ 3.13**
 
 ---
 
