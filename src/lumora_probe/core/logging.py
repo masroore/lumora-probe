@@ -15,6 +15,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars, unbind_co
 _SENSITIVE_KEYS = frozenset(
     {"password", "secret", "token", "authorization", "api_key", "access_key", "private_key"}
 )
+_EVENT_MIRROR_KEYS = frozenset({"event", "envelope", "payload", "event_payload", "event_json"})
 
 
 def _redact(value: object) -> object:
@@ -65,6 +66,22 @@ def configure_logging(*, json_logs: bool = False, level: int = logging.INFO) -> 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
+
+
+def log_operational(
+    logger: structlog.stdlib.BoundLogger,
+    message: str,
+    *,
+    level: str = "info",
+    **fields: Any,
+) -> None:
+    """Log an operational fact while rejecting full domain-event mirrors."""
+    mirrored = sorted(_EVENT_MIRROR_KEYS.intersection(fields))
+    if mirrored:
+        raise ValueError(f"operational logs must not mirror event fields: {', '.join(mirrored)}")
+    if level not in {"debug", "info", "warning", "error", "critical"}:
+        raise ValueError(f"unsupported operational log level: {level}")
+    getattr(logger, level)(message, **fields)
 
 
 def new_correlation_id() -> str:

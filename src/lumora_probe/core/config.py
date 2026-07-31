@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .errors import ConfigurationError, NetworkExposureError
@@ -43,6 +43,12 @@ class StartupConfig(BaseSettings):
     executor_workers: int = Field(default=4, ge=1, le=256)
     shutdown_grace_seconds: float = Field(default=10.0, gt=0, le=300)
     read_only: bool = False
+    plugin_errors_warning: int = Field(default=1, ge=0)
+    plugin_errors_critical: int = Field(default=3, ge=0)
+    budget_breaches_warning: int = Field(default=1, ge=0)
+    budget_breaches_critical: int = Field(default=3, ge=0)
+    event_drops_warning: int = Field(default=1, ge=0)
+    event_drops_critical: int = Field(default=10, ge=0)
 
     @field_validator("bind_host", "dicom_bind_host")
     @classmethod
@@ -73,6 +79,17 @@ class StartupConfig(BaseSettings):
             value = [value]
         return tuple(Path(item).expanduser() for item in value)
 
+    @model_validator(mode="after")
+    def validate_observability_thresholds(self) -> StartupConfig:
+        for warning, critical in (
+            (self.plugin_errors_warning, self.plugin_errors_critical),
+            (self.budget_breaches_warning, self.budget_breaches_critical),
+            (self.event_drops_warning, self.event_drops_critical),
+        ):
+            if critical < warning:
+                raise ValueError("observability critical thresholds must be >= warning thresholds")
+        return self
+
     def effective_captures_root(self) -> Path:
         return (self.captures_root or self.data_dir / "captures").resolve()
 
@@ -92,6 +109,12 @@ _ENV_NAMES: dict[str, str] = {
     "executor_workers": "LUMORA_EXECUTOR_WORKERS",
     "shutdown_grace_seconds": "LUMORA_SHUTDOWN_GRACE_SECONDS",
     "read_only": "LUMORA_READ_ONLY",
+    "plugin_errors_warning": "LUMORA_PLUGIN_ERRORS_WARNING",
+    "plugin_errors_critical": "LUMORA_PLUGIN_ERRORS_CRITICAL",
+    "budget_breaches_warning": "LUMORA_BUDGET_BREACHES_WARNING",
+    "budget_breaches_critical": "LUMORA_BUDGET_BREACHES_CRITICAL",
+    "event_drops_warning": "LUMORA_EVENT_DROPS_WARNING",
+    "event_drops_critical": "LUMORA_EVENT_DROPS_CRITICAL",
 }
 
 _DEFAULT_CONFIG_NAMES = ("lumora.toml", ".lumora.toml", "lumora.yaml", "lumora.yml")
