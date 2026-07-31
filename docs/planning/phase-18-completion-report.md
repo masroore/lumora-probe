@@ -5,6 +5,7 @@
 **Plan:** `docs/other/phase-18-implementation-plan.md` (Approved; Option B; Search S1;
 2,000-instance large study; npm audit report-only)
 **Governing phase:** `docs/planning/02-phase-plan.md` §Phase 18
+**Implementation tip:** `d2bc0a9`
 
 ## Completed work
 

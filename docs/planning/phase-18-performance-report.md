@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-31
 **Posture:** Option B (preserve ADR-0030 gates; measure unresolved dimensions)
-**Commit:** recorded at completion; see `phase-18-completion-report.md`
+**Commit:** `d2bc0a9` (Phase 18 close tip; see `phase-18-completion-report.md`)
 
 ## Environment identity
 
