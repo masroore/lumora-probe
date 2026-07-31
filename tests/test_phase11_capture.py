@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from lumora_probe.bootstrap import _CaptureEngineAdapter
 from lumora_probe.captures.format import CaptureFidelity, CapturePackage
 from lumora_probe.captures.service import CaptureEngine, RingBufferConfig, RingBufferService
 from lumora_probe.core.bus import EventBus
+from lumora_probe.core.errors import LifecycleError
+from lumora_probe.core.lifecycle import LifecycleManager
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 from tests.doubles.clock import ControllableClock
 from tests.doubles.ids import SeededIdGenerator
@@ -126,3 +129,47 @@ async def test_active_protocol_session_receives_pdu_and_object_sink_records(tmp_
     package = CapturePackage.open(tmp_path / "captures" / CAPTURE_ID)
     assert (package.path / "pdus.jsonl").read_text(encoding="utf-8").count("\n") == 1
     assert len(package.manifest.objects) == 1
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_shutdown_marks_active_captures_interrupted_on_deadline(
+    tmp_path: Path,
+) -> None:
+    """LifecycleManager.interrupt() seals open captures when the grace period expires."""
+    clock = ControllableClock(datetime(2026, 7, 29, tzinfo=UTC))
+    bus = EventBus(clock=clock)
+    engine = CaptureEngine(
+        tmp_path / "captures",
+        event_ingress=bus,
+        clock=clock,
+        id_generator=SeededIdGenerator([EVENT_ID, CORRELATION_ID]),
+    )
+    await engine.start(event_bus=bus)
+    await engine.start_session(capture_id=CAPTURE_ID, fidelity=CaptureFidelity.EVENTS)
+
+    original_drain = engine.drain
+
+    async def _hanging_drain() -> None:
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            # LifecycleManager cancels the timed-out drain before interrupting sessions.
+            engine.drain = original_drain  # type: ignore[method-assign]
+            raise
+
+    engine.drain = _hanging_drain  # type: ignore[method-assign]
+    lifecycle = LifecycleManager(shutdown_grace_seconds=0.05)
+    lifecycle.register(_CaptureEngineAdapter(engine, event_bus=bus))
+
+    try:
+        await lifecycle.start()
+        with pytest.raises(LifecycleError):
+            await lifecycle.shutdown()
+
+        manifest = CapturePackage.open(tmp_path / "captures" / CAPTURE_ID).manifest
+        assert manifest.state == "interrupted"
+        assert manifest.interruption_reason is not None
+    finally:
+        engine.drain = original_drain  # type: ignore[method-assign]
+        await engine.stop()
+        await bus.stop()

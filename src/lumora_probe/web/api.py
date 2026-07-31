@@ -15,12 +15,15 @@ from fastapi.staticfiles import StaticFiles
 
 from lumora_probe.core.errors import (
     ConfigurationError,
+    LifecycleError,
     LumoraError,
     PathSecurityError,
     RestartRequiredError,
     SettingLockedError,
     VersionMismatchError,
 )
+from lumora_probe.core.lifecycle import LifecycleManager
+from lumora_probe.core.logging import get_logger, log_operational
 
 from .association_routes import create_association_router
 from .audit_routes import AuditProvider, create_audit_router
@@ -210,6 +213,7 @@ def create_app(
     audit_provider: AuditProvider | None = None,
     security_audit_sink: Any | None = None,
     log_search_provider: LogSearchProvider | None = None,
+    lifecycle_manager: LifecycleManager | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -236,19 +240,38 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
         metrics_lifecycle = cast(Any, metrics_provider)
+        # Metrics attach always runs first — it has no lifecycle protocol.
         if metrics_provider is not None and hasattr(metrics_lifecycle, "attach"):
             await metrics_lifecycle.attach(active_bus)
+        # Replay startup sweep is a one-shot pre-lifecycle call, not a registered service.
         if replay_runtime is not None:
             await replay_runtime.startup()
-        if capture_engine is not None:
+        # Start the capture engine: managed path or legacy fallback.
+        if lifecycle_manager is not None:
+            await lifecycle_manager.start()
+        elif capture_engine is not None:
             await capture_engine.start(
                 event_bus=None if isinstance(active_bus, NullEventSource) else active_bus
             )
         try:
             yield
         finally:
-            if capture_engine is not None:
+            # Shutdown the capture engine: managed path guarantees drain + interrupt on
+            # deadline; legacy fallback preserves existing behaviour for tests.
+            if lifecycle_manager is not None:
+                try:
+                    await lifecycle_manager.shutdown()
+                except LifecycleError as error:
+                    log_operational(
+                        get_logger("lumora.lifecycle"),
+                        "shutdown grace period exceeded; active captures interrupted",
+                        level="warning",
+                        code=error.code,
+                        context=dict(error.context),
+                    )
+            elif capture_engine is not None:
                 await capture_engine.stop()
+            # These three always run regardless of which path was taken above.
             if metrics_provider is not None and hasattr(metrics_lifecycle, "detach"):
                 await metrics_lifecycle.detach()
             if not isinstance(active_bus, NullEventSource) and hasattr(active_bus, "stop"):

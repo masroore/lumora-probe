@@ -43,3 +43,13 @@ def test_empty_plugin_dir_returns_empty_list(tmp_path: Path) -> None:
     application = build_production_app(StartupConfig(data_dir=tmp_path))
 
     assert application.state.plugin_service.records() == ()
+
+
+def test_bootstrap_exposes_lifecycle_manager(tmp_path: Path) -> None:
+    """build_production_app wires a LifecycleManager onto application.state."""
+    from lumora_probe.core.lifecycle import LifecycleManager
+
+    application = build_production_app(StartupConfig(data_dir=tmp_path))
+
+    assert hasattr(application.state, "lifecycle_manager")
+    assert isinstance(application.state.lifecycle_manager, LifecycleManager)

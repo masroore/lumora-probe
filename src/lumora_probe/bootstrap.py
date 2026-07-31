@@ -7,13 +7,15 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
+from lumora_probe.captures.repository import CaptureRepository
+from lumora_probe.captures.service import CaptureEngine
 from lumora_probe.core.alerts import AlertRegistry, AlertThresholds
 from lumora_probe.core.audit import AuditCategory, AuditLog
 from lumora_probe.core.bus import EventBus
 from lumora_probe.core.clock import SystemClock
 from lumora_probe.core.config import StartupConfig
 from lumora_probe.core.health import HealthRegistry
-from lumora_probe.core.lifecycle import ServiceHealth
+from lumora_probe.core.lifecycle import LifecycleManager, ServiceHealth
 from lumora_probe.core.logging import get_logger, log_operational
 from lumora_probe.core.metrics import MetricRegistry
 from lumora_probe.core.paths import DataPaths
@@ -95,6 +97,37 @@ class AuditedSettingsProvider:
         return result
 
 
+class _CaptureEngineAdapter:
+    """Present CaptureEngine as a lifecycle.Service, closing over the event bus."""
+
+    name = "capture-engine"
+
+    def __init__(self, engine: Any, *, event_bus: Any | None) -> None:
+        self._engine = engine
+        self._bus = event_bus
+
+    async def start(self) -> None:
+        await self._engine.start(event_bus=self._bus)
+
+    async def stop(self) -> None:
+        await self._engine.stop()
+
+    async def stop_accepting(self) -> None:
+        await self._engine.stop_accepting()
+
+    async def drain(self) -> None:
+        await self._engine.drain()
+
+    async def flush(self) -> None:
+        await self._engine.flush()
+
+    async def interrupt(self, reason: str = "shutdown deadline") -> None:
+        await self._engine.interrupt(reason)
+
+    def health(self) -> ServiceHealth:
+        return self._engine.health()
+
+
 def build_production_app(config: StartupConfig) -> FastAPI:
     """Create the fully composed app using the canonical data root and production services."""
     paths = DataPaths.from_config(config)
@@ -104,6 +137,16 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     storage.initialise()
     audit = AuditLog(storage.app)
     bus = EventBus(clock=clock)
+    lifecycle = LifecycleManager(shutdown_grace_seconds=config.shutdown_grace_seconds)
+    capture_engine = CaptureEngine(
+        paths.captures,
+        ring_root=paths.ringbuffer,
+        event_ingress=bus,
+        capture_repository=CaptureRepository(storage, clock=clock),
+        clock=clock,
+        id_generator=bus.id_generator,
+    )
+    lifecycle.register(_CaptureEngineAdapter(capture_engine, event_bus=bus))
     metrics = MetricRegistry()
     alerts = AlertRegistry(metrics, _thresholds(config))
     health = HealthRegistry()
@@ -155,6 +198,8 @@ def build_production_app(config: StartupConfig) -> FastAPI:
         clock=clock,
         event_clock=clock,
         event_bus=cast(LiveEventSource, bus),
+        capture_engine=capture_engine,
+        lifecycle_manager=lifecycle,
         event_id_generator=bus.id_generator,
         health_provider=HealthRegistryAdapter(health),
         metrics_provider=metrics,
@@ -169,6 +214,7 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     application.state.paths = paths
     application.state.storage = storage
     application.state.event_bus = bus
+    application.state.lifecycle_manager = lifecycle
     application.state.health_registry = health
     application.state.metrics = metrics
     application.state.alerts = alerts
