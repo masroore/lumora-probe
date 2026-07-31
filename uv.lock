@@ -460,6 +460,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "jinja2" },
+    { name = "pluggy" },
     { name = "pydantic-settings" },
     { name = "pydicom" },
     { name = "pylibjpeg" },
@@ -487,6 +488,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116,<1.0" },
     { name = "jinja2", specifier = ">=3.1,<4.0" },
+    { name = "pluggy", specifier = ">=1.6,<2.0" },
     { name = "pydantic-settings", specifier = ">=2.10,<3.0" },
     { name = "pydicom", specifier = ">=3.0,<4.0" },
     { name = "pylibjpeg", specifier = ">=2.0,<3.0" },
