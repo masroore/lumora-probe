@@ -157,7 +157,7 @@ src/
 └── lumora_probe/        Lumora Probe application (incremental build)
 ```
 
-All three Lite packages ship in a single wheel (`lumora-probe-lite`). Python import
+Lumora Probe and all three Lite packages ship in a single wheel (`lumora-probe`). Python import
 names are `probe_lite`, `sender_lite`, and `lumora_lite_common` (no `src.` prefix).
 
 ## Shared library

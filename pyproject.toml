@@ -1,7 +1,7 @@
 [project]
-name = "lumora-probe-lite"
+name = "lumora-probe"
 version = "0.1.0"
-description = "Minimal DICOM C-STORE/C-ECHO receiver (Probe Lite) and sender (Sender Lite) for CLI use"
+description = "DICOM observability, troubleshooting, and engineering platform with Probe Lite utilities"
 readme = "README.md"
 requires-python = ">=3.13"
 classifiers = [
@@ -49,6 +49,17 @@ packages = [
 [tool.hatch.build.targets.wheel.force-include]
 "static" = "static"
 "assets/vendor" = "assets/vendor"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/**",
+    "static/**",
+    "assets/vendor/**",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "uv.lock",
+]
 
 [dependency-groups]
 dev = [

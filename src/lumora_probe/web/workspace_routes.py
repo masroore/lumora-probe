@@ -12,7 +12,12 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 WorkspaceData = Mapping[str, Any]
 TEMPLATE_ROOT = Path(__file__).with_name("templates")
-STATIC_ROOT = Path(__file__).resolve().parents[3] / "static"
+_MODULE_ROOT = Path(__file__).resolve()
+_STATIC_CANDIDATES = (
+    _MODULE_ROOT.parents[3] / "static",
+    _MODULE_ROOT.parents[2] / "static",
+)
+STATIC_ROOT = next((path for path in _STATIC_CANDIDATES if path.is_dir()), _STATIC_CANDIDATES[0])
 
 _DEFAULT_WORKSPACE: dict[str, Any] = {
     "title": "Investigation workspace",
