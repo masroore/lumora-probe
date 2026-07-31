@@ -23,6 +23,7 @@ from lumora_probe.core.errors import (
 )
 
 from .association_routes import create_association_router
+from .audit_routes import AuditProvider, create_audit_router
 from .bookmark_routes import BookmarkProvider, create_bookmark_router
 from .capture_routes import RetentionStateProvider, create_capture_router
 from .client_event_routes import (
@@ -33,6 +34,7 @@ from .client_event_routes import (
     create_client_event_router,
 )
 from .contracts import ErrorResponse
+from .dashboard_routes import create_dashboard_router
 from .event_routes import create_event_router
 from .frame_routes import FrameProvider, create_frame_router
 from .health_routes import HealthProvider, create_health_router
@@ -45,6 +47,7 @@ from .live import (
     create_live_router,
 )
 from .metadata_routes import MetadataProvider, create_metadata_router
+from .metric_routes import AlertProvider, MetricsProvider, create_metric_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .plugin_routes import PluginProvider, create_plugin_router
 from .report_routes import CaptureSummaryProvider, ReportJobProvider, create_reports_router
@@ -201,6 +204,10 @@ def create_app(
     bookmark_provider: BookmarkProvider | None = None,
     transfer_inspector: TransferInspectorService | None = None,
     plugin_provider: PluginProvider | None = None,
+    metrics_provider: MetricsProvider | None = None,
+    alert_provider: AlertProvider | None = None,
+    audit_provider: AuditProvider | None = None,
+    security_audit_sink: Any | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -226,6 +233,9 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
+        metrics_lifecycle = cast(Any, metrics_provider)
+        if metrics_provider is not None and hasattr(metrics_lifecycle, "attach"):
+            await metrics_lifecycle.attach(active_bus)
         if replay_runtime is not None:
             await replay_runtime.startup()
         if capture_engine is not None:
@@ -237,6 +247,10 @@ def create_app(
         finally:
             if capture_engine is not None:
                 await capture_engine.stop()
+            if metrics_provider is not None and hasattr(metrics_lifecycle, "detach"):
+                await metrics_lifecycle.detach()
+            if not isinstance(active_bus, NullEventSource) and hasattr(active_bus, "stop"):
+                await cast(Any, active_bus).stop()
             await live_hub.stop()
 
     application = FastAPI(
@@ -248,11 +262,14 @@ def create_app(
     application.add_exception_handler(LumoraError, lumora_error_handler)
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(RequestValidationError, validation_exception_handler)
-    application.add_middleware(SecurityMiddleware, policy=active_policy)
+    application.add_middleware(
+        SecurityMiddleware, policy=active_policy, audit_sink=security_audit_sink
+    )
     if STATIC_ROOT.is_dir():
         application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     application.include_router(api_v1_router)
     application.include_router(create_workspace_router(data=workspace_data))
+    application.include_router(create_dashboard_router(metrics_provider, alert_provider))
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)
     application.include_router(
@@ -263,6 +280,10 @@ def create_app(
     )
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
     application.include_router(create_plugin_router(plugin_provider), prefix=API_PREFIX)
+    application.include_router(
+        create_metric_router(metrics_provider, alert_provider), prefix=API_PREFIX
+    )
+    application.include_router(create_audit_router(audit_provider), prefix=API_PREFIX)
     application.include_router(
         create_transfer_inspector_router(transfer_inspector), prefix=API_PREFIX
     )

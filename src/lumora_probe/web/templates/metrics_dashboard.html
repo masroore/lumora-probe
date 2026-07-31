@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Metrics · Lumora Probe</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+  </head>
+  <body>
+    <main id="metrics-dashboard" aria-labelledby="dashboard-title">
+      <h1 id="dashboard-title">Operational metrics</h1>
+      <p>Event-derived metrics and in-process alert facts.</p>
+      <section aria-labelledby="alerts-title">
+        <h2 id="alerts-title">Alerts</h2>
+        <table>
+          <caption class="sr-only">Current alert thresholds</caption>
+          <thead><tr><th scope="col">Alert</th><th scope="col">State</th><th scope="col">Value</th><th scope="col">Threshold</th></tr></thead>
+          <tbody>
+          {% for alert in alerts %}
+            <tr><th scope="row">{{ alert.name }}</th><td>{{ alert.state }}</td><td>{{ alert.value }}</td><td>{{ alert.threshold }}</td></tr>
+          {% else %}<tr><td colspan="4">No alert providers configured.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </section>
+      <section aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Metrics</h2>
+        <table>
+          <caption class="sr-only">Current metric values</caption>
+          <thead><tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">Labels</th><th scope="col">Value</th></tr></thead>
+          <tbody>
+          {% for metric in metrics %}
+            <tr><th scope="row">{{ metric.name }}</th><td>{{ metric.kind }}</td><td>{{ metric.labels }}</td><td>{{ metric.value }}</td></tr>
+          {% else %}<tr><td colspan="4">No events observed.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

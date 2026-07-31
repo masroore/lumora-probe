@@ -31,6 +31,10 @@ def create_event_router(store: ResourceStore | None = None) -> APIRouter:
         filter: str | None = None,
         correlation_id: str | None = None,
         sequence: int | None = Query(None, ge=0),
+        sequence_from: int | None = Query(None, ge=0),
+        sequence_to: int | None = Query(None, ge=0),
+        occurred_from: str | None = None,
+        occurred_to: str | None = None,
     ) -> dict[str, object]:
         events = await resource_store.list("events")
         if correlation_id is not None:
@@ -39,6 +43,24 @@ def create_event_router(store: ResourceStore | None = None) -> APIRouter:
             )
         if sequence is not None:
             events = tuple(event for event in events if event.get("sequence") == sequence)
+        if sequence_from is not None and sequence_to is not None and sequence_from > sequence_to:
+            raise HTTPException(status_code=400, detail="sequence_from must not exceed sequence_to")
+        if sequence_from is not None:
+            events = tuple(
+                event for event in events if _number_value(event.get("sequence")) >= sequence_from
+            )
+        if sequence_to is not None:
+            events = tuple(
+                event for event in events if _number_value(event.get("sequence")) <= sequence_to
+            )
+        if occurred_from is not None:
+            events = tuple(
+                event for event in events if str(event.get("occurred_at", "")) >= occurred_from
+            )
+        if occurred_to is not None:
+            events = tuple(
+                event for event in events if str(event.get("occurred_at", "")) <= occurred_to
+            )
         try:
             events = apply_query(
                 events,
@@ -56,6 +78,10 @@ def create_event_router(store: ResourceStore | None = None) -> APIRouter:
 
 def _mapping_value(item: Mapping[str, Any], field: str) -> Any:
     return item.get(field)
+
+
+def _number_value(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else -1
 
 
 __all__: tuple[str, ...] = ()

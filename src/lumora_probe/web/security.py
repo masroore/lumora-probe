@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import secrets
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from urllib.parse import urlsplit
 
 from fastapi import Request
@@ -15,6 +16,7 @@ from .contracts import ErrorResponse
 
 _MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _ALLOWED_FETCH_SITES = frozenset({"", "none", "same-origin", "same-site"})
+SecurityAuditSink = Callable[[str, Mapping[str, object]], Awaitable[None] | None]
 
 
 class SecurityPolicy:
@@ -61,12 +63,19 @@ class SecurityPolicy:
 class SecurityMiddleware(BaseHTTPMiddleware):
     """Apply all HTTP trust-boundary checks before route handlers execute."""
 
-    def __init__(self, app: ASGIApp, *, policy: SecurityPolicy) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        policy: SecurityPolicy,
+        audit_sink: SecurityAuditSink | None = None,
+    ) -> None:
         super().__init__(app)
         self.policy = policy
+        self.audit_sink = audit_sink
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        failure = self._validate(request)
+        failure = await self._validate(request)
         if failure is not None:
             return failure
         response = await call_next(request)
@@ -75,10 +84,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 del response.headers[header_name]
         return response
 
-    def _validate(self, request: Request) -> JSONResponse | None:
+    async def _validate(self, request: Request) -> JSONResponse | None:
         host = self._effective_host(request)
         if host not in self.policy.allowed_hosts:
-            return _error_response(
+            return await self._failure(
                 status=400,
                 code="LUMORA-WEB-HOST-001",
                 message="The request Host is not allowed.",
@@ -89,15 +98,36 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if request.method not in _MUTATING_METHODS:
             return None
         if self.policy.read_only:
-            return _error_response(
+            return await self._failure(
                 status=403,
                 code="LUMORA-WEB-READONLY-001",
                 message="The server is in read-only mode.",
                 remediation="Disable read-only mode before sending a state-changing request.",
                 context={"method": request.method, "path": request.url.path},
             )
-        origin_failure = self._validate_origin(request, host)
+        origin_failure = await self._validate_origin(request, host)
         return origin_failure
+
+    async def _failure(
+        self,
+        *,
+        status: int,
+        code: str,
+        message: str,
+        remediation: str,
+        context: Mapping[str, object],
+    ) -> JSONResponse:
+        if self.audit_sink is not None:
+            result = self.audit_sink(code, context)
+            if inspect.isawaitable(result):
+                await result
+        return _error_response(
+            status=status,
+            code=code,
+            message=message,
+            remediation=remediation,
+            context=dict(context),
+        )
 
     def _effective_host(self, request: Request) -> str:
         client_host = _normalise_host(request.client.host if request.client else "")
@@ -108,10 +138,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 host_header = forwarded.split(",", 1)[0].strip()
         return _normalise_host(host_header.split(":", 1)[0])
 
-    def _validate_origin(self, request: Request, host: str) -> JSONResponse | None:
+    async def _validate_origin(self, request: Request, host: str) -> JSONResponse | None:
         fetch_site = request.headers.get("sec-fetch-site", "").casefold()
         if fetch_site not in _ALLOWED_FETCH_SITES:
-            return _error_response(
+            return await self._failure(
                 status=403,
                 code="LUMORA-WEB-ORIGIN-002",
                 message="Cross-site state changes are not allowed.",
@@ -123,7 +153,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return None
         if origin in self.policy.allowed_origins or _origin_host(origin) == host:
             return None
-        return _error_response(
+        return await self._failure(
             status=403,
             code="LUMORA-WEB-ORIGIN-001",
             message="The request Origin is not allowed.",
