@@ -18,6 +18,11 @@ from lumora_dicom_common.constants import (
     DEFAULT_DICOM_PORT,
     DICOM_SUCCESS_STATUS,
 )
+from lumora_dicom_common.pynetdicom_runtime import (
+    add_supported_contexts,
+    configure_receive_runtime,
+    load_all_transfer_syntaxes,
+)
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
 from lumora_probe.shared.value_objects import AETitle
@@ -547,7 +552,6 @@ class DICOMListener:
         try:
             from pynetdicom import (
                 AE,
-                ALL_TRANSFER_SYNTAXES,
                 AllStoragePresentationContexts,
                 QueryRetrievePresentationContexts,
                 VerificationPresentationContexts,
@@ -558,19 +562,21 @@ class DICOMListener:
                 "pynetdicom and pydicom are required for the DICOM listener"
             ) from exc
 
-        _config.LOG_HANDLER_LEVEL = "none"
-        _config.UNRESTRICTED_STORAGE_SERVICE = True
-        _config.STORE_RECV_CHUNKED_DATASET = True
+        configure_receive_runtime(_config)
+        all_transfer_syntaxes = load_all_transfer_syntaxes()
 
         ae: Any = AE(ae_title=str(self.config.ae_title))
         ae.maximum_pdu_size = self.config.max_pdu
         ae.supported_contexts = []
-        for context in (
-            *AllStoragePresentationContexts,
-            *QueryRetrievePresentationContexts,
-            *VerificationPresentationContexts,
-        ):
-            ae.add_supported_context(str(context.abstract_syntax), ALL_TRANSFER_SYNTAXES)
+        add_supported_contexts(
+            ae,
+            (
+                *AllStoragePresentationContexts,
+                *QueryRetrievePresentationContexts,
+                *VerificationPresentationContexts,
+            ),
+            all_transfer_syntaxes,
+        )
         if self.config.allowed_calling_aets:
             ae.require_calling_aet = sorted(self.config.allowed_calling_aets)
         return ae

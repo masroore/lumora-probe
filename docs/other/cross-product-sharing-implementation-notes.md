@@ -58,3 +58,16 @@ start absorbing product workflow policy.
 If Phase 3 needs a product callback, event, clock, ID generator, storage abstraction,
 logging/configuration policy, async owner, lifecycle object, or global AE singleton, reject
 the affected helper and retain the code in its product package.
+
+## Phase 3: narrow `pynetdicom` adapter
+
+Implemented `lumora_dicom_common.pynetdicom_runtime` with three mechanical helpers:
+
+- `load_all_transfer_syntaxes()` preserves the public/private symbol fallback;
+- `configure_receive_runtime()` applies only the three approved receive flags;
+- `add_supported_contexts()` wires caller-supplied context profiles and transfer syntaxes.
+
+Probe Lite and Lumora Probe listener setup now use these helpers. Listener handlers, AE
+policy, context-family selection, lifecycle, logging, storage, event/audit behavior, and
+application clock/ID ownership remain product-local. Sender Lite and application SCU
+construction were intentionally not migrated under the Phase 2 NO-GO decision.

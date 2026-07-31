@@ -40,6 +40,8 @@ def test_neutral_package_has_no_product_or_runtime_imports() -> None:
                 continue
             for name in names:
                 root = name.split(".", 1)[0]
+                if root == "pynetdicom" and path.name == "pynetdicom_runtime.py":
+                    continue
                 if root in FORBIDDEN_ROOTS:
                     violations.append(f"{path.name}: {name}")
 

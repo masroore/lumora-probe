@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from lumora_dicom_common.constants import DICOM_SUCCESS_STATUS
+from lumora_dicom_common.pynetdicom_runtime import (
+    add_supported_contexts,
+    configure_receive_runtime,
+    load_all_transfer_syntaxes,
+)
 
 from .config import Config
 from .log import ProbeLogger
@@ -51,10 +56,6 @@ class ProbeReceiver:
             from pynetdicom import AE, AllStoragePresentationContexts, evt
 
             try:
-                from pynetdicom import ALL_TRANSFER_SYNTAXES
-            except ImportError:
-                from pynetdicom._globals import ALL_TRANSFER_SYNTAXES
-            try:
                 from pynetdicom import _config
             except ImportError:
                 import pynetdicom._config as _config  # noqa: PLR0402  -- fallback for older pynetdicom layout
@@ -69,16 +70,14 @@ class ProbeReceiver:
         ae.maximum_pdu_size = self.config.max_pdu
         # Probe Lite is intentionally a generic receiver: private and unknown public
         # storage SOP Classes must be negotiated instead of being silently refused.
-        _config.LOG_HANDLER_LEVEL = "none"
-        _config.STORE_RECV_CHUNKED_DATASET = True
-        _config.UNRESTRICTED_STORAGE_SERVICE = True
+        configure_receive_runtime(_config)
+        all_transfer_syntaxes = load_all_transfer_syntaxes()
         ae.supported_contexts = []
         abstract_syntaxes = {
             str(context.abstract_syntax) for context in AllStoragePresentationContexts
         }
-        for abstract_syntax in abstract_syntaxes:
-            ae.add_supported_context(abstract_syntax, ALL_TRANSFER_SYNTAXES)
-        ae.add_supported_context(Verification, ALL_TRANSFER_SYNTAXES)
+        add_supported_contexts(ae, abstract_syntaxes, all_transfer_syntaxes)
+        add_supported_contexts(ae, (Verification,), all_transfer_syntaxes)
         if self.config.accept_ae:
             ae.require_calling_aet = sorted(self.config.accept_ae)
 
