@@ -48,3 +48,9 @@ what the capture engine records. Future observation topologies remain governed b
 - No claim that a reverse proxy alone satisfies clinical compliance obligations
 
 See also: [operator-guide.md](operator-guide.md), [privacy-and-compliance-posture.md](privacy-and-compliance-posture.md).
+
+## Docker image
+
+The supported container contract is documented in [docker.md](docker.md): one writable
+`/var/lib/lumora` volume, non-root execution, and a reverse proxy as the HTTP security
+boundary.

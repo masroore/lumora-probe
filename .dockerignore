@@ -1,0 +1,20 @@
+.git
+.github
+.venv
+node_modules
+__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
+*.py[cod]
+dist
+storage
+.tmp
+
+# Build-time source material is not needed in the runtime image.
+assets/source
+scripts
+examples
+plugins
+tests
+docs
