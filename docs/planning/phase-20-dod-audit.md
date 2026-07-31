@@ -19,7 +19,7 @@
 | Performance | Phase 11 budgets and Phase 18 measured evidence | ACCEPTED EVIDENCE |
 | Import boundaries | Import-linter: 7 contracts kept, 0 broken | PASS |
 | Static analysis | Basedpyright: 0 errors, 0 warnings, 0 notes | PASS |
-| Distribution | Asset, wheel/sdist, offline/no-Node, and data-version tests | PASS |
+| Distribution | Asset, wheel/sdist, offline/no-Node, data-version, and Docker smoke tests | PASS |
 | External interoperability | 14 scheduled tests passed; results and triage published | PASS |
 
 ## Feature-level audit
@@ -46,8 +46,8 @@ known-limitations treatment where applicable.
   evidence is published in `docs/planning/phase-18-performance-report.md`; no new budget is
   claimed here.
 - Phase 19's local Docker image smoke test was previously blocked by an unavailable Docker
-  daemon. The daemon is available for this release verification and the image smoke command
-  remains a required final gate.
+  daemon. It was executed during Phase 20 release verification: the image built, ran as
+  `uid=10001(lumora)`, used one mounted volume, and returned readiness successfully.
 - The Phase 20 interop report records the peer-specific compressed-to-DCMTK path observation;
   it is triaged and not omitted. The passing release matrix uses Orthanc for compressed
   transfer-syntax forwarding.

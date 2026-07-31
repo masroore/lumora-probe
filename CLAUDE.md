@@ -2,12 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 19 complete; Phase 20 in progress
+## Status: Phase 20 complete; v0.1.0 GA signed off
 
-Phase 19 packaging is complete. Phase 20 release work has started with the DCMTK
-interoperability suite (`T-20-01-01`). Completion reports in
-`docs/planning/phase-*-completion-report.md` and Phase 20 task reports are the current
-status record. Do not begin work outside Phase 20 before its release exit criteria pass.
+Phase 20 release work is complete. Version 0.1.0 is signed off for trusted engineering
+deployments after scheduled DCMTK/dcm4che/Orthanc interoperability, PRD acceptance, DoD
+audit, packaging, and Docker smoke verification. Completion reports in
+`docs/planning/phase-*-completion-report.md` and Phase 20 release artifacts are the current
+status record. Do not add post-GA capabilities without a new milestone or approved plan.
 
 ## What the product is
 
