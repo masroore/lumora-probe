@@ -1,6 +1,6 @@
 # LifecycleManager Wiring Plan
 
-**Status:** Ready for implementation  
+**Status:** Implemented and verified  
 **Target files:** `src/lumora_probe/bootstrap.py`, `src/lumora_probe/web/api.py`,
 `tests/test_phase11_capture.py`, `tests/test_bootstrap.py`
 
@@ -309,14 +309,14 @@ def test_bootstrap_exposes_lifecycle_manager(tmp_path: Path) -> None:
 
 ## Checklist before marking done
 
-- [ ] `import-linter` passes — no new cross-slice imports; `bootstrap.py` already imports
+- [x] `import-linter` passes — no new cross-slice imports; `bootstrap.py` already imports
   from `core`.
-- [ ] `test_phase11_capture.py` adversarial test passes (not skipped).
-- [ ] `test_bootstrap.py` structural test passes.
-- [ ] All existing tests in `test_bootstrap.py` and `test_phase11_capture.py` still pass.
-- [ ] No new dependency added.
-- [ ] `application.state.lifecycle_manager` is set in `build_production_app`.
-- [ ] The fallback path in `api.py` lifespan (no `lifecycle_manager`) is exercised by
+- [x] `test_phase11_capture.py` adversarial test passes (not skipped).
+- [x] `test_bootstrap.py` structural test passes.
+- [x] All existing tests in `test_bootstrap.py` and `test_phase11_capture.py` still pass.
+- [x] No new dependency added.
+- [x] `application.state.lifecycle_manager` is set in `build_production_app`.
+- [x] The fallback path in `api.py` lifespan (no `lifecycle_manager`) is exercised by
   existing tests and continues to pass without modification.
 
 ---
