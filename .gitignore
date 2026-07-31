@@ -1,4 +1,6 @@
+# =============================================================================
 # Python
+# =============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,6 +15,9 @@ eggs/
 *.spec
 pip-log.txt
 pip-delete-this-directory.txt
+.python-version
+.conda/
+*.pyo
 
 # Virtual environments
 .venv/
@@ -20,14 +25,14 @@ venv/
 ENV/
 env/
 
-# IDEs
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
+# Python package managers (lock files for non-uv tools)
+pdm.lock
+poetry.lock
+Pipfile.lock
 
+# =============================================================================
 # Testing / Coverage
+# =============================================================================
 .coverage
 .coverage.*
 htmlcov/
@@ -36,19 +41,91 @@ htmlcov/
 .nox/
 .mypy_cache/
 .ruff_cache/
+.pytest-reports/
 
-# OS
+# =============================================================================
+# IDEs / Editors
+# =============================================================================
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.sublime-workspace
+*.sublime-project
+.fleet/
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Node / JavaScript
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log
+.npmrc
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.turbo/
+.svelte-kit/
+.vuepress/dist/
+
+# =============================================================================
+# macOS
+# =============================================================================
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
+# =============================================================================
+# Windows
+# =============================================================================
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# =============================================================================
+# Linux
+# =============================================================================
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
 # Jupyter
+# =============================================================================
 .ipynb_checkpoints/
 
+# =============================================================================
 # Environment variables
+# =============================================================================
 .env
 .env.*
+.env.local
+.env.*.local
 
+# =============================================================================
 # AI / ML model artifacts
+# =============================================================================
 *.safetensors
 *.bin
 *.pt
@@ -64,8 +141,11 @@ Thumbs.db
 ggml-*.gguf
 *.gguf
 *.ggml
+*.gguf.model
 
+# =============================================================================
 # AI / ML directories
+# =============================================================================
 models/
 model/
 checkpoints/
@@ -84,21 +164,23 @@ embeddings/
 cache/
 hf_cache/
 huggingface/
-.ollama/
-.openai/
-.anthropic/
-.claude/
 
-# AI coding assistants
+# =============================================================================
+# AI coding assistants / agents
+# =============================================================================
 .cursor/
 .cursorrules
 .copilot/
 .aider*
+.aider.conf.yml
+.aider.tags.cache.v3/
 .claude/
 .commandcode/
 .serena/
 .omc/
+.omp/
 .windsurf/
+.windsurfrules
 .continue/
 .cody/
 .tabnine/
@@ -106,25 +188,29 @@ huggingface/
 .supermaven/
 .codex/
 .agent/
-.cursorrules
-.windsurfrules
-.aider.conf.yml
-.aider.tags.cache.v3/
-.omp/
-.omc/
 .zcode/
+.augment/
+.blackbox/
+.replit/
+.gemini/
+.qodo/
+.mutable/
 
+# =============================================================================
 # Dataset files
+# =============================================================================
 *.csv
 *.parquet
 *.arrow
 *.feather
-*.hdf5
 *.tfrecord
 
-# Large files
+# =============================================================================
+# Large files / archives
+# =============================================================================
 *.zip
 *.tar.gz
 *.tar.bz2
 *.rar
 *.7z
+*.xz
