@@ -234,6 +234,9 @@ what is additional or phase-defining.
 | Document | Extension point gap report from the seed-rule port |
 | Suite | Raising plugin contained; slow plugin auto-disabled; no install route |
 
+Implementation: `docs/plugins/sdk.md`, `docs/plugins/extension-point-gap-report.md`, and
+`examples/plugins/example_plugin/`.
+
 ## Phase 17 — Observability
 
 | Class | Deliverable |

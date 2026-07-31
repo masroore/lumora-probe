@@ -134,13 +134,14 @@ REST terminology should align with the REST API specification.
 
 # 9. Plugin Terms
 
-- Plugin
-- Extension
-- Manifest
-- Capability
-- Hook
-- SDK
-- Compatibility
+- **Plugin** — trusted in-process Python extension loaded through the public SDK.
+- **Extension** — optional code that contributes behavior through a documented hook.
+- **Manifest** — plugin metadata declaring identity, SDK range, entry point, hooks, and
+  capabilities for structural validation and operator disclosure.
+- **Capability** — declared plugin intent; not an enforced permission boundary in v1.
+- **Hook** — versioned pluggy extension point receiving contracts DTOs.
+- **SDK** — public `lumora_probe.plugins.api` and `contracts` surface for plugin authors.
+- **Compatibility** — SDK-major range accepted by the loader before activation.
 
 ---
 

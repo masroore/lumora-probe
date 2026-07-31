@@ -1,0 +1,11 @@
+{
+  "id": "example.plugin",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "author": "Lumora Probe",
+  "description": "Minimal public-SDK analyzer example",
+  "capabilities": ["analysis"],
+  "sdk": {"min_major": 1, "max_major": 1},
+  "entry_point": "plugin:plugin",
+  "hooks": ["analyze"]
+}
