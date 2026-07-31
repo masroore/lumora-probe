@@ -1,8 +1,8 @@
 services:
   orthanc:
-    image: orthancteam/orthanc:24.5.1
+    image: orthancteam/orthanc@sha256:a1b7fb6d1de31693949165c64b88fa35fae51fdeb9732fcef69cd75daea7ff9d
     ports:
-      - "4242:4242"
+      - "127.0.0.1:4242:4242"
     profiles: [interop]
 
   dcmtk:

@@ -30,8 +30,8 @@ The Orthanc and full transfer-syntax matrix scenarios belong to subsequent Phase
 ## Run
 
 ```console
-docker compose -f tests/interop/docker-compose.yml --profile interop up -d --wait dcmtk dcm4che
-LUMORA_INTEROP=1 uv run pytest tests/interop/test_dcmtk.py tests/interop/test_dcm4che.py -m interop -q
+docker compose -f tests/interop/docker-compose.yml --profile interop up -d --wait dcmtk dcm4che orthanc
+LUMORA_INTEROP=1 uv run pytest tests/interop/test_dcmtk.py tests/interop/test_dcm4che.py tests/interop/test_orthanc.py -m interop -q
 docker compose -f tests/interop/docker-compose.yml --profile interop down -v
 ```
 
