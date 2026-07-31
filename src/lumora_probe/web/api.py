@@ -46,6 +46,7 @@ from .live import (
 )
 from .metadata_routes import MetadataProvider, create_metadata_router
 from .operation_routes import OperationRegistry, create_operation_router
+from .plugin_routes import PluginProvider, create_plugin_router
 from .report_routes import CaptureSummaryProvider, ReportJobProvider, create_reports_router
 from .resources import ResourceStore
 from .retention import RetentionClock, RingBufferRetentionMap
@@ -199,6 +200,7 @@ def create_app(
     report_job_provider: ReportJobProvider | None = None,
     bookmark_provider: BookmarkProvider | None = None,
     transfer_inspector: TransferInspectorService | None = None,
+    plugin_provider: PluginProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -260,6 +262,7 @@ def create_app(
         create_reports_router(reports_provider, report_job_provider), prefix=API_PREFIX
     )
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
+    application.include_router(create_plugin_router(plugin_provider), prefix=API_PREFIX)
     application.include_router(
         create_transfer_inspector_router(transfer_inspector), prefix=API_PREFIX
     )

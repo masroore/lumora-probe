@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -11,6 +13,8 @@ import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
+
+from lumora_probe.plugins import PluginRepository
 
 
 class ApiClientError(RuntimeError):
@@ -74,6 +78,19 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser = capture_subparsers.add_parser("inspect", help="inspect a local capture")
     inspect_parser.add_argument("path", type=Path)
     inspect_parser.set_defaults(handler=_run_capture_inspect)
+
+    plugins = subparsers.add_parser("plugins", help="manage trusted local plugins")
+    plugin_subparsers = plugins.add_subparsers(dest="plugins_command", required=True)
+    install = plugin_subparsers.add_parser(
+        "install", help="place a plugin on disk; restart is required before loading"
+    )
+    install.add_argument("source", type=Path)
+    install.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(os.environ.get("LUMORA_DATA_DIR", "~/.local/share/lumora-probe")),
+    )
+    install.set_defaults(handler=_run_plugin_install)
     return parser
 
 
@@ -98,6 +115,29 @@ def _run_captures_list(args: argparse.Namespace) -> dict[str, Any]:
 
 def _run_capture_inspect(args: argparse.Namespace) -> dict[str, Any]:
     return inspect_capture(args.path)
+
+
+def _run_plugin_install(args: argparse.Namespace) -> dict[str, Any]:
+    """Copy one deliberately selected plugin directory into the data directory."""
+
+    source = args.source.expanduser().resolve()
+    if not source.is_dir():
+        raise ApiClientError(f"Plugin source is not a directory: {source}")
+    source_repository = PluginRepository(source.parent)
+    manifest = source_repository.read_manifest(source)
+    destination_root = args.data_dir.expanduser().resolve() / "plugins"
+    destination = destination_root / manifest.plugin_id
+    if destination.exists():
+        raise ApiClientError(f"Plugin is already installed: {manifest.plugin_id}")
+    destination_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination)
+    PluginRepository(destination_root).read_manifest(destination)
+    return {
+        "installed": manifest.plugin_id,
+        "path": str(destination),
+        "restart_required": True,
+        "trust_notice": "Plugins are trusted in-process code; enabling one can do anything the Lumora process can.",
+    }
 
 
 if __name__ == "__main__":

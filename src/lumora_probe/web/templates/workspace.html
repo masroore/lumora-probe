@@ -69,6 +69,13 @@
               <strong>Context</strong>
               <span>{{ workspace.active_context }}</span>
             </div>
+            <section class="panel-note" aria-labelledby="plugin-trust-heading">
+              <strong id="plugin-trust-heading">Plugin trust</strong>
+              <span data-plugin-trust-notice>
+                Enabled plugins are trusted in-process code and can do anything the Lumora process can.
+                Manifest capabilities are disclosure only; capability enforcement is not provided.
+              </span>
+            </section>
             {% if workspace.study_instances %}
             <section class="retention-panel" aria-labelledby="retention-heading">
               <div class="retention-heading">
