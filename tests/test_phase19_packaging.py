@@ -43,7 +43,7 @@ def test_no_node_no_network_install_can_run_lumora_cli(
         [
             sys.executable,
             "-c",
-            "from lumora_probe.cli import main; raise SystemExit(main())",
+            "from pathlib import Path; from lumora_probe.web.workspace_routes import STATIC_ROOT; assert (STATIC_ROOT / 'css/app.css').is_file(); from lumora_probe.cli import main; raise SystemExit(main())",
             "capture",
             "inspect",
             str(capture),
