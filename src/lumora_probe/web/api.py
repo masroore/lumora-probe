@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -23,7 +24,6 @@ from lumora_probe.core.errors import (
     VersionMismatchError,
 )
 from lumora_probe.core.lifecycle import LifecycleManager
-from lumora_probe.core.logging import get_logger, log_operational
 
 from .association_routes import create_association_router
 from .audit_routes import AuditProvider, create_audit_router
@@ -262,12 +262,9 @@ def create_app(
                 try:
                     await lifecycle_manager.shutdown()
                 except LifecycleError as error:
-                    log_operational(
-                        get_logger("lumora.lifecycle"),
+                    logging.getLogger("lumora.lifecycle").warning(
                         "shutdown grace period exceeded; active captures interrupted",
-                        level="warning",
-                        code=error.code,
-                        context=dict(error.context),
+                        extra={"error_code": error.code, "error_context": dict(error.context)},
                     )
             elif capture_engine is not None:
                 await capture_engine.stop()
