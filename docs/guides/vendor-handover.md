@@ -83,3 +83,7 @@ that new capture as the source for any deliberate pixel-bearing handover.
 - Review every redaction warning; do not treat an empty warning list as a claim that pixel
   content is clean.
 - Include the report rule-set version and the operation/report IDs in the vendor ticket.
+
+## Privacy posture
+
+See [privacy-and-compliance-posture.md](privacy-and-compliance-posture.md) for ADR-0026 limits.
