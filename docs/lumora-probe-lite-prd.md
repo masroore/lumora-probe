@@ -279,7 +279,7 @@ pyproject.toml      # [project.scripts] probe-lite = "probe_lite.cli:main"
 ```
 
 This layout is a recommendation, not a binding constraint. The implementer may adjust
-internal structure as long as the package remains independent from `lumora/`.
+internal structure as long as the package remains independent from `lumora/` product workflows; the only shared source exception is the neutral DICOM mechanics package authorized by ADR-0034.
 
 ## TC-02: Toolchain
 

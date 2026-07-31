@@ -144,7 +144,8 @@ src/
 ├── lumora_probe/        Lumora Probe application, module-first slices
 ├── probe_lite/          Probe Lite receiver
 ├── sender_lite/         Sender Lite sender
-└── lumora_lite_common/  Shared Lite logger, signals, validators, and UID checks
+├── lumora_lite_common/  Lite-only logger, signals, validators, and UID facade
+└── lumora_dicom_common/  Neutral DICOM mechanics (ADR-0034)
 
 docs/
 ├── adr/                 Authoritative architecture decisions

@@ -185,6 +185,8 @@ src/sender_lite/
 ```
 
 Sender Lite shares only small, genuinely common helpers with Probe Lite through
-[`lumora_lite_common`](../../src/lumora_lite_common/). The shared scope is recorded in
-[ADR-0028](../adr/ADR-0028-lite-shared-common-library.md). It is separate from the
-`lumora_probe` application package.
+[`lumora_lite_common`](../../src/lumora_lite_common/). Both Lite tools and the application
+may use the separate, neutral [`lumora_dicom_common`](../../src/lumora_dicom_common/)
+mechanics package; it contains no product workflow. The Lite-only scope is recorded in
+[ADR-0028](../adr/ADR-0028-lite-shared-common-library.md), and the neutral exception in
+[ADR-0034](../adr/ADR-0034-neutral-dicom-common-infrastructure.md).

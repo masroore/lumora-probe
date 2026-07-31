@@ -35,6 +35,14 @@ def test_wheel_and_sdist_include_runtime_assets(built_artifacts: tuple[Path, Pat
     assert "static/css/app.css" in names
     assert "static/js/cornerstone-renderer.js" in names
     assert "assets/vendor/manifest.json" in names
+    for package in (
+        "lumora_probe",
+        "probe_lite",
+        "sender_lite",
+        "lumora_lite_common",
+        "lumora_dicom_common",
+    ):
+        assert any(name.startswith(f"{package}/") for name in names), package
 
     with tarfile.open(source) as archive:
         names = set(archive.getnames())

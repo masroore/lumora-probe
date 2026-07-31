@@ -71,3 +71,25 @@ Probe Lite and Lumora Probe listener setup now use these helpers. Listener handl
 policy, context-family selection, lifecycle, logging, storage, event/audit behavior, and
 application clock/ID ownership remain product-local. Sender Lite and application SCU
 construction were intentionally not migrated under the Phase 2 NO-GO decision.
+
+## Phase 4: package and API verification
+
+The wheel includes all five runtime packages: `lumora_probe`, `probe_lite`, `sender_lite`,
+`lumora_lite_common`, and `lumora_dicom_common`. The neutral package's public API is
+explicitly limited by module `__all__` declarations:
+
+- `identifiers`: `inspect_uid`, `inspect_ae_title`, and immutable inspection records;
+- `constants`: default DICOM port/PDU and success status constants;
+- `pynetdicom_runtime`: the three approved mechanical adapter helpers.
+
+Product classes, result types, workflows, lifecycle, and policy wrappers remain internal to
+their owning packages. No neutral helper owns an AE, server, association, callback, event,
+storage, clock, ID, or async lifecycle.
+
+### Deliberate Stage 1 rejection: DIMSE status helper
+
+`sender_lite.sender._read_status()` is defensive (`None` for missing or malformed status),
+while `lumora_probe.associations.network._status_code()` is intentionally strict (missing
+or malformed status raises). A shared status reader would need product policy or would alter
+one observable contract, so S1-04 remains product-owned. The characterization tests preserve
+both behaviors.
