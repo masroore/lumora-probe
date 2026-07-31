@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-31
 **Last verified:** 2026-07-31 against `master` at `062e760`
-**Status:** Approved — implementing
+**Status:** Implemented — see `docs/planning/phase-18-completion-report.md`
 **Approved:** 2026-07-31
 **Selected options:** Performance Option B; Search/virtualization S1; large-study workload 2,000
 instances; npm audit report-only in Phase 18

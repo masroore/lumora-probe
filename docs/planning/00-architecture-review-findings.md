@@ -195,19 +195,15 @@ missing artifact. The catalog needs to exist as generated, versioned output befo
 Phase 07 ships, or eight slices will each infer the envelope independently. Owner:
 **Phase 06** (`shared/` envelope + registry), generated catalog as a deliverable.
 
-## F-05 — `19-glossary.md` predates the ADR vocabulary · **OPEN** · Low
+## F-05 — `19-glossary.md` predates the ADR vocabulary · **CLOSED** · Low
 
-The glossary defines `Study` as "a DICOM Study consisting of one or more Series"
-(ADR-0013 made it a projection), `Replay` as "re-execution of captured events"
-(ADR-0005 defines three distinct meanings and ships two), and `Event Store` as a
-storage term (ADR-0004 replaced it with a capture directory plus rebuildable index). It
-has no entry for ring buffer, promotion, fidelity tier, condition, finding, association
-pair, or `.lpcap`.
-
-`18` §7 requires names that "clearly express intent" and `19` §1 aims for shared
-vocabulary across documentation and code. A glossary that disagrees with the
-implementation vocabulary is worse than none, because it will be cited. Owner:
-**Phase 18**, as a documentation deliverable rather than a blocker.
+Closed in Phase 18 (`T-18-03-01`). `docs/architecture-baseline/19-glossary.md` now
+defines Study/Series/Instance as capture-derived projections (ADR-0013), Replay as three
+meanings with two shipped modes (ADR-0005), and replaces Event Store with capture
+directory / canonical event log plus rebuildable index (ADR-0004). Entries added for
+ring buffer, promotion, fidelity tier, Condition (Diagnostic Condition alias), Finding,
+association pair, `.lpcap`, protocol trace vs domain event, and redaction vs
+de-identification.
 
 ## F-06 — Non-functional targets are stated for the UI only · **OPEN** · Medium
 
@@ -217,13 +213,16 @@ performance, concurrent clients) without a target for any of them. `14` §12 lik
 
 ADR-0014 supplies the only quantified capacity figures anywhere in the corpus — ~5,000
 domain events per 500-instance study, ~16,000 PDUs, ring buffer 30 min / 2 GB — but
-these are stated as reasoning, not as acceptance thresholds.
+these are stated as reasoning, not as acceptance thresholds. ADR-0030 later ratified
+capture event/PDU cardinality, ring retention/cap, and durable-writer behavior only —
+not the six Phase 18 assessment dimensions.
 
-Without numbers, `13` §12's performance tests cannot fail, and "the bus stalled" cannot
-be the testable regression ADR-0014 claims it becomes. Recommendation: derive
-provisional budgets from ADR-0014's figures during Phase 03, ratify them against real
-traffic in Phase 11, and treat them as release gates thereafter. Owner: **Phase 03**,
-ratified **Phase 11**.
+Without numbers for those dimensions, `13` §12's assessment cannot invent pass/fail
+gates. Phase 18 (Option B) measures startup, large-study projection, throughput, memory,
+replay orchestration, and concurrent clients and records evidence in
+`docs/planning/phase-18-performance-report.md` without closing this finding. Owner:
+**Phase 03** (provisional), **Phase 11** (ADR-0030 partial), **Phase 18** (measurement
+evidence; remains OPEN until an ADR ratifies the unresolved dimensions).
 
 ## F-07 — Charter §5 promises a CLI that no baseline document specifies · **OPEN** · Low
 

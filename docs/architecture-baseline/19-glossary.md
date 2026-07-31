@@ -4,7 +4,7 @@
 >
 > **Document:** Glossary
 >
-> **Status:** Architecture Baseline
+> **Status:** Architecture Baseline (reconciled Phase 18 / T-18-03-01)
 >
 > **Audience:** All Contributors, Architects, Engineers, QA, Plugin Developers, Claude Code, Codex
 
@@ -15,6 +15,7 @@
 This glossary defines the canonical terminology used throughout the Lumora Probe documentation.
 
 All architecture documents, specifications, code, tests, and documentation should use these terms consistently.
+Where this glossary and an accepted ADR disagree, the ADR wins and this glossary must be updated.
 
 ---
 
@@ -33,17 +34,27 @@ Terminology should be:
 
 | Term | Definition |
 |------|------------|
-| Study | A DICOM Study consisting of one or more Series. |
-| Series | A logical grouping of DICOM Instances. |
-| Instance | A DICOM SOP Instance. |
+| Study | A **capture-derived projection** over observed DICOM Study Instance UIDs (ADR-0013). Not a top-level aggregate and not a PACS archive object. |
+| Series | A **capture-derived projection** grouping Instances under a Study Instance UID and Series Instance UID (ADR-0013). |
+| Instance | A **capture-derived projection** for one SOP Instance UID as observed in one or more captures (ADR-0013). |
 | Dataset | A collection of DICOM attributes. |
 | Metadata | Non-pixel descriptive information associated with DICOM objects. |
-| Capture | Recorded engineering evidence for investigation or replay. |
-| Replay | Re-execution of captured events for analysis. |
+| Capture | Recorded engineering evidence for investigation or replay: a self-contained directory under the data root (ADR-0004). Distinct from `.lpcap`, which is the interchange zip of that directory. |
+| `.lpcap` | Interchange form of a Capture: the capture directory zipped with deflate. Dropping one into `captures/` makes it appear. |
+| Ring buffer | Always-on, bounded rolling evidence buffer with retention and byte cap (ADR-0008, ADR-0030). Distinct from a Capture. |
+| Promotion | Copying a time window out of the ring buffer into a permanent Capture / `.lpcap` (ADR-0008). |
+| Fidelity tier | Capture stream completeness: `events` → `protocol` → `wire` (ADR-0005). Replay refuses modes the capture cannot support. |
+| Replay | Three meanings (ADR-0005); two ship in v1: **event replay** (offline into the bus) and **protocol replay** (SCU against a real target). Byte-exact / mock-peer replay is deferred. |
 | Analysis | Automated or manual interpretation of engineering evidence. |
-| Diagnostic Condition | Deterministic observed fact with a stable condition ID, emitted as a warning or error. |
-| Finding | Versioned rule-derived inference stored under a capture's `analysis/` directory, never in `events.jsonl`. |
+| Condition | Deterministic **observed** fact with a stable condition ID (`LP-XXX-NNN`), emitted as a warning or error. Physically separate from Findings (ADR-0018). Alias: **Diagnostic Condition**. |
+| Diagnostic Condition | Alias of Condition; prefer Condition in new writing. |
+| Finding | Versioned rule-derived **inference** stored under a capture's `analysis/` directory, never in `events.jsonl` (ADR-0018). Regenerable. |
 | Condition ID | Stable `LP-XXX-NNN` identifier; `XXX` is a three-letter namespace and `NNN` is a never-reused sequence from `001` through `999`. |
+| Association pair | The calling and called Application Entity titles (and related network endpoints) that bound one DICOM association negotiation. |
+| Domain event | Canonical envelope written to `events.jsonl`. Distinct from a **protocol trace** PDU record in `pdus.jsonl`. |
+| Protocol trace | PDU-level structural/timing record in `pdus.jsonl`; present at fidelity ≥ `protocol`. Never published as a domain event to improve a metric. |
+| Redaction | Honest, partial tag-level or object-dropping handover preparation (ADR-0026). **Not** anonymization, de-identification, or PS3.15 conformance. |
+| De-identification | Standards claim (e.g. PS3.15) that Lumora Probe **does not** make. Prefer redaction or object-dropping language. |
 | Report | Generated investigation output. |
 
 ### Capture Summary Report
@@ -86,8 +97,10 @@ Use standard DICOM terminology whenever applicable.
 | Entity | Object with identity. |
 | Value Object | Immutable object defined by its value. |
 | Repository | Persistence abstraction for aggregates. |
-| Domain Event | Immutable record describing something that occurred. |
+| Domain Event | Immutable record describing something that occurred (see Domain Terms). |
 | Event Bus | Infrastructure responsible for distributing events. |
+| Canonical event log | Append-only `events.jsonl` inside a Capture directory — the authoritative event store replacement (ADR-0004). |
+| Index | Rebuildable projection store (`index.db`); droppable when the capture directory disagrees (ADR-0023). |
 
 ---
 
@@ -121,14 +134,17 @@ REST terminology should align with the REST API specification.
 
 # 8. Storage Terms
 
-- Metadata Store
-- Event Store
-- Repository
-- Archive
-- Cache
-- Backup
-- Restore
-- Retention
+| Term | Definition |
+|------|------------|
+| Capture directory | Authoritative evidence layout for one Capture (ADR-0004). Replaces the baseline “Event Store” notion. |
+| Metadata Store | Historical baseline term; prefer projection/index vocabulary for Study/Series/Instance rows. |
+| Event Store | **Deprecated baseline term.** Use capture directory + canonical event log (`events.jsonl`) and rebuildable `index.db`. |
+| Repository | Persistence abstraction for aggregates or projections. |
+| Archive | Not a Lumora Probe product role; the Charter forbids becoming a PACS archive. |
+| Cache | Bounded, discardable acceleration (e.g. decode cache); never authoritative evidence. |
+| Backup | Operator responsibility: preserve `app.db` and Capture directories per retention obligations; `index.db` is rebuildable. |
+| Restore | Reconstructing operator-backed state; interrupted jobs are never auto-resumed (ADR-0023). |
+| Retention | Ring-buffer time/byte limits or operator capture retention policy. |
 
 ---
 
@@ -237,3 +253,4 @@ Related documents:
 - 09-websocket-specification.md
 - 10-plugin-sdk.md
 - 18-development-guidelines.md
+- ADR-0004, ADR-0005, ADR-0008, ADR-0013, ADR-0018, ADR-0023, ADR-0026
