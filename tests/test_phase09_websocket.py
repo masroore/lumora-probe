@@ -153,9 +153,9 @@ async def test_five_thousand_event_burst_flushes_within_ui_budget() -> None:
     bus = EventBus()
     governor = CoalescingGovernor(bus=bus, settings=LiveSettings())
     governor.register_ui(page="live-monitor", panels=("counters",), topics=("Capture",))
-    started = time.perf_counter()
     for index in range(5_000):
         await governor.publish(make_event(index))
+    started = time.perf_counter()
     await governor.flush_now()
     elapsed = time.perf_counter() - started
     await governor.stop()

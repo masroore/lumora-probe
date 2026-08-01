@@ -95,14 +95,20 @@ def _start(
 
 def _stop(process: subprocess.Popen[str]) -> tuple[str, str]:
     if process.poll() is None:
-        process.send_signal(signal.SIGTERM)
+        if os.name == "nt":
+            process.terminate()
+        else:
+            process.send_signal(signal.SIGTERM)
     try:
         stdout, stderr = process.communicate(timeout=15)
     except subprocess.TimeoutExpired as error:
         process.kill()
         process.communicate(timeout=5)
         raise AssertionError("production process required kill fallback") from error
-    assert process.returncode in {0, -signal.SIGTERM, 128 + signal.SIGTERM}
+    acceptable = {0, -signal.SIGTERM, 128 + signal.SIGTERM}
+    if os.name == "nt":
+        acceptable.add(1)
+    assert process.returncode in acceptable
     return stdout, stderr
 
 
@@ -333,6 +339,7 @@ def test_production_process_drains_sustained_dicom_traffic(tmp_path: Path) -> No
             else:
                 raise AssertionError("sustained traffic did not produce four acknowledged C-STOREs")
 
+            stop_senders.set()
             process.send_signal(signal.SIGTERM)
             try:
                 try:

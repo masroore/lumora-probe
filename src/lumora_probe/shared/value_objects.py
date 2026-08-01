@@ -197,7 +197,9 @@ class FilePath:
             raise domain_invariant("file path must be non-empty", field="value")
 
     def __str__(self) -> str:
-        return str(self.value)
+        return (
+            self.value.as_posix() if isinstance(self.value, Path) else Path(self.value).as_posix()
+        )
 
 
 @dataclass(frozen=True, slots=True)
