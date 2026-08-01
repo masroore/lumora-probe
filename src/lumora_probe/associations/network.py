@@ -9,6 +9,7 @@ import importlib
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
+from dataclasses import replace as dataclass_replace
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Protocol, cast
@@ -95,7 +96,7 @@ class CStoreSink(Protocol):
 class PDUTraceSink(Protocol):
     """Off-bus sink for compact protocol trace rows."""
 
-    def __call__(self, record: Mapping[str, object]) -> None: ...
+    def __call__(self, record: Mapping[str, object]) -> object | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +108,7 @@ class DICOMListenerConfig:
     ae_title: AETitle | str = "LUMORA"
     max_pdu: int = DEFAULT_MAX_PDU
     allowed_calling_aets: frozenset[str] = frozenset()
+    allowed_source_ips: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.bind_host.strip() or any(character.isspace() for character in self.bind_host):
@@ -123,6 +125,11 @@ class DICOMListenerConfig:
         object.__setattr__(self, "ae_title", title)
         normalized = frozenset(_normalize_ae_title(value) for value in self.allowed_calling_aets)
         object.__setattr__(self, "allowed_calling_aets", normalized)
+        object.__setattr__(
+            self,
+            "allowed_source_ips",
+            frozenset(value.strip() for value in self.allowed_source_ips),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,6 +489,7 @@ class DICOMListener:
         self._lock = threading.Lock()
         self._started = False
         self._accepted_associations = 0
+        self._ingress_failures = 0
 
     @property
     def started(self) -> bool:
@@ -490,6 +498,21 @@ class DICOMListener:
     @property
     def accepted_associations(self) -> int:
         return self._accepted_associations
+
+    @property
+    def ingress_failures(self) -> int:
+        return self._ingress_failures
+
+    def update_allowed_calling_aets(self, values: frozenset[str]) -> None:
+        """Apply the calling-AE allowlist to future associations."""
+        normalized = frozenset(_normalize_ae_title(value) for value in values)
+        self.config = dataclass_replace(self.config, allowed_calling_aets=normalized)
+        if self.ae is not None:
+            self.ae.require_calling_aet = sorted(normalized) if normalized else None
+
+    def update_allowed_source_ips(self, values: frozenset[str]) -> None:
+        """Apply the source-IP allowlist to future association requests."""
+        self.config = dataclass_replace(self.config, allowed_source_ips=frozenset(values))
 
     async def start(self) -> None:
         """Start the SCP without blocking the owning asyncio loop."""
@@ -615,6 +638,10 @@ class DICOMListener:
         )
         with self._lock:
             self._states[id(association)] = state
+        if self.config.allowed_source_ips and source_host not in self.config.allowed_source_ips:
+            self._emit(state, "rejected", reason="source IP is not allowlisted")
+            association.abort()
+            return
         self._emit(state, "requested")
 
     def _on_accepted(self, event: Any) -> None:
@@ -705,18 +732,21 @@ class DICOMListener:
         return 0xA700
 
     def _state_for(self, association: Any) -> _AssociationState:
+        association_key = id(association)
         with self._lock:
-            state = self._states.get(id(association))
-        if state is not None:
+            state = self._states.get(association_key)
+            if state is not None:
+                return state
+            source_host, source_port = _source_endpoint(association)
+            state = _AssociationState(
+                association_id=self._new_association_id(),
+                calling_ae=_calling_ae(association),
+                called_ae=_called_ae(association),
+                source_host=source_host,
+                source_port=source_port,
+            )
+            self._states[association_key] = state
             return state
-        source_host, source_port = _source_endpoint(association)
-        return _AssociationState(
-            association_id=self._new_association_id(),
-            calling_ae=_calling_ae(association),
-            called_ae=_called_ae(association),
-            source_host=source_host,
-            source_port=source_port,
-        )
 
     def _forget(self, association: Any) -> None:
         with self._lock:
@@ -741,7 +771,17 @@ class DICOMListener:
             clock=self._clock(),
             id_generator=self._id_generator(),
         )
-        self.event_ingress.publish_from_thread(event)
+        self._submit_event(event)
+
+    def _submit_event(self, event: EventEnvelope) -> None:
+        """Submit one callback observation and account for admission/completion failures."""
+        if self.event_ingress is None:
+            return
+        try:
+            future = self.event_ingress.publish_from_thread(event)
+            future.add_done_callback(self._observe_ingress_result)
+        except RuntimeError:
+            self._ingress_failures += 1
 
     def _summary_for(self, association_id: str) -> dict[str, object]:
         stats = self._pdu_stats.get(association_id)
@@ -825,7 +865,16 @@ class DICOMListener:
                 if phase in {"rejected", "aborted"}
                 else EventSeverity.INFO,
             )
-            self.event_ingress.publish_from_thread(event)
+            self._submit_event(event)
+
+    def _observe_ingress_result(self, future: concurrent.futures.Future[EventEnvelope]) -> None:
+        try:
+            error = future.exception()
+        except concurrent.futures.CancelledError:
+            self._ingress_failures += 1
+        else:
+            if error is not None:
+                self._ingress_failures += 1
 
 
 def _service_user(association: Any, name: str) -> Any:
