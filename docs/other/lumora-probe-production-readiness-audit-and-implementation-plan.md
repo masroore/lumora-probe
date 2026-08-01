@@ -1,8 +1,9 @@
 # Lumora Probe Production-Readiness Audit and Implementation Plan
 
-**Status:** Local release-closure implementation verified on August 1, 2026; final hosted matrix and reference-performance evidence remain pending
+**Status:** Production-readiness release closure verified on August 1, 2026; historical findings and intentional v1 limitations remain recorded below
 **Audit snapshot:** findings discovered at `b3f6b24`; source revalidated at `25351b4`; final docs-only HEAD `11dd9ee` (`master`)  
 **Audit date:** 2026-08-01  
+**Closure evidence:** implementation SHA `05474d5`; hosted CI run `30716410290`; benchmark `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json`
 **Audience:** implementation agent with limited repository context  
 **Scope:** `src/lumora_probe/`, production composition, shared packaging/CI seams, and their tests/docs  
 **Out of scope for the original audit:** changing accepted product scope and replacing the existing
@@ -21,8 +22,9 @@ architecture ratification in ADR-0035.
 Verified in the current worktree: full pytest (`540 passed, 17 skipped`), Ruff check/format,
 import-linter, strict BasedPyright for `core`/`shared` plus the production bootstrap, asset drift
 checks, process-boundary DICOM/C-STORE/restart smoke, and isolated wheel/sdist import/template
-smoke. Remaining release work is adversarial forced-shutdown/process coverage, broader type
-coverage, performance benchmarking, forced-shutdown evidence, and final release documentation.
+smoke. The release-closure work described below subsequently supplied the adversarial shutdown/process
+evidence, whole-package typing, reference benchmark, final-SHA interoperability, and reconciled
+release documentation. Historical checkpoint wording is retained to preserve finding provenance.
 
 > **Snapshot warning:** unrelated work changed concurrently while this audit ran. Commits `447f635`
 > and `25351b4` added a `CaptureEngine`, `CaptureRepository`, and `LifecycleManager` to bootstrap
@@ -41,9 +43,9 @@ persistent projections, operations/jobs, reports, decode/metadata, transfer insp
 plugins, and health. A subprocess smoke sends C-ECHO/C-STORE, promotes a capture, observes the
 instance through the API, stops by SIGTERM, restarts, and confirms index/settings recovery.
 
-Production readiness is **not yet release-closed**. The primary composition blockers are resolved;
-remaining gates are adversarial shutdown/process coverage, performance budgets, expanded typing,
-and release-document reconciliation.
+At the original audit checkpoint, production readiness was **not yet release-closed**. The primary
+composition blockers and all release-closure gates are now resolved; the evidence ledger below
+retains the original finding history and points to the final implementation/CI artifacts.
 
 The following constraints remain intentional: no authentication/RBAC, trusted in-process plugins,
 loopback-by-default exposure, single-process operation, and deferred pcap/byte-exact replay,
@@ -90,13 +92,13 @@ Current process-boundary acceptance (`tests/test_production_composition.py`) ver
   preserves runtime settings provenance;
 - wheel and sdist installs import `lumora_probe`/`lumora_dicom_common` and include templates.
 
-Remaining process evidence: forced shutdown during active traffic. Configured non-loopback Host
-acceptance and hostile Host rejection are covered by the subprocess test. Installed wheel/sdist
-HTTP+DICOM smoke is verified separately by the package smoke harness.
+Forced shutdown during active traffic is covered by the subprocess test. Configured non-loopback
+Host acceptance and hostile Host rejection are also covered. Installed wheel/sdist HTTP+DICOM smoke
+is verified separately by the package smoke harness and hosted six-artifact matrix.
 
 ### 2.3 Interoperability evidence
 
-`docs/planning/phase-20-interop-results.md` records 14 historical successful tests against DCMTK,
+`docs/planning/phase-20-interop-results.md` records the final 15-test successful tests against DCMTK,
 dcm4che, and Orthanc. The current pinned-container run passed 15 interoperability tests. Both
 suites exercise direct listener/relay instances rather than the shipping `lumora serve` composition;
 the installed-artifact process smoke is covered separately. The scheduled CI job is blocking for
@@ -121,7 +123,7 @@ its selected workflow events.
 | Security | **Mixed** | Host/origin/path/SQL controls, plugin containment, and archive bounds are implemented. Non-loopback process acceptance remains pending. No auth is intentional. |
 | Resource management | **Improved, still needs adversarial evidence** | Archive bounds, bounded default executor, and lifecycle drain are implemented; forced deadline evidence at process boundary remains. |
 | Cross-provider compatibility | **Component-level only** | External DICOM matrix passes direct relay instances, not production composition. |
-| Production readiness | **Local implementation closure verified; hosted evidence pending** | Readiness and advertised DICOM/capture workflow are composed; structural gates pass locally, while reference timing, six-OS artifacts, and final-SHA scheduled interoperability remain open. |
+| Production readiness | **Release closure verified** | Readiness and advertised DICOM/capture workflow are composed; reference gates pass on the documented local host, the six-artifact matrix passes in CI run `30716410290`, and final-SHA interoperability passes in job `91412594111`. |
 
 ## 4. Findings register
 
@@ -942,27 +944,28 @@ Implementation is complete only when all boxes are true:
 - [x] DICOM port and HTTP API are verified through installed wheel and sdist smoke environments.
 - [x] Graceful shutdown and deadline interruption preserve explicit evidence state at component and process level (`tests/test_bootstrap.py`, `tests/test_production_composition.py`).
 - [x] Archive extraction and plugin installation are contained and bounded.
-- [ ] Database pagination and rebuild performance meet ratified budgets.
+- [x] Database pagination and rebuild performance meet ratified budgets on the documented local reference host; no network-filesystem claim is made.
 - [x] SQLAlchemy/sqlite3 architecture drift is resolved by accepted ADR and documentation.
 - [x] Ruff check and format pass.
 - [x] Import-linter passes all contracts.
 - [x] BasedPyright passes its expanded application slices; core/shared and bootstrap pass (canonical `uv run basedpyright`).
-- [x] Full pytest passes; remaining skips are justified/opt-in, but release-required external suites remain to run.
+- [x] Full pytest passes; remaining skips are justified/opt-in, and final release-required interoperability ran separately in hosted CI.
 - [x] Frontend assets match source (`npm run check:assets`); generated event/OpenAPI artifacts were not changed.
 - [x] Exported-lock dependency audit passes; CI retains the report artifact.
-- [x] Existing pinned-container DICOM interoperability artifact passes against DCMTK, dcm4che, and Orthanc (`14 passed, 0 failed`; final-SHA scheduled rerun remains open).
+- [x] Final-SHA pinned-container DICOM interoperability passes against DCMTK, dcm4che, and Orthanc (`15 passed, 0 failed`; CI run `30716410290`, job `91412594111`).
 - [x] README, known limitations, troubleshooting, upgrade, and release status match verified behavior (`docs/release-notes-0.1.0.md`).
 - [x] No real or de-identified patient data was introduced; release tests and fixtures use synthetic DICOM UIDs/data only.
 
 ### Release-closure evidence update — August 1, 2026
 
-The closure implementation at `17fa82b` adds ADR-0036 and ADR-0037, a production runtime verification handle,
+The closure implementation at `05474d5` adds ADR-0036 and ADR-0037, a production runtime verification handle,
 bounded DICOM ingress and capture ownership, segmented ring persistence, SQL-backed pagination,
 canonical whole-package strict typing, installed wheel/sdist smoke, and adversarial shutdown/traffic
 tests. Local evidence is recorded in `docs/planning/phase-18-performance-report.md` and
-`docs/release-notes-0.1.0.md`. Hosted CI run `30714291883` passed source quality plus all six
-installed-artifact jobs and the dependency-audit step. The database p95 budget and final-SHA
-scheduled external interoperability result remain open; the scheduled interop job in that run was skipped.
+`docs/release-notes-0.1.0.md`. Hosted CI run `30716410290` passed source quality plus all six
+installed-artifact jobs, the dependency-audit step, and final-SHA interoperability. Reference
+performance gates pass on the documented local host; universal and network-filesystem performance
+claims remain intentionally out of scope.
 
 ## 10. Final implementation guidance
 

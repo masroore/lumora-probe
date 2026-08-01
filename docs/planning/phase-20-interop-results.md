@@ -1,8 +1,8 @@
 # Phase 20 Interoperability Results
 
-**Execution date:** 2026-07-31  
+**Execution date:** 2026-08-01  
 **Suite:** scheduled/manual, opt-in (`LUMORA_INTEROP=1`)  
-**Result:** 14 passed, 0 failed
+**Result:** 15 passed, 0 failed
 
 ## Execution
 
@@ -14,7 +14,9 @@ docker compose -f tests/interop/docker-compose.yml --profile interop down -v
 ```
 
 The default quality gate does not start these containers. Without `LUMORA_INTEROP=1`,
-the implementation-facing modules are skipped by design.
+the implementation-facing modules are skipped by design. The final hosted run used implementation
+SHA `05474d5d0bcdebeca559b7d0cc65ab7c977960ac`, CI run `30716410290`, job `91412594111`, and
+reported `15 passed, 556 deselected in 20.86s`.
 
 ## Pinned implementations
 
@@ -59,8 +61,7 @@ covered.
 | Orthanc DICOM port was initially published broadly by the skeleton | Restricted to `127.0.0.1:4242`; no broader host exposure is needed for the suite. Resolved. |
 
 No failure was omitted from the executed final suite. The scheduled job remains
-non-gating per ADR-0022; this report is the retained result artifact for triage and release
-review.
+non-gating per ADR-0022, but this final-SHA run is the retained result artifact for release review.
 
 ## Maintenance
 

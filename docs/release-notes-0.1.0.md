@@ -1,7 +1,7 @@
 # Lumora Probe 0.1.0 release notes
 
-**Status:** GA implementation signed off July 31, 2026; release-closure verification updated
-August 1, 2026. Hosted final-SHA artifacts remain promotion evidence.
+**Status:** GA implementation and release closure signed off August 1, 2026. Hosted final-SHA
+artifacts remain promotion evidence.
 
 ## Verified closure work
 
@@ -19,11 +19,12 @@ August 1, 2026. Hosted final-SHA artifacts remain promotion evidence.
 
 ## Evidence still environment-specific
 
-- Six installed-artifact OS combinations passed in hosted CI run `30714291883` (wheel and sdist on
-  Ubuntu, macOS, and Windows). The run is the release evidence; local execution does not replace it.
-- The retained pinned-container interoperability artifact records 14 passed, 0 failed on July 31,
-  2026; the final-SHA scheduled CI artifact remains pending.
-- Reference performance timing is limited to the Phase 18 local host; unresolved p95 budgets remain
-  named in `docs/planning/phase-18-performance-report.md`.
+- Six installed-artifact OS combinations passed in hosted CI run `30716410290` (wheel and sdist on
+  Ubuntu, macOS, and Windows) at implementation SHA `05474d5`. The run is the release evidence;
+  local execution does not replace it.
+- The final-SHA pinned-container interoperability artifact records 15 passed, 0 failed in hosted
+  CI run `30716410290` (job `91412594111`).
+- Reference performance timing passed the ratified p95/rebuild/ring gates on the documented Phase 18
+  local host; results remain host-specific and are not claims for network filesystems or every machine.
 - No authentication, RBAC, PCAP import, PS3.15 de-identification, or network-filesystem SQLite
   support is added by this closure work.
