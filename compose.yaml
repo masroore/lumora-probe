@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
+
+# Docker Compose deployment for Lumora Probe.
+#
+# Mirrors docs/guides/docker.md: HTTP on 8000, DICOM on 11112, one volume
+# (/var/lib/lumora) holding the complete LUMORA_DATA_DIR tree. The image runs
+# as the non-root `lumora` user; bind mounts must be writable by that UID/GID
+# (defaults 10001/10001, overridable via the Dockerfile UID/GID build args).
+
+services:
+  lumora-probe:
+    build:
+      context: .
+      args:
+        UID: 10001
+        GID: 10001
+    image: lumora-probe:local
+    container_name: lumora-probe
+    restart: unless-stopped
+    environment:
+      # Set by the image already; kept here so the mapping is visible.
+      LUMORA_DATA_DIR: /var/lib/lumora
+      LUMORA_BIND_HOST: 0.0.0.0
+      LUMORA_ALLOW_UNAUTHENTICATED_NETWORK: "true"
+    ports:
+      # Loopback-bound by default; open to the LAN/external network only when
+      # a reverse proxy / DICOM boundary is deliberately configured.
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:11112:11112"
+    volumes:
+      - lumora-data:/var/lib/lumora
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  lumora-data:
