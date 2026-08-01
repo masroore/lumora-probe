@@ -35,6 +35,13 @@ class SecurityPolicy:
         self.trusted_proxies = frozenset(_normalise_host(host) for host in trusted_proxies)
         self.allowed_origins = frozenset(allowed_origins)
 
+    def update_read_only(self, read_only: bool) -> None:
+        """Apply the mutable read-only gate to subsequent requests."""
+        self.read_only = bool(read_only)
+
+    def update_allowed_origins(self, origins: Iterable[str]) -> None:
+        self.allowed_origins = frozenset(origins)
+
     def validate_websocket(
         self,
         *,
@@ -48,7 +55,7 @@ class SecurityPolicy:
         effective_host = host_header
         if _normalise_host(client_host) in self.trusted_proxies and forwarded_host:
             effective_host = forwarded_host.split(",", 1)[0].strip()
-        host = _normalise_host(effective_host.split(":", 1)[0])
+        host = _host_from_header(effective_host)
         if host not in self.allowed_hosts:
             return "The WebSocket Host is not allowed."
         if (
@@ -136,7 +143,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             forwarded = request.headers.get("x-forwarded-host")
             if forwarded:
                 host_header = forwarded.split(",", 1)[0].strip()
-        return _normalise_host(host_header.split(":", 1)[0])
+        return _host_from_header(host_header)
 
     async def _validate_origin(self, request: Request, host: str) -> JSONResponse | None:
         fetch_site = request.headers.get("sec-fetch-site", "").casefold()
@@ -183,6 +190,19 @@ def _error_response(
 
 def _normalise_host(value: str) -> str:
     return value.strip().lower().strip("[]")
+
+
+def _host_from_header(value: str) -> str:
+    """Extract a normalized host from an HTTP Host or forwarded-host value."""
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    try:
+        parsed = urlsplit(f"//{candidate}")
+        hostname = parsed.hostname
+    except ValueError:
+        hostname = None
+    return _normalise_host(hostname or candidate.split(":", 1)[0])
 
 
 def _origin_host(origin: str) -> str:

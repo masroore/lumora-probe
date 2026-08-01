@@ -158,6 +158,8 @@ def _run_plugin_install(args: argparse.Namespace) -> dict[str, Any]:
     if destination.exists():
         raise ApiClientError(f"Plugin is already installed: {manifest.plugin_id}")
     destination_root.mkdir(parents=True, exist_ok=True)
+    if any(path.is_symlink() for path in source.rglob("*")):
+        raise ApiClientError("Plugin source contains symlinks, which are not installable")
     try:
         destination = destination.resolve()
         if destination.parent != destination_root.resolve():

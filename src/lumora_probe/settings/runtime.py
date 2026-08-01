@@ -144,10 +144,24 @@ class RuntimeSettingsStore:
                     remediation="Fix settings.toml syntax or restore the last valid copy.",
                     context={"path": str(self.path)},
                 ) from exc
+        metadata = file_values.pop("__lumora", {})
+        runtime_names = metadata.get("runtime", []) if isinstance(metadata, dict) else []
+        if not isinstance(runtime_names, list) or not all(
+            isinstance(name, str) for name in runtime_names
+        ):
+            raise ConfigurationError(
+                code="LUMORA-CORE-SETTINGS-006",
+                message="Invalid settings provenance metadata",
+                remediation="Remove the __lumora metadata table and restart.",
+                context={"path": str(self.path)},
+            )
         values = RuntimeSettings().model_dump()
         values.update(file_values)
         self._sources = {key: SettingSource.DEFAULT for key in values}
         self._sources.update({key: SettingSource.FILE for key in file_values})
+        self._sources.update(
+            {name: SettingSource.RUNTIME for name in runtime_names if name in values}
+        )
         for field, env_name in _ENV_NAMES.items():
             if env_name in self.environ:
                 values[field] = _parse_env(field, self.environ[env_name])
@@ -184,7 +198,8 @@ class RuntimeSettingsStore:
     def snapshots(self) -> tuple[SettingSnapshot, ...]:
         return tuple(self.snapshot(name) for name in self.settings.model_fields)
 
-    def update(self, name: str, value: Any) -> SettingSnapshot:
+    def validate_update(self, name: str, value: Any) -> None:
+        """Validate mutability and value shape before applying a runtime change."""
         if name in _STARTUP_ONLY:
             raise RestartRequiredError(
                 code="LUMORA-CORE-SETTINGS-003",
@@ -207,7 +222,7 @@ class RuntimeSettingsStore:
         values = self.settings.model_dump()
         values[name] = value
         try:
-            updated = RuntimeSettings.model_validate(values)
+            RuntimeSettings.model_validate(values)
         except ValidationError as exc:
             raise ConfigurationError(
                 code="LUMORA-CORE-SETTINGS-005",
@@ -215,12 +230,37 @@ class RuntimeSettingsStore:
                 remediation="Use a value accepted by the setting schema.",
                 context={"setting": name, "errors": exc.errors()},
             ) from exc
+
+    def update(self, name: str, value: Any) -> SettingSnapshot:
+        """Persist one validated runtime setting atomically."""
+        return self.update_many({name: value})[0]
+
+    def update_many(self, values: Mapping[str, Any]) -> tuple[SettingSnapshot, ...]:
+        """Validate and persist a group of runtime settings in one file replacement."""
+        if not values:
+            return ()
+        for name, value in values.items():
+            self.validate_update(name, value)
+        previous = {name: self.snapshot(name) for name in values}
+        merged = self.settings.model_dump()
+        merged.update(values)
+        updated = RuntimeSettings.model_validate(merged)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._atomic_write(updated.model_dump())
+        runtime_names = {
+            key for key, source in self._sources.items() if source == SettingSource.RUNTIME
+        }
+        runtime_names.update(values)
+        persisted = {
+            key: item
+            for key, item in updated.model_dump().items()
+            if key in runtime_names or self._sources.get(key) == SettingSource.FILE
+        }
+        self._atomic_write(persisted, runtime_names=runtime_names)
         self._settings = updated
-        self._sources[name] = SettingSource.RUNTIME
-        changed = self.snapshot(name)
-        self._emit_configuration_changed(current, changed)
+        self._sources.update({name: SettingSource.RUNTIME for name in values})
+        changed = tuple(self.snapshot(name) for name in values)
+        for name, snapshot in zip(values, changed, strict=True):
+            self._emit_configuration_changed(previous[name], snapshot)
         return changed
 
     def _emit_configuration_changed(
@@ -253,12 +293,15 @@ class RuntimeSettingsStore:
         )
         self.event_publisher.publish_from_thread(event)
 
-    def _atomic_write(self, values: Mapping[str, Any]) -> None:
+    def _atomic_write(self, values: Mapping[str, Any], *, runtime_names: set[str]) -> None:
+        metadata = {"runtime": sorted(runtime_names)}
+        serialized = dict(values)
+        serialized["__lumora"] = metadata
         fd, temporary_name = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
         temporary = Path(temporary_name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(_render_toml(values))
+                handle.write(_render_toml(serialized))
                 handle.flush()
                 os.fsync(handle.fileno())
             temporary.replace(self.path)

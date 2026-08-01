@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from fastapi import APIRouter, HTTPException, Query
 
-from .pagination import PaginationParams, paginate
+from .pagination import Page, PaginationParams, paginate
 from .query import QueryError, QueryPolicy, apply_query
 from .resources import InMemoryResourceStore, ResourceStore
 
@@ -73,6 +73,13 @@ def create_capture_router(
         sort: str | None = None,
         filter: str | None = None,
     ) -> dict[str, object]:
+        page_loader = getattr(resource_store, "list_page", None)
+        if callable(page_loader) and sort is None and filter is None:
+            items, total = await page_loader(
+                offset=(page - 1) * page_size,
+                limit=page_size,
+            )
+            return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
         try:
             records = await resource_store.list("captures")
             records = apply_query(

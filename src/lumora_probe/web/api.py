@@ -73,7 +73,7 @@ API_PREFIX = "/api/v1"
 class CaptureRuntime(Protocol):
     """Lifecycle adapter for the capture engine owned by application bootstrap."""
 
-    ring_buffer: RetentionStateProvider
+    ring_buffer: Any
 
     async def start(self, *, event_bus: Any | None = None) -> None: ...
 
@@ -349,7 +349,5 @@ def create_app(
     application.state.retention_map = study_retention_map
     return application
 
-
-app = create_app()
 
 __all__: tuple[str, ...] = ()
