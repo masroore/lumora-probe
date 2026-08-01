@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -27,7 +28,7 @@ def test_physical_databases_have_separate_rebuildable_and_authoritative_schemas(
     databases = StorageDatabases.from_paths(paths, network_detector=lambda _: False)
     databases.initialise()
 
-    with sqlite3.connect(paths.index_db) as connection:
+    with closing(sqlite3.connect(paths.index_db)) as connection:
         tables = {
             row[0]
             for row in connection.execute(
@@ -37,7 +38,7 @@ def test_physical_databases_have_separate_rebuildable_and_authoritative_schemas(
     assert {"captures", "studies", "series", "instances", "event_window"} <= tables
     assert "jobs" not in tables
 
-    with sqlite3.connect(paths.app_db) as connection:
+    with closing(sqlite3.connect(paths.app_db)) as connection:
         tables = {
             row[0]
             for row in connection.execute(
@@ -56,7 +57,7 @@ def test_index_recreation_drops_stale_projection_but_app_migration_preserves_his
     recreate_index_schema(index_path)
     migrate_app_schema(app_path)
 
-    with sqlite3.connect(index_path) as connection:
+    with closing(sqlite3.connect(index_path)) as connection:
         connection.execute(
             "INSERT INTO captures VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -76,7 +77,7 @@ def test_index_recreation_drops_stale_projection_but_app_migration_preserves_his
             ),
         )
         connection.commit()
-    with sqlite3.connect(app_path) as connection:
+    with closing(sqlite3.connect(app_path)) as connection:
         connection.execute(
             "INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             ("job-1", "rebuild", "{}", "completed", "now", "now", "ok", "{}", None),
@@ -86,9 +87,9 @@ def test_index_recreation_drops_stale_projection_but_app_migration_preserves_his
     recreate_index_schema(index_path)
     migrate_app_schema(app_path)
 
-    with sqlite3.connect(index_path) as connection:
+    with closing(sqlite3.connect(index_path)) as connection:
         assert connection.execute("SELECT COUNT(*) FROM captures").fetchone() == (0,)
-    with sqlite3.connect(app_path) as connection:
+    with closing(sqlite3.connect(app_path)) as connection:
         assert connection.execute("SELECT operation_id FROM jobs").fetchone() == ("job-1",)
 
 

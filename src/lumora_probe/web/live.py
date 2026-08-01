@@ -692,7 +692,17 @@ def _event_json(event: EventEnvelope) -> dict[str, Any]:
 def _update_client_panel_state(
     client: LiveClient, events: Iterable[EventEnvelope], timeline_cap: int, bus: LiveEventSource
 ) -> dict[str, dict[str, Any]]:
-    for event in events:
+    event_list = events if isinstance(events, list) else list(events)
+    previous_sequence = client.timeline_state[-1]["sequence"] if client.timeline_state else None
+    ordered = previous_sequence is not None or not client.timeline_state
+    for event in event_list:
+        sequence = event.sequence
+        if sequence is None or (previous_sequence is not None and sequence < previous_sequence):
+            ordered = False
+        if sequence is not None:
+            previous_sequence = sequence
+
+    for event in event_list:
         category = bus.registry.category_for(event.event_name, event.event_version)
         category_name = category.value if category is not None else event.aggregate_type
         client.counter_state[f"category:{category_name}"] += 1
@@ -711,15 +721,19 @@ def _update_client_panel_state(
                 "severity": event.severity.value,
             }
         )
-    # Sort by sequence ascending to ensure timeline order is deterministic
-    sorted_timeline = sorted(client.timeline_state, key=lambda e: e["sequence"])
-    client.timeline_state = deque(sorted_timeline)
-    # Track dropped events before trimming
-    if len(client.timeline_state) > timeline_cap:
-        dropped = len(client.timeline_state) - timeline_cap
-        client.counter_state["events_dropped"] += dropped
-    while len(client.timeline_state) > timeline_cap:
-        client.timeline_state.popleft()
+        if ordered and len(client.timeline_state) > timeline_cap:
+            client.timeline_state.popleft()
+            client.counter_state["events_dropped"] += 1
+
+    if not ordered:
+        # Out-of-order events are uncommon; retain deterministic sequence ordering.
+        sorted_timeline = sorted(client.timeline_state, key=lambda e: e["sequence"])
+        client.timeline_state = deque(sorted_timeline)
+        if len(client.timeline_state) > timeline_cap:
+            dropped = len(client.timeline_state) - timeline_cap
+            client.counter_state["events_dropped"] += dropped
+            while len(client.timeline_state) > timeline_cap:
+                client.timeline_state.popleft()
     return {
         "counters": {
             "counters": dict(sorted(client.counter_state.items())),

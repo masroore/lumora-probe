@@ -83,6 +83,7 @@ target-version = "py313"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = ["error"]
 markers = [
     "unit: isolated pure logic tests",
     "component: tests using real filesystem, database, or bus components",

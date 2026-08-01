@@ -12,6 +12,7 @@ from typing import Any
 from pydicom import dcmread
 
 from lumora_dicom_common.constants import DICOM_SUCCESS_STATUS
+from lumora_dicom_common.pynetdicom_runtime import patch_transport_socket_cleanup
 
 from .catalog import CatalogInstance, StudyBatch
 from .config import Config
@@ -23,6 +24,8 @@ try:
 except ImportError:
     pynetdicom = None  # type: ignore
     Verification = None  # type: ignore
+else:
+    patch_transport_socket_cleanup()
 
 
 # ---------------------------------------------------------------------------
