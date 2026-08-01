@@ -11,8 +11,10 @@ network tests:
   Study Batch per DICOM association.
 
 Release `0.1.0` reached GA sign-off on **July 31, 2026** for trusted engineering
-deployments. The release is not a clinical workstation, PACS archive, RIS/EMR, reporting
-system, or AI diagnostic platform. See [known limitations](docs/guides/known-limitations.md).
+deployments. The production `lumora serve` path starts the HTTP API, DICOM listener, capture
+engine, index recovery, and durable operation services. The release is not a clinical
+workstation, PACS archive, RIS/EMR, reporting system, or AI diagnostic platform. See [known
+limitations](docs/guides/known-limitations.md).
 
 ## Quick start: Lumora Probe
 

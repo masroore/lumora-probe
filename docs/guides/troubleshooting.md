@@ -16,7 +16,8 @@ condition IDs for ordinary operational errors.
 
 | Symptom | Likely cause | Remediation |
 |---------|--------------|-------------|
-| `/api/v1/health/ready` not ready | Event bus or database probe not ready | Check process logs; confirm `index.db`/`app.db` initialised on a local filesystem |
+| `/api/v1/health/ready` not ready | Event bus, index recovery, DICOM listener, or database probe not ready | Check the named service detail; confirm `index.db`/`app.db` initialised on a local filesystem and that the DICOM port is free |
+| Readiness reports degraded index recovery | One or more malformed capture packages were skipped | Preserve the capture root, inspect startup diagnostics, repair or quarantine the invalid package, then restart to rebuild the derived index |
 | Liveness OK, readiness fail | Intentional split | Investigate the failing probe named in the health payload |
 
 ## Data root and network filesystems

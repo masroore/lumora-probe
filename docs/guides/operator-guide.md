@@ -13,8 +13,10 @@ lumora serve --trust-network --host 0.0.0.0   # explicit non-loopback acknowledg
 
 - Startup-only settings (bind address, data/capture roots, ports, executor sizing) require
   restart to change.
-- Runtime settings (ring buffer, allowlists, read-only mode, theme, rule toggles) update live
-  via `/api/v1/settings` and persist to `settings.toml` under the data root.
+- Runtime settings (ring buffer, allowlists, and read-only mode) apply live via
+  `/api/v1/settings`; all runtime settings persist to `settings.toml` under the data root. Theme
+  and rule toggles are client/UI provenance settings because no server-side analysis rule runner is
+  enabled in v1.
 
 ## Exposure gate and read-only mode
 
@@ -45,12 +47,18 @@ Everything derives from `LUMORA_DATA_DIR` (OS-conventional default when unset):
 - Liveness/health: `GET /api/v1/health`
 - Readiness: `GET /api/v1/health/ready`
 
-Poll readiness after start; do not assume a fixed sleep.
+Readiness is false until event bus, executor, index recovery, databases, capture engine,
+DICOM listener, plugin host, and operation jobs are healthy. Poll readiness after start; do not
+assume a fixed sleep. A degraded index-recovery detail identifies invalid capture packages that
+were skipped while valid captures remained available.
 
 ## Shutdown and recovery
 
-Shutdown drains associations and durable writers within the configured grace period. Jobs
-found `running` after restart become `Interrupted` and are never auto-resumed (ADR-0023).
+Shutdown stops new associations, drains event/capture writers, and persists or explicitly
+interrupts active work within the configured grace period. Jobs found `running` after restart
+become `Interrupted` and are never auto-resumed (ADR-0023). The capture index is rebuilt from
+authoritative capture directories on every startup; `app.db` remains authoritative for jobs,
+audit, and bookmarks.
 
 ## Backup checklist
 
