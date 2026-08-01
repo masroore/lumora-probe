@@ -43,8 +43,8 @@ latency.
 
 ## Release-closure measurements (2026-08-01)
 
-**Commit under evaluation:** `9d54e05` (release-closure implementation tip; evidence-only
-documentation follows in a separate commit). **Reference host:** macOS local SSD, CPython 3.13,
+**Commit under evaluation:** `25f4be6` (release-closure implementation tip). **Reference host:**
+macOS local SSD, CPython 3.13,
 SQLite WAL. **Method:** one warm-up plus five samples for timing runs; median and p95 are reported
 when a workload is run. No result below is generalized to network filesystems.
 
@@ -52,9 +52,16 @@ when a workload is run. No result below is generalized to network filesystems.
 |---|---|---|---|
 | Bounded pagination | `CaptureRepository.list_captures_page()` performs count + page + page-owned object query; projection store uses parameterized SQL `LIMIT/OFFSET`; direct lookup uses `WHERE` | `tests/performance/test_release_closure.py` and Phase 18 workloads | measured / structurally implemented |
 | Projection rebuild | `CaptureRepository.rebuild()` indexes valid packages with projection disabled and invokes one final projection rebuild | Existing Phase 18 startup/large-study measurements | measured / structurally implemented |
-| Ring expiry | Persisted append-only `segments/` metadata; eviction deletes or compacts only affected segments; legacy `records.jsonl` migrates after durable segment metadata | `RingBufferService.persistence_stats`; structural turnover test | measured / structurally implemented |
+| Ring expiry | Persisted append-only `segments/` metadata; eviction deletes or compacts only affected segments; oversized records remain as a single retained segment; legacy `records.jsonl` migrates after durable segment metadata | `RingBufferService.persistence_stats`; structural turnover, torn-tail, migration, oversized-record, and metadata-publication tests | measured / structurally implemented |
 | Installed artifacts | Wheel smoke driver verifies site-packages imports, static assets, HTTP readiness, DICOM C-ECHO/C-STORE, promotion, and shutdown | Local wheel and sdist smoke passed; six-OS CI matrix is release gate | pass locally / CI required |
-| Warning cleanliness | Pytest defaults to `error`; direct SQLite fixtures and locked pynetdicom transport teardown are closed explicitly | `uv run pytest -q` and `uv run pytest -q -W error`: 546 passed, 17 skipped | pass locally |
+| Warning cleanliness | Pytest defaults to `error`; direct SQLite fixtures and locked pynetdicom transport teardown are closed explicitly | `uv run pytest -q -W error`: 553 passed, 17 skipped | pass locally |
+
+The current structural release-closure suite also covers deterministic unique pagination ties,
+direct projection point lookups, SQL query-plan presence for the indexed instance sort, and a
+real child-process forced-deadline capture recovery. It does **not** constitute a reference timing
+run for the 10,000-capture / 100,000-instance / 500,000-event workload, N-versus-2N rebuild
+scaling, or the five-sample p95 budgets in ADR-0037; those remain explicitly unverified rather
+than being inferred from small structural fixtures.
 
 Reference timing and CI run links are intentionally left open until the final release commit and
 hosted matrix results exist. This report does not convert local structural evidence into a universal

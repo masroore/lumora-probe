@@ -28,8 +28,9 @@ PACS, RIS, EMR, diagnostic workstation, clinical archive, or de-identification s
 ## Release verification
 
 - External interoperability is an opt-in scheduled suite and is intentionally outside the
-  default push/pull-request gate. Results are published in
-  `docs/planning/phase-20-interop-results.md`.
+  default push/pull-request gate. The retained pinned-container result is 14 passed, 0 failed
+  on July 31, 2026; a final-SHA scheduled artifact is still required for release promotion.
+  Results are published in `docs/planning/phase-20-interop-results.md`.
 - Performance dimensions not ratified as release budgets remain measured evidence rather than
   newly invented gates; see `docs/planning/phase-18-performance-report.md`.
 
@@ -39,5 +40,5 @@ The checked-in structural performance suite proves bounded query and ring-persis
 it does not claim the ratified p95 budgets on every machine. Reference timing evidence is limited
 to the documented local macOS/SQLite-WAL host. Network filesystems remain outside the supported
 SQLite deployment. Installed wheel/sdist smoke is locally verified; the six-job Linux/macOS/
-Windows CI matrix and scheduled external interoperability run remain release evidence rather than
-claims inferred from local execution.
+Windows CI matrix and a final-SHA scheduled external interoperability run remain release evidence
+rather than claims inferred from local execution.

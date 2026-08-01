@@ -1,6 +1,7 @@
 # Lumora Probe 0.1.0 release notes
 
-**Status:** GA signed off July 31, 2026; release-closure verification updated August 1, 2026.
+**Status:** GA implementation signed off July 31, 2026; release-closure verification updated
+August 1, 2026. Hosted final-SHA artifacts remain promotion evidence.
 
 ## Verified closure work
 
@@ -20,7 +21,8 @@
 
 - Six installed-artifact OS combinations are gated by CI; local execution does not replace their
   hosted artifacts.
-- DCMTK/dcm4che/Orthanc interoperability remains scheduled CI evidence.
+- The retained pinned-container interoperability artifact records 14 passed, 0 failed on July 31,
+  2026; the final-SHA scheduled CI artifact remains pending.
 - Reference performance timing is limited to the Phase 18 local host; unresolved p95 budgets remain
   named in `docs/planning/phase-18-performance-report.md`.
 - No authentication, RBAC, PCAP import, PS3.15 de-identification, or network-filesystem SQLite
