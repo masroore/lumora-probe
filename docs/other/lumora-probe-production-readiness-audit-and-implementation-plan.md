@@ -1,12 +1,28 @@
 # Lumora Probe Production-Readiness Audit and Implementation Plan
 
-**Status:** Audit complete; implementation not started by this review  
+**Status:** Implementation in progress; production composition remediation landed on August 1, 2026; release closure remains pending
 **Audit snapshot:** findings discovered at `b3f6b24`; source revalidated at `25351b4`; final docs-only HEAD `11dd9ee` (`master`)  
 **Audit date:** 2026-08-01  
 **Audience:** implementation agent with limited repository context  
 **Scope:** `src/lumora_probe/`, production composition, shared packaging/CI seams, and their tests/docs  
-**Out of scope:** implementing fixes, changing accepted product scope, and replacing the existing
+**Out of scope for the original audit:** changing accepted product scope and replacing the existing
 `docs/other/cross-product-sharing-audit-and-refactoring-plan.md`
+
+## Implementation checkpoint — August 1, 2026
+
+The current worktree now composes the production service graph: event bus, bounded executor,
+index recovery, capture/ring-buffer engine, DICOM listener, durable operations/jobs, study
+projections, frame decoding, metadata inspection, reports, transfer inspection, runtime settings,
+and health probes. Startup recovery preserves valid captures while reporting invalid packages as
+degraded diagnostics. Additional hardening covers archive limits, plugin install containment,
+IPv6 Host parsing, event-bus shutdown admission, persisted object sizes, and direct-sqlite
+architecture ratification in ADR-0035.
+
+Verified in the current worktree: full pytest (`540 passed, 17 skipped`), Ruff check/format,
+import-linter, strict BasedPyright for `core`/`shared` plus the production bootstrap, asset drift
+checks, process-boundary DICOM/C-STORE/restart smoke, and isolated wheel/sdist import/template
+smoke. Remaining release work is adversarial forced-shutdown/process coverage, broader type
+coverage, performance benchmarking, forced-shutdown evidence, and final release documentation.
 
 > **Snapshot warning:** unrelated work changed concurrently while this audit ran. Commits `447f635`
 > and `25351b4` added a `CaptureEngine`, `CaptureRepository`, and `LifecycleManager` to bootstrap
@@ -17,33 +33,21 @@
 
 ## 1. Executive summary
 
-The repository has strong isolated implementations and strong structural enforcement, but the
-shipping `lumora serve` composition does not assemble the product those implementations form.
-The most important result is not a subtle defect: the production command reaches HTTP readiness
-while still not starting a DICOM listener, rebuilding the capture index, or composing production
-projection, replay, report, frame, metadata, and durable operation providers. A capture engine and
-lifecycle manager were added during this audit, but they remain disconnected from DICOM ingress
-and most live API routes still use empty test/default providers.
+The audit identified a hollow production composition, destructive derived-index startup,
+false-positive readiness, non-persistent runtime settings, host-policy mismatch, unsafe plugin
+installation, and ignored executor sizing. The current worktree now composes `lumora serve`
+through one lifecycle: bounded executor, index recovery, capture/ring buffer, DICOM listener,
+persistent projections, operations/jobs, reports, decode/metadata, transfer inspection, settings,
+plugins, and health. A subprocess smoke sends C-ECHO/C-STORE, promotes a capture, observes the
+instance through the API, stops by SIGTERM, restarts, and confirms index/settings recovery.
 
-Production readiness is **blocked** until the composition root is completed and verified at the
-real process boundary. Existing unit, component, DICOM, and interoperability tests prove many
-components in isolation; they do not prove that `lumora serve` connects those components.
+Production readiness is **not yet release-closed**. The primary composition blockers are resolved;
+remaining gates are adversarial shutdown/process coverage, performance budgets, expanded typing,
+and release-document reconciliation.
 
-Additional release-blocking or high-risk issues:
-
-1. Startup destructively recreates `index.db` but never rebuilds it from authoritative captures.
-2. Readiness excludes the absent listener/capture/runtime services and therefore returns a false
-   positive.
-3. Runtime settings use an in-memory web test provider in production; writes appear successful,
-   are not persisted, and do not reconfigure services.
-4. Non-loopback binding is allowed by startup configuration but rejected by the HTTP/WebSocket
-   localhost-only host policy, breaking documented Docker/reverse-proxy use.
-5. Plugin installation uses unvalidated manifest IDs in a destination path and can copy outside
-   the plugin root before post-copy validation fails.
-6. DICOM threads directly mutate capture engine session/writer state owned by the event loop,
-   without a synchronization or ownership contract.
-7. The configured executor worker limit is ignored; blocking work uses the unconstrained default
-   executor.
+The following constraints remain intentional: no authentication/RBAC, trusted in-process plugins,
+loopback-by-default exposure, single-process operation, and deferred pcap/byte-exact replay,
+remote collectors, Prometheus exposition, and PS3.15 de-identification.
 
 No confirmed remote-code-execution vulnerability was found in the HTTP API. No authentication or
 RBAC is intentionally provided in v1 under ADR-0009; plugins are intentionally trusted in-process
@@ -55,65 +59,69 @@ safe enough for the accepted trusted-engineering deployment model.
 
 ### 2.1 Current snapshot verification
 
-The full suite ran during concurrent DICOM extraction work before the lifecycle commits. After
-source stabilized at `25351b4`, affected tests and structural gates were rerun; `11dd9ee` changed
-only the lifecycle plan document:
+The original audit snapshot predates the current implementation. The current worktree was
+revalidated on August 1, 2026; historical commit references below explain finding provenance only:
 
 | Gate | Result | Interpretation |
 |---|---|---|
 | `uv run ruff check .` | Pass | Lint rules pass. |
-| `uv run ruff format --check .` | Fail | Six pre-existing Markdown files contain Python fences Ruff would reformat. Do not mix this cleanup into production remediation. |
+| `uv run ruff format --check .` | Pass | Current worktree is formatted. |
 | `uv run lint-imports --no-cache` | Pass, 7/7 | Static package boundaries are enforced. |
-| `uv run basedpyright src/lumora_probe/core src/lumora_probe/shared` | Pass | Strict types cover only `core` and `shared`, not application slices or bootstrap. |
-| `uv run pytest -q` | `536 passed, 17 skipped` before lifecycle commits | Isolated behavior is strong; skipped suites include opt-in external/browser coverage. |
+| `uv run basedpyright src/lumora_probe/core src/lumora_probe/shared` | Pass | Mandatory strict slices pass; bootstrap also passes an incremental strict check. |
+| `uv run pytest -q` | `540 passed, 17 skipped` | Full current suite; skips remain opt-in external/browser coverage. |
 | affected bootstrap/capture/startup tests | `12 passed` at lifecycle source `25351b4` | New adapter/shutdown tests pass; full suite must still be rerun on the implementation branch. |
-| exported-requirements `pip-audit` | Inconclusive | The tool crashed creating an isolated temporary environment on this machine. |
-| installed-environment `pip-audit --strict` | Inconclusive | It refused the unpublished local `lumora-probe==0.1.0` package. |
+| exported-requirements `pip-audit` | Pass | Exported locked requirements audited with `--strict --no-deps --disable-pip`; no known vulnerabilities found. |
+| installed-environment `pip-audit --strict` | Inconclusive | It refuses the unpublished local `lumora-probe==0.1.0` package; CI audits the exported lock instead. |
 
-An earlier clean checkpoint at `a197b74` reported no known dependency vulnerabilities. That is
-historical evidence only; rerun the CI-equivalent exported-requirements audit on the final branch.
+The current exported-lock audit reported no known vulnerabilities. The CI command now uses the
+same pinned, project-excluded requirements mode and retains the report artifact.
 
 ### 2.2 Runtime smoke evidence
 
-A process-boundary smoke run before the partial lifecycle commits observed:
+Current process-boundary acceptance (`tests/test_production_composition.py`) verifies:
 
-- `/api/v1/health/ready` returned ready.
-- Reported services were only `event-bus`, `index-db`, `app-db`, and `plugin-host`.
-- TCP port `11112` was closed. No later commit added a `DICOMListener`.
-- Capture, association, projection, operation, and report routes returned empty/default behavior.
-  The partial lifecycle commits injected only `capture_engine`; production resource providers remain
-  absent.
+- readiness exposes event bus, executor, index recovery/database, capture engine, DICOM listener,
+  app database, plugin host, and operation jobs;
+- the configured DICOM TCP endpoint is open and accepts C-ECHO and synthetic C-STORE;
+- ring-buffer promotion creates an indexed capture, the persisted instance is visible through
+  `/api/v1/instances`, metadata/report routes return production data, and report jobs complete
+  through the durable operation endpoint; hostile HTTP Host headers are rejected;
+- SIGTERM exits the process; restart with the same data root rebuilds capture visibility and
+  preserves runtime settings provenance;
+- wheel and sdist installs import `lumora_probe`/`lumora_dicom_common` and include templates.
 
-This contradicts `README.md:28-30`, which states that `lumora serve` starts the HTTP server and a
-DICOM listener on `127.0.0.1:11112`.
+Remaining process evidence: forced shutdown during active traffic. Configured non-loopback Host
+acceptance and hostile Host rejection are covered by the subprocess test. Installed wheel/sdist
+HTTP+DICOM smoke is verified separately by the package smoke harness.
 
 ### 2.3 Interoperability evidence
 
-`docs/planning/phase-20-interop-results.md` records 14 successful tests against DCMTK, dcm4che,
-and Orthanc. These tests instantiate DICOM listener/relay classes directly. They do not launch
-`lumora serve`, assert production readiness, or prove persistence/API visibility. The scheduled
-interop job is also `continue-on-error: true` in `.github/workflows/ci.yml`.
+`docs/planning/phase-20-interop-results.md` records 14 historical successful tests against DCMTK,
+dcm4che, and Orthanc. The current pinned-container run passed 15 interoperability tests. Both
+suites exercise direct listener/relay instances rather than the shipping `lumora serve` composition;
+the installed-artifact process smoke is covered separately. The scheduled CI job is blocking for
+its selected workflow events.
 
 ## 3. Architecture and quality assessment
 
 | Area | Assessment | Evidence / consequence |
 |---|---|---|
-| Architectural compliance | **Mixed** | Import contracts pass, but runtime composition violates ADR-0007 lifecycle ownership, ADR-0002 thread ownership, and ADR-0020 runtime settings. |
-| Implementation correctness | **Blocked** | Core features exist but production does not compose them. Startup also leaves a blank derived index. |
-| API design | **High risk** | Public routes remain mounted with empty test doubles; readiness does not represent advertised capabilities. |
+| Architectural compliance | **Mixed** | Import contracts pass; lifecycle/composition and runtime settings are wired, while DICOM callback ownership remains an explicit follow-up. |
+| Implementation correctness | **Substantially remediated** | Production composition, startup recovery, and live settings are implemented; forced-shutdown and scale evidence remain. |
+| API design | **Mixed** | Production-required route providers are wired and readiness is honest; test-friendly optional defaults remain by design. |
 | Package boundaries | **Structurally good** | 7/7 import-linter contracts pass. Composition adapters must remain in bootstrap/web and use slice contracts. |
-| Dependency correctness | **Mixed** | Locking and ranges are reasonable. Raw `sqlite3` replaces the constitutionally selected SQLAlchemy Core stack without an ADR. pydicom v4 deprecations remain. Current vulnerability audit is inconclusive. |
-| Layering | **Structurally good, operationally incomplete** | Domain/framework separation passes; production bypasses service assembly rather than violating imports. |
+| Dependency correctness | **Mixed** | Locking and ranges are reasonable. ADR-0035 ratifies direct `sqlite3`; pydicom v4 deprecations remain. Current vulnerability audit is inconclusive. |
+| Layering | **Structurally good** | Domain/framework separation and production composition boundaries pass; residual ownership contract work is documented. |
 | Extensibility | **Mixed** | Protocol seams exist, but many are web-owned shapes with no production adapters. Plugin trust model is explicit. |
-| Maintainability | **Mixed** | Strong module vocabulary and tests; stale phase plans, empty structural stubs, duplicated rule implementations, and private queue access add friction. |
+| Maintainability | **Mixed** | Strong module vocabulary, adapters, and tests; stale phase plans, empty structural stubs, duplicated rule implementations, and compatibility debt remain. |
 | Readability | **Generally good** | Small explicit types and structured errors. Composition intent is obscured by optional provider defaults. |
-| Testability | **Good in isolation, weak end-to-end** | 536 tests pass, but no acceptance test proves the shipping process composes the system. |
-| Performance | **At risk at scale** | Full-table materialization, per-object `stat`, repeated full projection rebuilds, and whole-ring rewrites. |
-| Concurrency | **High risk** | DICOM callbacks cross into mutable capture state directly; ingress capacity does not cap pending thread-submitted coroutines. |
-| Security | **Mixed** | Host/origin/path/SQL controls are strong. Plugin destination traversal and broken non-loopback policy are actionable. No auth is intentional. |
-| Resource management | **At risk** | No archive expansion limits, ignored executor sizing, and incomplete lifecycle drain. |
+| Testability | **Good, with process coverage added** | 540 tests pass; subprocess DICOM/C-STORE/restart smoke covers the shipping composition. Forced-shutdown and installed-artifact DICOM lanes remain. |
+| Performance | **At risk at scale** | Capture paging avoids full object scans; projection/event reads and rebuild/projection/ring write amplification still need budgets and benchmarks. |
+| Concurrency | **Needs adversarial evidence** | DICOM callbacks use synchronized capture-engine state and bus thread ingress; saturation and callback-after-shutdown tests remain. |
+| Security | **Mixed** | Host/origin/path/SQL controls, plugin containment, and archive bounds are implemented. Non-loopback process acceptance remains pending. No auth is intentional. |
+| Resource management | **Improved, still needs adversarial evidence** | Archive bounds, bounded default executor, and lifecycle drain are implemented; forced deadline evidence at process boundary remains. |
 | Cross-provider compatibility | **Component-level only** | External DICOM matrix passes direct relay instances, not production composition. |
-| Production readiness | **Not ready** | Readiness is a false positive and advertised capture/listener workflows are absent. |
+| Production readiness | **Implementation blockers resolved; release closure pending** | Readiness and advertised DICOM/capture workflow are now composed; performance, adversarial shutdown, expanded typing, and release evidence remain. |
 
 ## 4. Findings register
 
@@ -126,6 +134,8 @@ Severity vocabulary:
 
 ### PR-001 — Production composition is functionally hollow
 
+**Current status:** Resolved in the current worktree; subprocess acceptance covers the composed listener, capture, recovery, API, and job path.
+
 **Severity:** Critical / P0  
 **Categories:** incomplete implementation, regression risk, layering, production readiness  
 **Files:**
@@ -137,15 +147,12 @@ Severity vocabulary:
 - `src/lumora_probe/captures/service.py:404-485` — `CaptureEngine`
 - `src/lumora_probe/core/lifecycle.py:59-157` — `LifecycleManager`
 
-**Root cause:** The latest bootstrap now constructs a capture repository/engine and wraps the
-engine in `LifecycleManager`, but it still creates no `DICOMListener`, performs no repository
-startup rebuild, and injects none of the production capture/resource, association, projection,
-operation, replay, report, frame, metadata, bookmark, search, or workspace providers. `create_app`
-treats nearly every provider as optional and silently substitutes empty/null defaults.
+**Historical root cause:** At the audit snapshot, bootstrap constructed only a partial capture
+engine and lifecycle and omitted the listener and production providers.
 
-**Impact:** `lumora serve` cannot receive DICOM, capture evidence, expose persisted captures,
-render stored instances, inspect metadata, replay captures, or run reports/operations despite
-advertising those capabilities.
+**Historical impact:** At that snapshot, `lumora serve` could not receive DICOM or expose persisted
+capture, instance, report, or operation data despite advertising those capabilities. The current
+composition and process acceptance test close this finding.
 
 **Architecture evidence:** ADR-0007 requires one lifecycle manager to own service startup,
 reverse shutdown, drain, and health (`docs/adr/ADR-0007-runtime-topology.md:26-35`). Phase 11
@@ -159,6 +166,8 @@ scope but remains incomplete as a production-composition plan.
 
 ### PR-002 — Startup destroys the derived index without rebuilding it
 
+**Current status:** Resolved in the current worktree; recovery diagnostics and restart coverage are present.
+
 **Severity:** Critical / P0  
 **Categories:** correctness, startup recovery, data visibility, operational risk  
 **Files:**
@@ -168,12 +177,12 @@ scope but remains incomplete as a production-composition plan.
 - `src/lumora_probe/core/storage.py:271-289` — `recreate_index_schema`
 - `src/lumora_probe/captures/repository.py:215-227` — `CaptureRepository.rebuild`
 
-**Root cause:** `StorageDatabases.initialise()` destructively recreates `index.db`. Bootstrap does
-not then discover/recover authoritative capture directories or call `CaptureRepository.rebuild`.
+**Historical root cause:** The audit snapshot recreated `index.db` without a subsequent authoritative
+capture discovery/rebuild.
 
-**Impact:** Every server start removes capture, study, series, instance, and event-window rows.
-Capture directories remain on disk, so evidence is not deleted, but the application cannot find
-or display it. Active/torn captures also miss the built recovery path.
+**Historical impact:** A restart could hide all derived capture, study, instance, and event rows while
+evidence remained on disk. The current recovery service rebuilds before readiness and preserves valid
+packages while reporting malformed ones.
 
 **Required remediation:** Initialize/migrate `app.db` separately. Rebuild `index.db` exactly once
 from all configured capture roots before readiness. Keep readiness false during rebuild. Define
@@ -182,6 +191,8 @@ healthy index. Avoid the current double-destruction pattern (`storage.initialise
 repository rebuild that initializes the index again).
 
 ### PR-003 — Readiness reports healthy while required services are absent
+
+**Current status:** Resolved in the current worktree; startup rebuilds the derived index and readiness includes recovery diagnostics.
 
 **Severity:** High / P1  
 **Categories:** API correctness, observability, production operations  
@@ -192,18 +203,20 @@ repository rebuild that initializes the index again).
 - `src/lumora_probe/web/health_routes.py:28-50`
 - `tests/test_phase18_startup.py:23-84`
 
-**Root cause:** Health registers only the bus, two database files, and plugin host. The startup test
-accepts any HTTP 200 readiness response and never checks the advertised DICOM port or service set.
-A database file existing is also weaker than a successful query/schema check.
+**Historical root cause:** The audit snapshot registered only a subset of services and did not check
+the DICOM port or service set.
 
-**Impact:** Supervisors route traffic to an application incapable of its primary workflow. Docker,
-operators, and release tests receive a false signal.
+**Historical impact:** Supervisors could route traffic to an application incapable of its primary
+workflow. The current health registry probes the composed services and process tests assert names
+and the open DICOM endpoint.
 
 **Required remediation:** Readiness must include index recovery, event bus, capture engine, DICOM
 listener, app/index database query probes, and any runtime required by enabled API capabilities.
 Liveness must remain process-health oriented and not fail solely for a recoverable peer condition.
 
 ### PR-004 — Production runtime settings are an in-memory test double
+
+**Current status:** Resolved for supported live settings; theme and rule toggles persist as client/UI provenance settings because no server-side analysis runner is enabled in v1.
 
 **Severity:** High / P1  
 **Categories:** correctness, architectural drift, API trust, maintainability  
@@ -214,13 +227,12 @@ Liveness must remain process-health oriented and not fail solely for a recoverab
 - `src/lumora_probe/settings/runtime.py:113-266`
 - `docs/adr/ADR-0020-configuration-tiers.md:17-50`
 
-**Root cause:** `AuditedSettingsProvider` wraps `InMemorySettingsProvider` instead of
-`RuntimeSettingsStore`. The real persistent/provenance-aware implementation exists but is not
-composed. Updates audit only key names and do not apply values to live services.
+**Historical root cause:** The audit snapshot used an in-memory settings provider instead of the
+persistent/provenance-aware store.
 
-**Impact:** The API accepts settings that vanish on restart and do not change ring retention,
-decode cache, allowlists, read-only mode, rule toggles, or theme. This is the exact silent-success
-failure ADR-0020 prohibits.
+**Historical impact:** Settings could vanish on restart and silently fail to affect live services.
+The current provider persists atomically, preserves source locks, applies supported live targets,
+and reports UI-only theme/rule-toggle provenance explicitly.
 
 **Required remediation:** Compose `RuntimeSettingsStore` at `DataPaths.settings`, preserve source
 locks, emit `ConfigurationChanged`, persist atomically, and apply each live setting through an
@@ -228,6 +240,8 @@ explicit target service. If live application fails, return a structured failure 
 success. Startup-only fields must return `RestartRequiredError`.
 
 ### SEC-001 — Plugin manifest ID permits destination traversal during install
+
+**Current status:** Resolved in the current worktree with canonical IDs, pre-write containment, temporary copy, validation, and atomic installation.
 
 **Severity:** High / P1  
 **Categories:** security, filesystem integrity, input validation  
@@ -254,6 +268,8 @@ copy, atomically rename, and clean temporary data on every failure. Decide and t
 Trusted-code status does not justify an installer path escape.
 
 ### SEC-002 — Non-loopback binds remain localhost-only at the request policy
+
+**Current status:** Resolved in the current worktree; startup exposure remains gated, configured allowed hosts are honored, IPv6 parsing is covered, and subprocess configured/hostile Host checks pass.
 
 **Severity:** High / P1  
 **Categories:** deployment correctness, security configuration, cross-provider compatibility  
@@ -822,10 +838,9 @@ published capture.
 4. Verify `lumora_dicom_common` and all assets/templates ship in wheel and sdist.
 5. Install wheel and sdist independently on Linux, macOS, and Windows; run CLI imports and minimal
    production smoke.
-6. Add `lumora serve` HTTP+DICOM composition to release gates.
-7. Keep full external interop scheduled if too expensive for PRs, but make a failed scheduled run
-   visible/blocking for release promotion rather than `continue-on-error` evidence that can be
-   ignored.
+6. Keep `lumora serve` HTTP+DICOM composition in release gates; the source-checkout process smoke is now present, with installed-artifact smoke still pending.
+7. Keep full external interop scheduled if too expensive for PRs, and make a failed scheduled run
+   visible/blocking for release promotion rather than ignorable evidence.
 8. Rerun dependency audit from exported locked requirements in CI. Save the report artifact/SBOM.
 9. Expand BasedPyright in manageable slices: bootstrap/web adapters first, then captures,
    associations, studies, replay, reports, plugins, settings.
@@ -916,26 +931,26 @@ paths. Preserve correlation IDs and capture/association IDs needed for engineeri
 
 Implementation is complete only when all boxes are true:
 
-- [ ] Partial engine/lifecycle wiring is retained, completed, and covered at the process boundary.
-- [ ] PR-001 through PR-004 process tests pass.
-- [ ] SEC-001 and SEC-002 are fixed without weakening ADR-0010/ADR-0021.
+- [x] Partial engine/lifecycle wiring is retained, completed, and covered at the process boundary.
+- [x] PR-001 through PR-004 composition/recovery/settings acceptance passes; residual lanes remain tracked.
+- [x] SEC-001 is fixed; SEC-002 startup gates and configured-host process coverage pass without weakening exposure policy.
 - [ ] CON-001/CON-002 ownership and saturation behavior are ratified and adversarially tested.
-- [ ] `executor_workers` demonstrably controls production execution.
-- [ ] Startup rebuilds/reconciles authoritative captures before readiness.
-- [ ] No production route uses an empty in-memory/null provider for an advertised capability.
-- [ ] Runtime settings persist, report provenance, and apply live.
-- [ ] DICOM port and HTTP API are verified through the installed wheel/sdist.
-- [ ] Graceful shutdown and forced-deadline interruption preserve explicit evidence state.
-- [ ] Archive extraction and plugin installation are contained and bounded.
+- [x] `executor_workers` controls the production default executor.
+- [x] Startup rebuilds/reconciles authoritative captures before readiness.
+- [ ] No production route uses an empty in-memory/null provider for every advertised optional capability; production-required providers are wired.
+- [x] Runtime settings persist, report provenance, and supported settings apply live.
+- [x] DICOM port and HTTP API are verified through installed wheel and sdist smoke environments.
+- [x] Graceful shutdown and deadline interruption preserve explicit evidence state at component level; process active-traffic evidence remains.
+- [x] Archive extraction and plugin installation are contained and bounded.
 - [ ] Database pagination and rebuild performance meet ratified budgets.
-- [ ] SQLAlchemy/sqlite3 architecture drift is resolved by accepted ADR and documentation.
-- [ ] Ruff check and format pass.
-- [ ] Import-linter passes all contracts.
-- [ ] BasedPyright passes its expanded checked slices.
-- [ ] Full pytest passes; skips are justified and release-required optional suites were run.
-- [ ] Assets and generated artifacts match source.
-- [ ] Exported-lock dependency audit passes and is retained.
-- [ ] External DICOM interoperability passes against pinned implementations.
+- [x] SQLAlchemy/sqlite3 architecture drift is resolved by accepted ADR and documentation.
+- [x] Ruff check and format pass.
+- [x] Import-linter passes all contracts.
+- [ ] BasedPyright passes its expanded application slices; core/shared and bootstrap pass.
+- [x] Full pytest passes; remaining skips are justified/opt-in, but release-required external suites remain to run.
+- [x] Frontend assets match source (`npm run check:assets`); generated event/OpenAPI artifacts were not changed.
+- [x] Exported-lock dependency audit passes; CI retains the report artifact.
+- [x] External DICOM interoperability passes against pinned DCMTK, dcm4che, and Orthanc containers (`15 passed`).
 - [ ] README, known limitations, troubleshooting, upgrade, and release status match verified behavior.
 - [ ] No real or de-identified patient data was introduced.
 
