@@ -171,3 +171,56 @@ async def test_ring_recovers_segment_written_before_metadata_rename(tmp_path: Pa
     await recovered.start()
 
     assert [record.monotonic_ns for record in recovered.snapshot()] == [1, 2]
+
+
+@pytest.mark.component
+@pytest.mark.asyncio
+async def test_projection_pages_use_unique_ties_and_direct_point_lookups(tmp_path: Path) -> None:
+    from lumora_probe.bootstrap import _SQLiteResourceStore
+    from lumora_probe.core.config import StartupConfig
+    from lumora_probe.core.paths import DataPaths
+    from lumora_probe.core.storage import StorageDatabases
+
+    paths = DataPaths.from_config(StartupConfig(data_dir=tmp_path / "data"))
+    paths.initialise(network_detector=lambda _: False)
+    storage = StorageDatabases.from_paths(paths, network_detector=lambda _: False)
+    storage.initialise()
+    timestamp = "2026-08-01T00:00:00+00:00"
+    with storage.index.write_transaction() as connection:
+        connection.execute(
+            "INSERT INTO captures VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("capture-1", str(paths.captures / "capture-1"), str(paths.captures), 1, timestamp,
+             timestamp, "completed", "objects", 0, 0, None, "a" * 64, timestamp),
+        )
+        connection.executemany(
+            "INSERT INTO instances(capture_id, study_uid, series_uid, sop_instance_uid, "
+            "object_digest, object_path, object_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (("capture-1", "study", "series", f"same-{index % 2}", f"digest-{index}",
+              f"objects/digest-{index}", index, timestamp) for index in range(6)),
+        )
+        connection.executemany(
+            "INSERT INTO event_window(capture_id, sequence, event_id, event_name, event_version, "
+            "observed_at, monotonic_ns, origin, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (("capture-1", index, f"event-{index}", "Observed", 1, timestamp, index,
+              "observed", f'{{"event_id":"event-{index}","sequence":{index}}}')
+             for index in range(6)),
+        )
+
+    store = _SQLiteResourceStore(storage)
+    items, total = await store.list_page(
+        "instances", offset=2, limit=2, sort="sop_instance_uid"
+    )
+    assert total == 6
+    assert len(items) == 2
+    assert [(item["sop_instance_uid"], item["instance_id"]) for item in items] == sorted(
+        (item["sop_instance_uid"], item["instance_id"]) for item in items
+    )
+    assert await store.get("instances", str(items[0]["instance_id"]))
+    assert await store.get("events", "event-3")
+
+    with storage.index.connection(read_only=True) as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM instances ORDER BY created_at, instance_id LIMIT 2"
+        ).fetchall()
+    details = " ".join(str(row[3]) for row in plan)
+    assert "idx_instances_created_id" in details or "INTEGER PRIMARY KEY" in details

@@ -226,8 +226,13 @@ class CaptureRepository:
                         clauses.append(f"LOWER({column}) = LOWER(?)")
                         parameters.append(expected)
                     else:
-                        clauses.append("LOWER(capture_id) LIKE LOWER(?)")
-                        parameters.append(f"%{filter}%")
+                        columns = tuple(dict.fromkeys(allowed_filter.values()))
+                        clauses.append(
+                            " OR ".join(
+                                f"LOWER({column}) LIKE LOWER(?)" for column in columns
+                            )
+                        )
+                        parameters.extend([f"%{filter}%"] * len(columns))
                 where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
                 total = int(
                     connection.execute(

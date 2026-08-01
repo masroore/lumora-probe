@@ -316,6 +316,12 @@ class _SQLiteResourceStore:
             ("capture_id", "sequence"),
         ),
     }
+    _lookup_keys: ClassVar[dict[str, str]] = {
+        "studies": "study_uid",
+        "series": "series_uid",
+        "instances": "instance_id",
+        "events": "event_id",
+    }
 
     def __init__(self, storage: StorageDatabases) -> None:
         self.storage = storage
@@ -380,11 +386,15 @@ class _SQLiteResourceStore:
                 clauses.append(f"LOWER(CAST({column} AS TEXT)) = LOWER(?)")
                 parameters.append(expected)
             else:
-                column = next(iter(allowed.values()), "")
-                if not column:
+                columns = tuple(dict.fromkeys(allowed.values()))
+                if not columns:
                     return (), 0
-                clauses.append(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)")
-                parameters.append(f"%{filter}%")
+                clauses.append(
+                    " OR ".join(
+                        f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in columns
+                    )
+                )
+                parameters.extend([f"%{filter}%"] * len(columns))
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         default_order = query[0].split(" ORDER BY ", 1)[1]
         order: list[str] = []
@@ -414,7 +424,7 @@ class _SQLiteResourceStore:
         if query is None:
             return None
         rows = await self.storage.index.execute_read(
-            f"{query[0].split(' ORDER BY ', 1)[0]} WHERE {query[1]} = ? LIMIT 1",
+            f"{query[0].split(' ORDER BY ', 1)[0]} WHERE {self._lookup_keys[resource]} = ? LIMIT 1",
             (resource_id,),
         )
         return _row_mapping(resource, rows[0]) if rows else None
