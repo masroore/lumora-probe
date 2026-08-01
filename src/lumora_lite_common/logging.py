@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
 """Shared stdout-only event logger for the Lumora Lite tools.
 
 `EventLogger` holds the text/JSONL rendering engine that `ProbeLogger` and

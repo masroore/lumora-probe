@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
 """Portable signal handler install/restore for the Lumora Lite CLIs.
 
 CPython only permits signal registration from the main thread, and the set of

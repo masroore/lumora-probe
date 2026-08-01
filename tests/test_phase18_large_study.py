@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
 """Phase 18 large synthetic study projection workload (2,000 instances)."""
 
 from __future__ import annotations

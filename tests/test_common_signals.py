@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
 """Tests for the shared signal install/restore helpers.
 
 The plumbing is shared; each Lite tool supplies its own callback. These tests

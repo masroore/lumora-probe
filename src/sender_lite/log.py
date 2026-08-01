@@ -1,3 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (c) 2026 Dr. Masroor Ehsan
+#
+# Part of the Lumora Probe project.
+# See the LICENSE file for details.
 """Stdout-only text and JSONL event logging for Sender Lite.
 
 The logging engine lives in `lumora_lite_common.logging` (see ADR-0028);
