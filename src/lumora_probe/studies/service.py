@@ -223,10 +223,13 @@ class FolderImportService:
 class LRUFrameCache:
     """Bounded server-side frame cache with deterministic LRU eviction."""
 
-    def __init__(self, max_items: int = 128) -> None:
+    def __init__(self, max_items: int = 128, *, max_bytes: int | None = None) -> None:
         if type(max_items) is not int or max_items < 1:
             raise ValueError("max_items must be a positive integer")
+        if max_bytes is not None and (type(max_bytes) is not int or max_bytes < 1):
+            raise ValueError("max_bytes must be a positive integer")
         self.max_items = max_items
+        self.max_bytes = max_bytes
         self._items: OrderedDict[tuple[str, int], DecodedFrame] = OrderedDict()
 
     def get(self, key: tuple[str, int]) -> DecodedFrame | None:
@@ -236,10 +239,30 @@ class LRUFrameCache:
         self._items.move_to_end(key)
         return value
 
+    def resize(self, max_items: int) -> None:
+        """Change cache capacity and evict oldest frames deterministically."""
+        if type(max_items) is not int or max_items < 1:
+            raise ValueError("max_items must be a positive integer")
+        self.max_items = max_items
+        self._evict()
+
     def put(self, key: tuple[str, int], value: DecodedFrame) -> None:
         self._items[key] = value
         self._items.move_to_end(key)
-        while len(self._items) > self.max_items:
+        self._evict()
+
+    def resize_bytes(self, max_bytes: int) -> None:
+        """Set a byte budget and evict least-recently-used frames."""
+        if type(max_bytes) is not int or max_bytes < 1:
+            raise ValueError("max_bytes must be a positive integer")
+        self.max_bytes = max_bytes
+        self._evict()
+
+    def _evict(self) -> None:
+        while len(self._items) > self.max_items or (
+            self.max_bytes is not None
+            and sum(len(item.pixels) for item in self._items.values()) > self.max_bytes
+        ):
             self._items.popitem(last=False)
 
     def __len__(self) -> int:

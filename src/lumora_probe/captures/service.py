@@ -10,7 +10,7 @@ import os
 import threading
 from collections import deque
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -151,6 +151,33 @@ class RingBufferService:
     @property
     def started(self) -> bool:
         return self._started
+
+    def update_config(
+        self,
+        *,
+        retention_seconds: float | None = None,
+        max_bytes: int | None = None,
+        events_only: bool | None = None,
+    ) -> None:
+        """Apply retention settings without replacing the running buffer."""
+        with self._lock:
+            self.config = replace(
+                self.config,
+                retention_seconds=(
+                    self.config.retention_seconds
+                    if retention_seconds is None
+                    else retention_seconds
+                ),
+                max_bytes=self.config.max_bytes if max_bytes is None else max_bytes,
+                events_only=self.config.events_only if events_only is None else events_only,
+            )
+            removed = self._expire(self.clock.now())
+            while self._records and self._bytes_used > self.config.max_bytes:
+                removed_record = self._records.popleft()
+                self._bytes_used -= removed_record.size
+                removed = True
+            if removed and self.root is not None:
+                self._rewrite()
 
     async def start(self) -> None:
         with self._lock:
@@ -430,10 +457,15 @@ class CaptureEngine:
         self._accepting = False
         self._sessions: dict[str, _CaptureSession] = {}
         self._session_lock = threading.RLock()
+        self._persistence_failures = 0
 
     @property
     def sessions(self) -> tuple[str, ...]:
         return tuple(self._sessions)
+
+    @property
+    def persistence_failures(self) -> int:
+        return self._persistence_failures
 
     async def start(self, *, event_bus: Any | None = None) -> None:
         if self._accepting:
@@ -483,7 +515,10 @@ class CaptureEngine:
             name=self.name,
             ready=self._accepting,
             alive=self._accepting,
-            detail=f"{len(self._sessions)} active capture session(s)",
+            detail=(
+                f"{len(self._sessions)} active capture session(s); "
+                f"persistence_failures={self._persistence_failures}"
+            ),
         )
 
     async def start_session(
@@ -739,7 +774,7 @@ class CaptureEngine:
             return 0xA700
         try:
             output = BytesIO()
-            pydicom.dcmwrite(output, dataset, write_like_original=True)
+            pydicom.dcmwrite(output, dataset, enforce_file_format=False)
             study_uid = str(dataset.StudyInstanceUID)
             series_uid = str(dataset.SeriesInstanceUID)
             sop_instance_uid = str(dataset.SOPInstanceUID)
@@ -771,7 +806,11 @@ class CaptureEngine:
         with self._session_lock:
             sessions = tuple(self._sessions.values())
             for session in sessions:
-                session.writer.append_event_raw(event.to_json_bytes())
+                try:
+                    session.writer.append_event_raw(event.to_json_bytes())
+                except (OSError, ValueError):
+                    self._persistence_failures += 1
+                    continue
                 if event.origin is EventOrigin.CLIENT_ASSERTED:
                     session.client_asserted_event_count += 1
 

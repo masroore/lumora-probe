@@ -140,6 +140,7 @@ class CaptureRepository:
     ) -> None:
         self.databases = databases
         self.clock = clock
+        self.rebuild_errors: tuple[str, ...] = ()
 
     async def index(
         self,
@@ -161,22 +162,20 @@ class CaptureRepository:
                     "state, fidelity, partial, promoted_from_buffer, interruption_reason, "
                     "manifest_sha256, indexed_at FROM captures ORDER BY created_at, capture_id"
                 ).fetchall()
-                capture_paths = {row["capture_id"]: Path(row["path"]) for row in rows}
                 objects = connection.execute(
                     "SELECT capture_id, object_digest, study_uid, series_uid, sop_instance_uid, "
-                    "object_path, transfer_syntax_uid, rows, columns FROM instances "
+                    "object_path, transfer_syntax_uid, rows, columns, object_size FROM instances "
                     "ORDER BY capture_id, instance_id"
                 ).fetchall()
                 by_capture: dict[str, list[CaptureObject]] = {}
                 for row in objects:
-                    object_path = capture_paths[row["capture_id"]] / row["object_path"]
                     by_capture.setdefault(row["capture_id"], []).append(
                         CaptureObject(
                             digest=row["object_digest"],
                             study_uid=row["study_uid"],
                             series_uid=row["series_uid"],
                             sop_instance_uid=row["sop_instance_uid"],
-                            size=object_path.stat().st_size if object_path.is_file() else 0,
+                            size=int(row["object_size"]),
                             transfer_syntax_uid=row["transfer_syntax_uid"],
                             rows=row["rows"],
                             columns=row["columns"],
@@ -185,6 +184,57 @@ class CaptureRepository:
                 return tuple(
                     row_to_capture(row, tuple(by_capture.get(row["capture_id"], ())))
                     for row in rows
+                )
+
+        return await asyncio.to_thread(read)
+
+    async def list_captures_page(
+        self, *, offset: int, limit: int
+    ) -> tuple[tuple[CaptureIndexRecord, ...], int]:
+        """Read one stable capture page and its count without scanning object files."""
+        if offset < 0 or limit < 1:
+            raise ValueError("offset must be non-negative and limit must be positive")
+
+        def read() -> tuple[tuple[CaptureIndexRecord, ...], int]:
+            with self.databases.index.connection(read_only=True) as connection:
+                total = int(connection.execute("SELECT COUNT(*) FROM captures").fetchone()[0])
+                rows = connection.execute(
+                    "SELECT capture_id, path, source_root, format_version, created_at, completed_at, "
+                    "state, fidelity, partial, promoted_from_buffer, interruption_reason, "
+                    "manifest_sha256, indexed_at FROM captures "
+                    "ORDER BY created_at, capture_id LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
+                if not rows:
+                    return (), total
+                capture_ids = tuple(row["capture_id"] for row in rows)
+                placeholders = ",".join("?" for _ in capture_ids)
+                objects = connection.execute(
+                    "SELECT capture_id, object_digest, study_uid, series_uid, sop_instance_uid, "
+                    "object_path, transfer_syntax_uid, rows, columns, object_size FROM instances "
+                    f"WHERE capture_id IN ({placeholders}) ORDER BY capture_id, instance_id",
+                    capture_ids,
+                ).fetchall()
+                by_capture: dict[str, list[CaptureObject]] = {}
+                for row in objects:
+                    by_capture.setdefault(row["capture_id"], []).append(
+                        CaptureObject(
+                            digest=row["object_digest"],
+                            study_uid=row["study_uid"],
+                            series_uid=row["series_uid"],
+                            sop_instance_uid=row["sop_instance_uid"],
+                            size=int(row["object_size"]),
+                            transfer_syntax_uid=row["transfer_syntax_uid"],
+                            rows=row["rows"],
+                            columns=row["columns"],
+                        )
+                    )
+                return (
+                    tuple(
+                        row_to_capture(row, tuple(by_capture.get(row["capture_id"], ())))
+                        for row in rows
+                    ),
+                    total,
                 )
 
         return await asyncio.to_thread(read)
@@ -222,14 +272,24 @@ class CaptureRepository:
         *,
         additional_roots: Iterable[Path] = (),
     ) -> tuple[CaptureIndexRecord, ...]:
-        packages = discover_capture_packages(primary_root, additional_roots=additional_roots)
+        errors: list[str] = []
+        packages = discover_capture_packages(
+            primary_root, additional_roots=additional_roots, errors=errors
+        )
+        self.rebuild_errors = tuple(errors)
         await asyncio.to_thread(self.databases.index.initialise, recreate=True)
         records = []
         for package, source_root in packages:
-            package = await self.recover_package(package)
-            records.append(
-                await self.index(package, source_root=source_root, rebuild_projection=False)
-            )
+            try:
+                package = await self.recover_package(package)
+                records.append(
+                    await self.index(package, source_root=source_root, rebuild_projection=False)
+                )
+            except (CaptureFormatError, OSError, ValueError) as exc:
+                self.rebuild_errors = (
+                    *self.rebuild_errors,
+                    f"{package.path}: {type(exc).__name__}: {exc}",
+                )
         await asyncio.to_thread(self._rebuild_projection)
         return tuple(records)
 
@@ -280,8 +340,8 @@ class CaptureRepository:
             )
             connection.executemany(
                 "INSERT INTO instances(capture_id, study_uid, series_uid, sop_instance_uid, "
-                "object_digest, object_path, transfer_syntax_uid, rows, columns, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "object_digest, object_path, transfer_syntax_uid, rows, columns, object_size, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     (
                         record.capture_id,
@@ -293,6 +353,7 @@ class CaptureRepository:
                         item.transfer_syntax_uid,
                         item.rows,
                         item.columns,
+                        item.size,
                         record.created_at.isoformat(),
                     )
                     for item in record.objects
@@ -359,6 +420,7 @@ def discover_capture_packages(
     primary_root: Path,
     *,
     additional_roots: Iterable[Path] = (),
+    errors: list[str] | None = None,
 ) -> tuple[tuple[CapturePackage, Path], ...]:
     """Discover directories and materialize dropped archives into the primary root."""
     primary_root = primary_root.expanduser().resolve()
@@ -368,12 +430,17 @@ def discover_capture_packages(
         if not root.is_dir():
             continue
         for candidate in sorted(root.iterdir(), key=lambda path: path.name):
-            if candidate.is_dir() and (candidate / "manifest.json").is_file():
-                package = CapturePackage.open(candidate)
-                discovered.setdefault(package.manifest.capture_id, (package, root))
-            elif candidate.is_file() and candidate.suffix.lower() == ".lpcap":
-                package, source_root = _materialize_archive(candidate, primary_root)
-                discovered.setdefault(package.manifest.capture_id, (package, source_root))
+            try:
+                if candidate.is_dir() and (candidate / "manifest.json").is_file():
+                    package = CapturePackage.open(candidate)
+                    discovered.setdefault(package.manifest.capture_id, (package, root))
+                elif candidate.is_file() and candidate.suffix.lower() == ".lpcap":
+                    package, source_root = _materialize_archive(candidate, primary_root)
+                    discovered.setdefault(package.manifest.capture_id, (package, source_root))
+            except (CaptureFormatError, OSError, ValueError) as exc:
+                if errors is None:
+                    raise
+                errors.append(f"{candidate}: {type(exc).__name__}: {exc}")
     return tuple(discovered.values())
 
 

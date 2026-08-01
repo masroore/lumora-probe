@@ -291,15 +291,26 @@ _logger = logging.getLogger(__name__)
 class FileSystemInstanceSourceRepository:
     """Resolve instance IDs to verified capture-owned DICOM bytes."""
 
-    def __init__(self, captures_root: Path, databases: StorageDatabases) -> None:
+    def __init__(
+        self,
+        captures_root: Path,
+        databases: StorageDatabases,
+        *,
+        capture_roots: Iterable[Path] = (),
+    ) -> None:
         self._captures_root = captures_root.expanduser().resolve()
+        self._capture_roots = (
+            self._captures_root,
+            *(path.expanduser().resolve() for path in capture_roots),
+        )
         self._databases = databases
 
     async def get_instance_source(self, instance_id: str) -> DicomObjectSource | None:
         """Look up the projection row, read bytes off-loop, and verify the digest."""
         rows = await self._databases.index.execute_read(
-            "SELECT capture_id, object_digest, object_path FROM instances "
-            "WHERE sop_instance_uid = ? LIMIT 1",
+            "SELECT i.capture_id, i.object_digest, i.object_path, c.path AS capture_path "
+            "FROM instances AS i JOIN captures AS c ON c.capture_id = i.capture_id "
+            "WHERE i.sop_instance_uid = ? LIMIT 1",
             (instance_id,),
         )
         if not rows:
@@ -307,7 +318,23 @@ class FileSystemInstanceSourceRepository:
         row = rows[0]
         capture_id = row["capture_id"]
         digest = row["object_digest"]
-        object_path = self._captures_root / capture_id / "objects" / digest
+        try:
+            capture_path_value = row["capture_path"]
+        except (KeyError, IndexError):
+            capture_path_value = None
+        capture_path = (
+            Path(capture_path_value).expanduser().resolve()
+            if capture_path_value
+            else self._captures_root / capture_id
+        )
+        if not any(
+            capture_path == root or root in capture_path.parents for root in self._capture_roots
+        ):
+            _logger.error(
+                "capture source path escapes configured roots", extra={"path": str(capture_path)}
+            )
+            return None
+        object_path = assert_contained(capture_path / row["object_path"], capture_path)
         try:
             raw_bytes = await asyncio.to_thread(object_path.read_bytes)
         except FileNotFoundError:

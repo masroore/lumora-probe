@@ -26,6 +26,8 @@ CURRENT_CAPTURE_FORMAT_VERSION = 1
 ARCHIVE_MAX_MEMBERS = 100_000
 ARCHIVE_MAX_MEMBER_BYTES = 512 * 1024 * 1024
 ARCHIVE_MAX_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
+ARCHIVE_MAX_COMPRESSION_RATIO = 1_000
+ARCHIVE_MAX_MEMBER_PATH_LENGTH = 4_096
 MANIFEST_NAME = "manifest.json"
 EVENTS_NAME = "events.jsonl"
 PDUS_NAME = "pdus.jsonl"
@@ -475,7 +477,20 @@ def unpack_capture(archive_path: Path, destination_root: Path) -> Path:
                     context={"members": len(members)},
                 )
             expanded = 0
+            seen_members: set[str] = set()
             for member in members:
+                if (
+                    not member.filename
+                    or len(member.filename) > ARCHIVE_MAX_MEMBER_PATH_LENGTH
+                    or member.filename in seen_members
+                ):
+                    raise CaptureFormatError(
+                        code="LUMORA-CAPTURE-FMT-017",
+                        message="Capture archive contains an invalid or duplicate member path",
+                        remediation="Repack the capture with unique, bounded member paths.",
+                        context={"member": member.filename},
+                    )
+                seen_members.add(member.filename)
                 target = assert_contained(temporary_root / member.filename, temporary_root)
                 if _zip_member_is_symlink(member):
                     raise CaptureFormatError(
@@ -487,6 +502,16 @@ def unpack_capture(archive_path: Path, destination_root: Path) -> Path:
                 if member.is_dir():
                     target.mkdir(parents=True, exist_ok=True)
                     continue
+                if (
+                    member.compress_size > 0
+                    and member.file_size / member.compress_size > ARCHIVE_MAX_COMPRESSION_RATIO
+                ):
+                    raise CaptureFormatError(
+                        code="LUMORA-CAPTURE-FMT-018",
+                        message="Capture archive member compression ratio exceeds the limit",
+                        remediation="Repack the capture with a bounded compression ratio.",
+                        context={"member": member.filename},
+                    )
                 if member.file_size > ARCHIVE_MAX_MEMBER_BYTES:
                     raise CaptureFormatError(
                         code="LUMORA-CAPTURE-FMT-014",

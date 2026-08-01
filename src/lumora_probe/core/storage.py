@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS instances (
     transfer_syntax_uid TEXT,
     rows INTEGER,
     columns INTEGER,
+    object_size INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     UNIQUE (capture_id, study_uid, series_uid, sop_instance_uid, object_digest),
     FOREIGN KEY (capture_id) REFERENCES captures(capture_id) ON DELETE CASCADE
@@ -240,6 +241,11 @@ class SQLiteDatabase:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 with self.policy.connect(self.path) as connection:
                     connection.executescript(_INDEX_SCHEMA)
+                    columns = {row[1] for row in connection.execute("PRAGMA table_info(instances)")}
+                    if "object_size" not in columns:
+                        connection.execute(
+                            "ALTER TABLE instances ADD COLUMN object_size INTEGER NOT NULL DEFAULT 0"
+                        )
                     connection.execute(
                         "INSERT INTO schema_metadata(key, value) VALUES ('schema_version', ?) "
                         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
