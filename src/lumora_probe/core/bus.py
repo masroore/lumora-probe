@@ -26,6 +26,51 @@ from lumora_probe.shared.events import (
 EventCallback = Callable[[EventEnvelope], Awaitable[None] | None]
 
 
+class ThreadIngressError(RuntimeError):
+    """Base error for a rejected or failed threaded event submission."""
+
+    def __init__(self, message: str, *, category: str) -> None:
+        super().__init__(message)
+        self.category = category
+
+
+class ThreadIngressNotStartedError(ThreadIngressError):
+    def __init__(self) -> None:
+        super().__init__("EventBus is not accepting threaded ingress", category="not-started")
+
+
+class ThreadIngressShuttingDownError(ThreadIngressError):
+    def __init__(self) -> None:
+        super().__init__("EventBus is shutting down", category="shutting-down")
+
+
+class ThreadIngressSaturatedError(ThreadIngressError):
+    def __init__(self) -> None:
+        super().__init__("EventBus threaded ingress capacity is saturated", category="saturated")
+
+
+class ThreadIngressCancelledError(ThreadIngressError):
+    def __init__(self) -> None:
+        super().__init__("EventBus threaded ingress submission was cancelled", category="cancelled")
+
+
+class ThreadIngressTimedOutError(ThreadIngressError):
+    def __init__(self) -> None:
+        super().__init__("EventBus threaded ingress submission timed out", category="timed-out")
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadIngressSnapshot:
+    """Lock-safe diagnostics for the bounded thread ingress."""
+
+    capacity: int
+    pending: int
+    saturation_refusals: int
+    completion_failures: int
+    cancellations: int
+    timeouts: int
+
+
 class SubscriberChannel(StrEnum):
     """Backpressure policy selected for a subscriber."""
 
@@ -212,6 +257,10 @@ class EventBus:
         self._thread_ingress = threading.BoundedSemaphore(self.thread_ingress_capacity)
         self._thread_pending = 0
         self._thread_pending_lock = threading.Lock()
+        self._thread_saturation_refusals = 0
+        self._thread_completion_failures = 0
+        self._thread_cancellations = 0
+        self._thread_timeouts = 0
 
     @property
     def ingress(self) -> EventIngress:
@@ -248,6 +297,8 @@ class EventBus:
         self._accepting = False
         assert self._ingress_queue is not None
         await self._ingress_queue.join()
+        while self.pending_thread_submissions:
+            await asyncio.sleep(0)
         assert self._dispatch_task is not None
         self._dispatch_task.cancel()
         try:
@@ -276,10 +327,14 @@ class EventBus:
         self, event: EventEnvelope, *, capture_id: str | None = None
     ) -> concurrent.futures.Future[EventEnvelope]:
         """Cross the only thread boundary through ``call_soon_threadsafe``."""
-        if self._closing or not self._accepting or self._loop is None:
-            raise RuntimeError("EventBus is not accepting threaded ingress")
+        if self._closing:
+            raise ThreadIngressShuttingDownError()
+        if not self._accepting or self._loop is None:
+            raise ThreadIngressNotStartedError()
         if not self._thread_ingress.acquire(blocking=False):
-            raise RuntimeError("EventBus threaded ingress capacity is saturated")
+            with self._thread_pending_lock:
+                self._thread_saturation_refusals += 1
+            raise ThreadIngressSaturatedError()
         with self._thread_pending_lock:
             self._thread_pending += 1
         try:
@@ -287,20 +342,48 @@ class EventBus:
                 self.publish(event, capture_id=capture_id), self._loop
             )
         except BaseException:
-            self._release_thread_ingress()
+            self._release_thread_ingress(category="cancelled")
             raise
-        future.add_done_callback(lambda _: self._release_thread_ingress())
+        future.add_done_callback(self._thread_future_done)
         return future
+
+    def _thread_future_done(self, future: concurrent.futures.Future[EventEnvelope]) -> None:
+        category = "completed"
+        if future.cancelled():
+            category = "cancelled"
+        else:
+            if future.exception() is not None:
+                category = "failed"
+        self._release_thread_ingress(category=category)
 
     @property
     def pending_thread_submissions(self) -> int:
         with self._thread_pending_lock:
             return self._thread_pending
 
-    def _release_thread_ingress(self) -> None:
+    def _release_thread_ingress(self, *, category: str = "completed") -> None:
         self._thread_ingress.release()
         with self._thread_pending_lock:
             self._thread_pending -= 1
+            if category == "failed":
+                self._thread_completion_failures += 1
+            elif category == "cancelled":
+                self._thread_cancellations += 1
+
+    def thread_ingress_snapshot(self) -> ThreadIngressSnapshot:
+        with self._thread_pending_lock:
+            return ThreadIngressSnapshot(
+                capacity=self.thread_ingress_capacity,
+                pending=self._thread_pending,
+                saturation_refusals=self._thread_saturation_refusals,
+                completion_failures=self._thread_completion_failures,
+                cancellations=self._thread_cancellations,
+                timeouts=self._thread_timeouts,
+            )
+
+    def record_thread_ingress_timeout(self) -> None:
+        with self._thread_pending_lock:
+            self._thread_timeouts += 1
 
     async def subscribe(
         self,
@@ -504,4 +587,11 @@ __all__ = [
     "EventSubscription",
     "SubscriberChannel",
     "SubscriberStats",
+    "ThreadIngressCancelledError",
+    "ThreadIngressError",
+    "ThreadIngressNotStartedError",
+    "ThreadIngressSaturatedError",
+    "ThreadIngressShuttingDownError",
+    "ThreadIngressSnapshot",
+    "ThreadIngressTimedOutError",
 ]
