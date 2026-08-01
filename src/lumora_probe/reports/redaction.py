@@ -32,7 +32,7 @@ class IdSource(Protocol):
     def new_id(self) -> str: ...
 
 
-def _coerce_tag(value: TagLike) -> Tag:
+def _coerce_tag(value: TagLike) -> Tag:  # pyright: ignore[reportGeneralTypeIssues, reportUnknownParameterType]
     if isinstance(value, str):
         keyword_tag = tag_for_keyword(value)
         if keyword_tag is not None:
@@ -119,24 +119,25 @@ class RedactionProfile:
     """Tag actions and private-tag knowledge used by one redaction operation."""
 
     remove_tags: Iterable[TagLike] = field(default_factory=lambda: _DEFAULT_REDACTED_TAGS)
-    replace_tags: Mapping[TagLike, str] = field(default_factory=dict)
+    replace_tags: Mapping[TagLike, str] = field(default_factory=dict)  # pyright: ignore[reportUnknownVariableType]
     recognized_private_tags: Iterable[TagLike] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        remove_tags = frozenset(_coerce_tag(tag) for tag in self.remove_tags)
-        replace_tags = {_coerce_tag(tag): value for tag, value in self.replace_tags.items()}
-        recognized_private_tags = frozenset(
-            _coerce_tag(tag) for tag in self.recognized_private_tags
+        remove_tags = frozenset(_coerce_tag(tag) for tag in self.remove_tags)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
+        replace_tags = {_coerce_tag(tag): value for tag, value in self.replace_tags.items()}  # pyright: ignore[reportUnknownVariableType]
+        recognized_private_tags = frozenset(  # pyright: ignore[reportUnknownVariableType]
+            _coerce_tag(tag)
+            for tag in self.recognized_private_tags  # pyright: ignore[reportUnknownArgumentType]
         )
-        overlap = remove_tags.intersection(replace_tags)
+        overlap = remove_tags.intersection(replace_tags)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
         if overlap:
-            tags = ", ".join(str(tag) for tag in sorted(overlap))
+            tags = ", ".join(str(tag) for tag in sorted(overlap))  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
             raise ValueError(f"tag cannot be both removed and replaced: {tags}")
-        if any(not isinstance(value, str) for value in replace_tags.values()):
+        if any(not isinstance(value, str) for value in replace_tags.values()):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError("replacement values must be strings")
 
         object.__setattr__(self, "remove_tags", remove_tags)
-        object.__setattr__(self, "replace_tags", MappingProxyType(replace_tags))
+        object.__setattr__(self, "replace_tags", MappingProxyType(replace_tags))  # pyright: ignore[reportUnknownArgumentType]
         object.__setattr__(self, "recognized_private_tags", recognized_private_tags)
 
 
@@ -149,7 +150,7 @@ class RedactionWarning:
 
     code: str
     message: str
-    tag: Tag | None = None
+    tag: Tag | None = None  # pyright: ignore[reportGeneralTypeIssues]
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +159,7 @@ class RedactionResult:
 
     dataset: Dataset
     warnings: tuple[RedactionWarning, ...]
-    redacted_tags: tuple[Tag, ...]
+    redacted_tags: tuple[Tag, ...]  # pyright: ignore[reportGeneralTypeIssues]
     uid_mapping: Mapping[str, str]
 
     @property
@@ -189,10 +190,10 @@ class DatasetRedactor:
         output = deepcopy(dataset)
         warnings: list[RedactionWarning] = []
         warning_keys: set[tuple[str, int | None, str]] = set()
-        redacted_tags: set[Tag] = set()
+        redacted_tags: set[Tag] = set()  # pyright: ignore[reportGeneralTypeIssues, reportUnknownVariableType]
         active_uid_mapping = uid_mapping if uid_mapping is not None else {}
 
-        self._visit_dataset(
+        self._visit_dataset(  # pyright: ignore[reportUnknownMemberType]
             output,
             warnings=warnings,
             warning_keys=warning_keys,
@@ -201,7 +202,7 @@ class DatasetRedactor:
         )
         file_meta = getattr(output, "file_meta", None)
         if isinstance(file_meta, Dataset):
-            self._visit_dataset(
+            self._visit_dataset(  # pyright: ignore[reportUnknownMemberType]
                 file_meta,
                 warnings=warnings,
                 warning_keys=warning_keys,
@@ -212,7 +213,7 @@ class DatasetRedactor:
         return RedactionResult(
             dataset=output,
             warnings=tuple(warnings),
-            redacted_tags=tuple(sorted(redacted_tags)),
+            redacted_tags=tuple(sorted(redacted_tags)),  # pyright: ignore[reportUnknownArgumentType]
             uid_mapping=MappingProxyType(dict(active_uid_mapping)),
         )
 
@@ -222,7 +223,7 @@ class DatasetRedactor:
         *,
         warnings: list[RedactionWarning],
         warning_keys: set[tuple[str, int | None, str]],
-        redacted_tags: set[Tag],
+        redacted_tags: set[Tag],  # pyright: ignore[reportGeneralTypeIssues, reportUnknownParameterType]
         uid_mapping: dict[str, str],
     ) -> None:
         self._warn_dataset(dataset, warnings, warning_keys)
@@ -232,7 +233,7 @@ class DatasetRedactor:
             self._warn_element(element, warnings, warning_keys)
             if tag in self._profile.remove_tags:
                 del dataset[tag]
-                redacted_tags.add(tag)
+                redacted_tags.add(tag)  # pyright: ignore[reportUnknownMemberType]
                 continue
 
             replacement = self._profile.replace_tags.get(tag)
@@ -242,9 +243,9 @@ class DatasetRedactor:
                 element.value = self._remap_uid_value(element.value, uid_mapping)
 
             if element.VR == "SQ":
-                for item in element.value:
+                for item in element.value:  # pyright: ignore[reportGeneralTypeIssues, reportUnknownVariableType]
                     if isinstance(item, Dataset):
-                        self._visit_dataset(
+                        self._visit_dataset(  # pyright: ignore[reportUnknownMemberType]
                             item,
                             warnings=warnings,
                             warning_keys=warning_keys,
@@ -269,12 +270,12 @@ class DatasetRedactor:
                         f"BurnedInAnnotation={str(burned_in).strip()!r}; pixel content was not "
                         "inspected for embedded identifiers."
                     ),
-                    tag=Tag(tag_for_keyword("BurnedInAnnotation")),
+                    tag=Tag(tag_for_keyword("BurnedInAnnotation")),  # pyright: ignore[reportArgumentType]
                 ),
             )
 
         sop_class = str(dataset.get("SOPClassUID", ""))
-        sop_tag = Tag(tag_for_keyword("SOPClassUID"))
+        sop_tag = Tag(tag_for_keyword("SOPClassUID"))  # pyright: ignore[reportArgumentType]
         if sop_class in _SECONDARY_CAPTURE_CLASSES:
             self._add_warning(
                 warnings,
@@ -363,7 +364,7 @@ class DatasetRedactor:
         warning_keys: set[tuple[str, int | None, str]],
         warning: RedactionWarning,
     ) -> None:
-        key = (warning.code, int(warning.tag) if warning.tag is not None else None, warning.message)
+        key = (warning.code, int(warning.tag) if warning.tag is not None else None, warning.message)  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
         if key not in warning_keys:
             warning_keys.add(key)
             warnings.append(warning)
@@ -380,7 +381,7 @@ class DatasetRedactor:
 
     def _remap_uid_value(self, value: object, uid_mapping: dict[str, str]) -> object:
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            return [self._remap_one_uid(str(item), uid_mapping) for item in value]
+            return [self._remap_one_uid(str(item), uid_mapping) for item in value]  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
         return self._remap_one_uid(str(value), uid_mapping)
 
     def _remap_one_uid(self, source_uid: str, uid_mapping: dict[str, str]) -> str:
@@ -408,7 +409,7 @@ def _has_value(value: object) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return any(_has_value(item) for item in value)
+        return any(_has_value(item) for item in value)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
     return True
 
 

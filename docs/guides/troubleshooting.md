@@ -53,3 +53,20 @@ blocking step is separately approved. Reviewed exceptions live in
 `docs/planning/phase-18-dependency-audit.md`.
 
 See also: [operator-guide.md](operator-guide.md), [user-workflows.md](user-workflows.md).
+
+## DICOM saturation and shutdown
+
+| Symptom | Likely cause | Remediation |
+|---------|--------------|-------------|
+| C-STORE returns `0xA700` | Bounded event ingress, persistence capacity, or event-admission timeout | Stop or reduce senders, inspect listener counters, and retry after pending submissions drain |
+| C-STORE returns `0xC210` | Malformed or incomplete DICOM payload | Correct the sender payload; this response is not a successful persistence claim |
+| C-STORE returns `0xC211` | Unexpected event completion or processing failure | Preserve logs/correlation ID, inspect `ingress_completion_error`, and retry only after root cause is understood |
+| Capture manifest is `interrupted` | Shutdown grace deadline expired while work was active | Restart with the same data root; retain the interrupted evidence and do not relabel it completed |
+| Warning appears from a third-party DICOM transport | Runtime/library compatibility warning | Run the locked dependency line and capture the full warning under `-W default`; do not hide warnings with a global filter |
+
+## Pagination and rebuild workload
+
+Collection APIs use SQL-backed count/page queries and whitelist sort/filter fields. If a page is
+slow, record endpoint, page size, filter, local-disk identity, and database size. Do not move
+`index.db` or `app.db` to a network filesystem; that deployment remains unsupported. Projection
+rebuild reads authoritative capture packages and recreates derived index state.

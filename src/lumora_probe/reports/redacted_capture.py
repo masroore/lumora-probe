@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from pydicom.dataset import Dataset
-from pydicom.filereader import dcmread
-from pydicom.filewriter import dcmwrite
+from pydicom.filereader import dcmread  # pyright: ignore[reportUnknownVariableType]
+from pydicom.filewriter import dcmwrite  # pyright: ignore[reportUnknownVariableType]
 
 from lumora_probe.captures.format import (
     CaptureFidelity,
@@ -120,7 +120,7 @@ class RedactedCaptureExporter:
                 {
                     "code": warning.code,
                     "message": warning.message,
-                    "tag": str(warning.tag) if warning.tag is not None else None,
+                    "tag": str(warning.tag) if warning.tag is not None else None,  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
                 }
                 for warning in result.warnings
             )

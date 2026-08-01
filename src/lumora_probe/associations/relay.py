@@ -119,7 +119,7 @@ class DICOMRelay(DICOMListener):
         if upstream is None:
             yield 0xA700, None
             return
-        for count, (status, dataset) in enumerate(
+        for count, (status, dataset) in enumerate(  # pyright: ignore[reportUnusedVariable]
             DICOMSCUClient(upstream, clock=self.clock).iter_get(
                 event.identifier, query_model=str(event.context.abstract_syntax)
             ),
@@ -127,7 +127,7 @@ class DICOMRelay(DICOMListener):
         ):
             yield status, dataset
 
-    def _on_c_move(self, event: Any):
+    def _on_c_move(self, event: Any):  # pyright: ignore[reportUnknownParameterType]
         move_destination = getattr(event, "move_destination", None)
         if move_destination is None:
             move_destination = getattr(event.request, "MoveDestination", "unknown")

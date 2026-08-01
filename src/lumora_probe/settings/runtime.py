@@ -92,7 +92,7 @@ def _toml_value(value: Any) -> str:
     if isinstance(value, str):
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
     if isinstance(value, (list, tuple)):
-        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"  # pyright: ignore[reportUnknownVariableType]
     raise TypeError(f"Unsupported TOML value: {type(value).__name__}")
 
 
@@ -145,9 +145,10 @@ class RuntimeSettingsStore:
                     context={"path": str(self.path)},
                 ) from exc
         metadata = file_values.pop("__lumora", {})
-        runtime_names = metadata.get("runtime", []) if isinstance(metadata, dict) else []
+        runtime_names = metadata.get("runtime", []) if isinstance(metadata, dict) else []  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(runtime_names, list) or not all(
-            isinstance(name, str) for name in runtime_names
+            isinstance(name, str)
+            for name in runtime_names  # pyright: ignore[reportUnknownVariableType]
         ):
             raise ConfigurationError(
                 code="LUMORA-CORE-SETTINGS-006",
@@ -160,7 +161,7 @@ class RuntimeSettingsStore:
         self._sources = {key: SettingSource.DEFAULT for key in values}
         self._sources.update({key: SettingSource.FILE for key in file_values})
         self._sources.update(
-            {name: SettingSource.RUNTIME for name in runtime_names if name in values}
+            {name: SettingSource.RUNTIME for name in runtime_names if name in values}  # pyright: ignore[reportUnknownVariableType]
         )
         for field, env_name in _ENV_NAMES.items():
             if env_name in self.environ:
@@ -196,7 +197,7 @@ class RuntimeSettingsStore:
         )
 
     def snapshots(self) -> tuple[SettingSnapshot, ...]:
-        return tuple(self.snapshot(name) for name in self.settings.model_fields)
+        return tuple(self.snapshot(name) for name in self.settings.model_fields)  # pyright: ignore[reportDeprecated]
 
     def validate_update(self, name: str, value: Any) -> None:
         """Validate mutability and value shape before applying a runtime change."""

@@ -56,7 +56,7 @@ jobs:
         run: uv run lint-imports --no-cache
 
       - name: Check static types
-        run: uv run basedpyright src/lumora_probe/core src/lumora_probe/shared
+        run: uv run basedpyright
 
       - name: Run tests with per-slice coverage
         run: >-
@@ -89,6 +89,54 @@ jobs:
           path: |
             audit-requirements.txt
             pip-audit-report.txt
+
+  installed-smoke:
+    name: installed ${{ matrix.artifact }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    fail-fast: false
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        artifact: [wheel, sdist]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+      - name: Set up CPython
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build selected artifact
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --${{ matrix.artifact }} --outdir dist
+      - name: Run installed production smoke
+        shell: bash
+        run: |
+          artifact=$(python - <<'PY'
+          from pathlib import Path
+          import os
+          files = sorted(Path("dist").glob("*.whl" if os.environ["ARTIFACT"] == "wheel" else "*.tar.gz"))
+          assert len(files) == 1, files
+          print(files[0])
+          PY
+          )
+          python scripts/smoke_installed_distribution.py --artifact "$artifact"
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+          LUMORA_SMOKE_LOG_DIR: ${{ runner.temp }}/lumora-installed-smoke-logs
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-smoke-${{ matrix.os }}-${{ matrix.artifact }}
+          path: |
+            dist/*
+            ${{ runner.temp }}/lumora-installed-smoke-logs/**
 
   interop:
     name: Scheduled DICOM interoperability suite

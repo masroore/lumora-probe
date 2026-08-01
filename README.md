@@ -54,6 +54,15 @@ uv run lumora serve --trust-network --host 0.0.0.0
 Lumora Probe provides no authentication, RBAC, or in-process TLS in v1. Put a reverse
 proxy or another trusted network boundary in front of any non-loopback deployment.
 
+Shutdown is bounded by `shutdown_grace_seconds`: new DICOM associations close first, admitted
+work drains, and deadline expiry seals active captures as `interrupted`. DICOM saturation is
+explicit (`0xA700`); malformed data is `0xC210`; unexpected processing failure is `0xC211`.
+Inspect listener ingress counters through health diagnostics. SQLite databases require local
+storage; the persisted ring uses segmented files under `ringbuffer/segments/`.
+
+Release evidence and environment-specific limits: [0.1.0 release notes](docs/release-notes-0.1.0.md),
+[performance report](docs/planning/phase-18-performance-report.md), and [known limitations](docs/guides/known-limitations.md).
+
 ## Quick start: Lite utilities
 
 Both utilities are included in the same distribution and require only CPython plus the
@@ -116,7 +125,7 @@ uv run pytest -m unit -q
 uv run ruff check .
 uv run ruff format --check .
 uv run lint-imports --no-cache
-uv run basedpyright src/lumora_probe/core src/lumora_probe/shared
+uv run basedpyright
 ```
 
 Interop tests are opt-in:

@@ -104,7 +104,7 @@ def create_transfer_inspector_router(
     router = APIRouter(prefix="/transfers", tags=["transfers"])
 
     @router.get("/{association_id}")
-    async def get_transfer_inspection(association_id: str) -> dict[str, Any]:
+    async def get_transfer_inspection(association_id: str) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         if inspector is None:
             raise HTTPException(503, "transfer inspector not mounted")
         legs = await inspector.inspect(association_id)

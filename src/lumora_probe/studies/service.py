@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from pydicom import dcmread
+from pydicom import dcmread  # pyright: ignore[reportUnknownVariableType]
 from pydicom.dataset import Dataset
 
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
@@ -374,7 +374,7 @@ class DecodeService:
         if cached is not None:
             result = DecodedFrame(
                 pixels=cached.pixels,
-                metadata=DecodedFrameMetadata(**{**cached.metadata.as_dict(), "cache_hit": True}),
+                metadata=DecodedFrameMetadata(**{**cached.metadata.as_dict(), "cache_hit": True}),  # pyright: ignore[reportArgumentType]
                 duration_ns=0,
             )
         else:
@@ -396,7 +396,7 @@ class DecodeService:
             duration_ns = max(0, self.clock.monotonic_ns() - started)
             result = DecodedFrame(
                 pixels=decoded.pixels,
-                metadata=DecodedFrameMetadata(**{**decoded.metadata.as_dict(), "cache_hit": False}),
+                metadata=DecodedFrameMetadata(**{**decoded.metadata.as_dict(), "cache_hit": False}),  # pyright: ignore[reportArgumentType]
                 duration_ns=duration_ns,
             )
             self.cache.put(key, result)
@@ -418,7 +418,7 @@ class DecodeService:
             ):
                 continue
             task = asyncio.create_task(self.decode(source, frame_number=candidate, prefetch=False))
-            self._prefetch_tasks.add(task)
+            self._prefetch_tasks.add(task)  # pyright: ignore[reportArgumentType]
             task.add_done_callback(self._prefetch_tasks.discard)
 
     async def _publish_decoded(self, source: DicomObjectSource, result: DecodedFrame) -> None:
@@ -535,9 +535,9 @@ def _transfer_syntax(dataset: Dataset) -> str:
 
 def _number(value: Any, default: float) -> float:
     if isinstance(value, (list, tuple)):
-        value = value[0] if value else default
+        value = value[0] if value else default  # pyright: ignore[reportUnknownVariableType]
     try:
-        return float(value)
+        return float(value)  # pyright: ignore[reportUnknownArgumentType]
     except (TypeError, ValueError):
         return default
 

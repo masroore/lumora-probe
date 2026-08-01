@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import copy
 import importlib
 import threading
@@ -29,6 +30,9 @@ from lumora_probe.shared.events import EventEnvelope, EventOrigin, EventSeverity
 from lumora_probe.shared.value_objects import AETitle
 
 DICOM_SUCCESS = DICOM_SUCCESS_STATUS
+DICOM_MALFORMED = 0xC210
+DICOM_RESOURCE_EXHAUSTED = 0xA700
+DICOM_INTERNAL_FAILURE = 0xC211
 DEFAULT_MAX_PDU = DEFAULT_DICOM_MAX_PDU
 
 
@@ -109,6 +113,7 @@ class DICOMListenerConfig:
     max_pdu: int = DEFAULT_MAX_PDU
     allowed_calling_aets: frozenset[str] = frozenset()
     allowed_source_ips: frozenset[str] = frozenset()
+    event_timeout_seconds: float = 0.1
 
     def __post_init__(self) -> None:
         if not self.bind_host.strip() or any(character.isspace() for character in self.bind_host):
@@ -121,6 +126,8 @@ class DICOMListenerConfig:
             raise ValueError("port must be a non-privileged TCP port between 1024 and 65535")
         if type(self.max_pdu) is not int or not 4_096 <= self.max_pdu <= 131_072:
             raise ValueError("max_pdu must be between 4096 and 131072")
+        if self.event_timeout_seconds <= 0:
+            raise ValueError("event_timeout_seconds must be positive")
         title = self.ae_title if isinstance(self.ae_title, AETitle) else AETitle(self.ae_title)
         object.__setattr__(self, "ae_title", title)
         normalized = frozenset(_normalize_ae_title(value) for value in self.allowed_calling_aets)
@@ -241,8 +248,16 @@ class DICOMSCUClient:
                 error=str(exc),
             )
         finally:
+            raw_socket = _association_raw_socket(association)
             if association is not None and association.is_established:
                 association.release()
+            _force_close_association_socket(association, raw_socket)
+            with contextlib.suppress(Exception):
+                if association is not None:
+                    association.join()
+            _force_close_association_socket(association)
+            with contextlib.suppress(Exception):
+                ae.shutdown()
 
     def iter_find(self, identifier: Any, *, query_model: str) -> Iterator[tuple[Any, Any | None]]:
         """Yield C-FIND responses from the configured peer."""
@@ -299,8 +314,16 @@ class DICOMSCUClient:
                 raise ValueError(f"unsupported query operation: {operation}")
             yield from responses
         finally:
+            raw_socket = _association_raw_socket(association)
             if association is not None and association.is_established:
                 association.release()
+            _force_close_association_socket(association, raw_socket)
+            with contextlib.suppress(Exception):
+                if association is not None:
+                    association.join()
+            _force_close_association_socket(association)
+            with contextlib.suppress(Exception):
+                ae.shutdown()
 
     async def send_dataset(self, raw_bytes: bytes, *, transfer_syntax: str) -> DICOMStoreResult:
         """Parse raw DICOM bytes off-loop and send one C-STORE dataset."""
@@ -309,7 +332,7 @@ class DICOMSCUClient:
     def _send_dataset_sync(self, raw_bytes: bytes, transfer_syntax: str) -> DICOMStoreResult:
         started = self._monotonic_ns()
         try:
-            from pydicom import dcmread
+            from pydicom import dcmread  # pyright: ignore[reportUnknownVariableType]
             from pydicom.dataset import FileMetaDataset
 
             dataset = dcmread(BytesIO(raw_bytes), force=True)
@@ -404,8 +427,16 @@ class DICOMSCUClient:
                 error=str(exc),
             )
         finally:
+            raw_socket = _association_raw_socket(association)
             if association is not None and association.is_established:
                 association.release()
+            _force_close_association_socket(association, raw_socket)
+            with contextlib.suppress(Exception):
+                if association is not None:
+                    association.join()
+            _force_close_association_socket(association)
+            with contextlib.suppress(Exception):
+                ae.shutdown()
 
     def _monotonic_ns(self) -> int:
         return self.clock.monotonic_ns() if self.clock is not None else 0
@@ -488,8 +519,16 @@ class DICOMListener:
         self._pdu_stats: dict[str, _PDUStats] = {}
         self._lock = threading.Lock()
         self._started = False
+        self._admission_open = False
         self._accepted_associations = 0
         self._ingress_failures = 0
+        self._diagnostic_counters: dict[str, int] = {
+            "ingress_saturation": 0,
+            "ingress_timeout": 0,
+            "ingress_completion_error": 0,
+            "c_store_persistence_failure": 0,
+            "late_callback_refusal": 0,
+        }
 
     @property
     def started(self) -> bool:
@@ -502,6 +541,15 @@ class DICOMListener:
     @property
     def ingress_failures(self) -> int:
         return self._ingress_failures
+
+    @property
+    def diagnostic_counters(self) -> Mapping[str, int]:
+        with self._lock:
+            return dict(self._diagnostic_counters)
+
+    def _count(self, name: str) -> None:
+        with self._lock:
+            self._diagnostic_counters[name] = self._diagnostic_counters.get(name, 0) + 1
 
     def update_allowed_calling_aets(self, values: frozenset[str]) -> None:
         """Apply the calling-AE allowlist to future associations."""
@@ -531,9 +579,11 @@ class DICOMListener:
             self.server = None
             raise
         self._started = True
+        self._admission_open = True
 
     async def stop(self) -> None:
         """Stop accepting associations and close the pynetdicom server."""
+        self._admission_open = False
         server = self.server
         self.server = None
         if server is not None:
@@ -547,17 +597,23 @@ class DICOMListener:
 
     async def stop_accepting(self) -> None:
         """Stop new associations before lifecycle drain begins."""
+        self._admission_open = False
         server = self.server
         self.server = None
         if server is not None:
             server.shutdown()
 
     async def drain(self) -> None:
-        """Allow pynetdicom association threads to complete their current work."""
+        """Allow all admitted pynetdicom association threads to complete their current work."""
         if self.ae is None:
             return
-        for association in tuple(self.ae.active_associations):
-            association.join(timeout=0.1)
+        while True:
+            active = tuple(self.ae.active_associations)
+            if not active:
+                return
+            for association in active:
+                association.join(timeout=0.1)
+            await asyncio.sleep(0)
 
     async def flush(self) -> None:
         """Listener has no durable buffers; capture services provide flushing."""
@@ -626,6 +682,10 @@ class DICOMListener:
 
     def _on_requested(self, event: Any) -> None:
         association = event.assoc
+        if not self._admission_open:
+            self._count("late_callback_refusal")
+            association.abort()
+            return
         calling_ae = _calling_ae(association)
         called_ae = _called_ae(association)
         source_host, source_port = _source_endpoint(association)
@@ -724,12 +784,43 @@ class DICOMListener:
         return DICOM_SUCCESS
 
     def _on_c_store(self, event: Any) -> int:
-        payload = c_store_payload(event)
-        self._publish_dimse_event(event.assoc, "CStoreReceived", payload)
-        self._publish_dimse_event(event.assoc, "DatasetParsed", payload)
-        if self.c_store_sink is not None:
-            return self.c_store_sink(event)
-        return 0xA700
+        try:
+            payload = c_store_payload(event)
+        except (AttributeError, TypeError, ValueError):
+            return DICOM_MALFORMED
+        if self.c_store_sink is None:
+            return DICOM_RESOURCE_EXHAUSTED
+        try:
+            status = self.c_store_sink(event)
+        except (OSError, TypeError, ValueError):
+            self._count("c_store_persistence_failure")
+            return DICOM_RESOURCE_EXHAUSTED
+        if status != DICOM_SUCCESS:
+            if status == DICOM_RESOURCE_EXHAUSTED:
+                self._count("c_store_persistence_failure")
+            return status
+        for event_name in ("CStoreReceived", "DatasetParsed"):
+            future = self._publish_dimse_event(event.assoc, event_name, payload)
+            if future is None:
+                if self.event_ingress is not None:
+                    return DICOM_RESOURCE_EXHAUSTED
+                continue
+            try:
+                future.result(timeout=self.config.event_timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                self._count("ingress_timeout")
+                recorder = getattr(self.event_ingress, "record_thread_ingress_timeout", None)
+                if callable(recorder):
+                    recorder()
+                future.cancel()
+                return DICOM_RESOURCE_EXHAUSTED
+            except concurrent.futures.CancelledError:
+                self._count("ingress_completion_error")
+                return DICOM_RESOURCE_EXHAUSTED
+            except Exception:  # noqa: BLE001 - protocol boundary maps completion failure
+                self._count("ingress_completion_error")
+                return DICOM_INTERNAL_FAILURE
+        return DICOM_SUCCESS
 
     def _state_for(self, association: Any) -> _AssociationState:
         association_key = id(association)
@@ -754,9 +845,9 @@ class DICOMListener:
 
     def _publish_dimse_event(
         self, association: Any, event_name: str, payload: dict[str, object]
-    ) -> None:
+    ) -> concurrent.futures.Future[EventEnvelope] | None:
         if self.event_ingress is None:
-            return
+            return None
         state = self._state_for(association)
         payload = {**payload, **self._summary_for(state.association_id)}
         event = EventEnvelope.create(
@@ -771,17 +862,29 @@ class DICOMListener:
             clock=self._clock(),
             id_generator=self._id_generator(),
         )
-        self._submit_event(event)
+        return self._submit_event(event)
 
-    def _submit_event(self, event: EventEnvelope) -> None:
+    def _submit_event(
+        self, event: EventEnvelope
+    ) -> concurrent.futures.Future[EventEnvelope] | None:
         """Submit one callback observation and account for admission/completion failures."""
         if self.event_ingress is None:
-            return
+            return None
         try:
             future = self.event_ingress.publish_from_thread(event)
             future.add_done_callback(self._observe_ingress_result)
-        except RuntimeError:
+            return future
+        except RuntimeError as error:
+            category = getattr(error, "category", "completion-error")
+            self._count(
+                "ingress_saturation"
+                if category == "saturated"
+                else "late_callback_refusal"
+                if category in {"not-started", "shutting-down"}
+                else "ingress_completion_error"
+            )
             self._ingress_failures += 1
+        return None
 
     def _summary_for(self, association_id: str) -> dict[str, object]:
         stats = self._pdu_stats.get(association_id)
@@ -872,9 +975,11 @@ class DICOMListener:
             error = future.exception()
         except concurrent.futures.CancelledError:
             self._ingress_failures += 1
+            self._count("ingress_completion_error")
         else:
             if error is not None:
                 self._ingress_failures += 1
+                self._count("ingress_completion_error")
 
 
 def _service_user(association: Any, name: str) -> Any:
@@ -985,6 +1090,20 @@ def c_store_payload(event: Any) -> dict[str, object]:
     }
 
 
+def _association_raw_socket(association: Any) -> Any:
+    transport = getattr(getattr(association, "dul", None), "socket", None)
+    return getattr(transport, "socket", transport)
+
+
+def _force_close_association_socket(association: Any, raw_socket: Any = None) -> None:
+    """Close a raced pynetdicom transport socket after association thread teardown."""
+    if raw_socket is None:
+        raw_socket = _association_raw_socket(association)
+    if raw_socket is not None:
+        with contextlib.suppress(Exception):
+            raw_socket.close()
+
+
 def _status_code(response: Any) -> int:
     value = getattr(response, "Status", response)
     return int(value)
@@ -1007,6 +1126,9 @@ def _text(value: Any) -> str:
 __all__ = [
     "DEFAULT_DICOM_PORT",
     "DEFAULT_MAX_PDU",
+    "DICOM_INTERNAL_FAILURE",
+    "DICOM_MALFORMED",
+    "DICOM_RESOURCE_EXHAUSTED",
     "DICOM_SUCCESS",
     "AssociationAuditRecord",
     "AssociationAuditSink",

@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from fastapi import APIRouter, HTTPException, Query
 
 from .pagination import Page, PaginationParams, paginate
-from .query import QueryError, QueryPolicy, apply_query
+from .query import QueryError, QueryPolicy, apply_query, parse_filter, parse_sort
 from .resources import InMemoryResourceStore, ResourceStore
 
 _CAPTURE_POLICY = QueryPolicy.from_fields(
@@ -41,7 +41,7 @@ def create_capture_router(
             return {"enabled": False, "reason": "ring buffer service is not mounted"}
         status = retention_provider.status()
         as_dict = getattr(status, "as_dict", None)
-        return as_dict() if callable(as_dict) else status
+        return as_dict() if callable(as_dict) else status  # pyright: ignore[reportReturnType]
 
     @router.post("/ring-buffer/promote")
     async def promote_ring_buffer(payload: Mapping[str, Any]) -> Mapping[str, Any]:  # pyright: ignore[reportUnusedFunction]
@@ -53,7 +53,7 @@ def create_capture_router(
         try:
             start = datetime.fromisoformat(str(payload["start"]))
             end = datetime.fromisoformat(str(payload["end"]))
-            manifest = await promote(
+            manifest = await promote(  # pyright: ignore[reportGeneralTypeIssues, reportUnknownVariableType]
                 start=start,
                 end=end,
                 capture_id=payload.get("capture_id"),
@@ -63,8 +63,8 @@ def create_capture_router(
             raise HTTPException(
                 status_code=422, detail=f"invalid promotion request: {error}"
             ) from error
-        as_dict = getattr(manifest, "model_dump", None)
-        return as_dict(mode="json") if callable(as_dict) else {"capture_id": str(manifest)}
+        as_dict = getattr(manifest, "model_dump", None)  # pyright: ignore[reportUnknownArgumentType]
+        return as_dict(mode="json") if callable(as_dict) else {"capture_id": str(manifest)}  # pyright: ignore[reportReturnType, reportUnknownArgumentType]
 
     @router.get("")
     async def list_captures(  # pyright: ignore[reportUnusedFunction]
@@ -73,14 +73,20 @@ def create_capture_router(
         sort: str | None = None,
         filter: str | None = None,
     ) -> dict[str, object]:
-        page_loader = getattr(resource_store, "list_page", None)
-        if callable(page_loader) and sort is None and filter is None:
-            items, total = await page_loader(
+        try:
+            parse_sort(sort, _CAPTURE_POLICY)
+            parse_filter(filter, _CAPTURE_POLICY)
+            items, total = await resource_store.list_page(
+                "captures",
                 offset=(page - 1) * page_size,
                 limit=page_size,
+                sort=sort,
+                filter=filter,
             )
             return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
-        try:
+        except QueryError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except (AttributeError, NotImplementedError):
             records = await resource_store.list("captures")
             records = apply_query(
                 records,
@@ -89,8 +95,6 @@ def create_capture_router(
                 sort=sort,
                 filter=filter,
             )
-        except QueryError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
         return paginate(records, PaginationParams(page=page, page_size=page_size)).as_dict()
 
     @router.get("/{capture_id}")

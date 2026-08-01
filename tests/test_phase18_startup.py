@@ -59,8 +59,8 @@ def test_lumora_serve_reaches_ready_five_times(tmp_path: Path) -> None:
         process = subprocess.Popen(
             ["uv", "run", "lumora", "serve", "--host", "127.0.0.1", "--port", str(port)],
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
         )
         try:

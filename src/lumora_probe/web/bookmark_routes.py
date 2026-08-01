@@ -41,7 +41,7 @@ def create_bookmark_router(provider: BookmarkProvider | None = None) -> APIRoute
     router = APIRouter(prefix="/bookmarks", tags=["bookmarks"])
 
     @router.post("", status_code=201)
-    async def create_bookmark(request: BookmarkCreateRequest) -> Any:
+    async def create_bookmark(request: BookmarkCreateRequest) -> Any:  # pyright: ignore[reportUnusedFunction]
         if provider is None:
             raise HTTPException(status_code=404, detail="Bookmark provider is not configured")
         bookmark = await provider.add_bookmark(
@@ -54,14 +54,14 @@ def create_bookmark_router(provider: BookmarkProvider | None = None) -> APIRoute
         return _bookmark_to_dict(bookmark)
 
     @router.get("")
-    async def list_bookmarks(capture_id: str | None = None) -> Any:
+    async def list_bookmarks(capture_id: str | None = None) -> Any:  # pyright: ignore[reportUnusedFunction]
         if provider is None:
             raise HTTPException(status_code=404, detail="Bookmark provider is not configured")
         bookmarks = await provider.list_bookmarks(capture_id=capture_id)
         return [_bookmark_to_dict(b) for b in bookmarks]
 
     @router.delete("/{bookmark_id}", status_code=204)
-    async def delete_bookmark(bookmark_id: str) -> None:
+    async def delete_bookmark(bookmark_id: str) -> None:  # pyright: ignore[reportUnusedFunction]
         if provider is None:
             raise HTTPException(status_code=404, detail="Bookmark provider is not configured")
         removed = await provider.remove_bookmark(bookmark_id)

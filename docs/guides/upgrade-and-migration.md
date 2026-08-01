@@ -55,3 +55,15 @@ to local storage and leave only bulky capture roots on a share when required.
 
 See [operator-guide.md](operator-guide.md), [deployment-topologies.md](deployment-topologies.md),
 and ADR-0011 for the data-root and storage contract.
+
+## Ring-buffer format migration and rollback
+
+Newer releases persist ring evidence under `ringbuffer/segments/` with an atomic metadata file.
+On first open, a legacy `records.jsonl` is read and migrated to segments; the legacy file is not
+deleted until the new metadata is durable. Stale temporary files from an interrupted rotation are
+ignored or cleaned during the next open. A data root with a newer unsupported ring format is
+refused rather than silently downgraded.
+
+For rollback, stop admission, wait for bounded drain, copy the complete `ringbuffer/` and
+`captures/` trees, then install the prior version. Preserve the newer tree as an investigation
+copy; never hand-edit segment metadata or delete `app.db` as a rollback shortcut.

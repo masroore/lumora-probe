@@ -62,7 +62,7 @@ class ReportRepository:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {}
-        return value if isinstance(value, dict) else {}
+        return value if isinstance(value, dict) else {}  # pyright: ignore[reportUnknownVariableType]
 
     @staticmethod
     def _read_jsonl(path: Path) -> tuple[Mapping[str, Any], ...]:
@@ -79,7 +79,7 @@ class ReportRepository:
             except json.JSONDecodeError:
                 continue
             if isinstance(value, dict):
-                events.append(value)
+                events.append(value)  # pyright: ignore[reportUnknownArgumentType]
         return tuple(sorted(events, key=_event_sort_key))
 
     @staticmethod
@@ -88,7 +88,7 @@ class ReportRepository:
         values = document.get("findings", ())
         if not isinstance(values, list):
             return ()
-        return tuple(value for value in values if isinstance(value, dict))
+        return tuple(value for value in values if isinstance(value, dict))  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
 
     @staticmethod
     def _read_findings_rule_set_version(path: Path) -> str | None:

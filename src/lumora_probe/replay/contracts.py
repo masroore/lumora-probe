@@ -31,11 +31,11 @@ class ProtocolReplayDataset:
     monotonic_ns: int
 
     def __post_init__(self) -> None:
-        if not isinstance(self.raw_bytes, (bytes, bytearray, memoryview)):
+        if not isinstance(self.raw_bytes, (bytes, bytearray, memoryview)):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError("raw_bytes must be bytes-like")
         if not self.raw_bytes:
             raise ValueError("raw_bytes must not be empty")
-        if not isinstance(self.transfer_syntax, str) or not self.transfer_syntax.strip():
+        if not isinstance(self.transfer_syntax, str) or not self.transfer_syntax.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError("transfer_syntax must be a non-empty string")
         if type(self.monotonic_ns) is not int or self.monotonic_ns < 0:
             raise ValueError("monotonic_ns must be a non-negative integer")

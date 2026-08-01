@@ -38,8 +38,6 @@ def make_dicom(*, frames: int = 1) -> bytes:
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
     dataset = Dataset()
     dataset.file_meta = file_meta
-    dataset.is_little_endian = True
-    dataset.is_implicit_VR = False
     dataset.SOPClassUID = CTImageStorage
     dataset.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
     dataset.StudyInstanceUID = "1.2.826.0.1.3680043.10.543.13.2"
@@ -58,7 +56,7 @@ def make_dicom(*, frames: int = 1) -> bytes:
     )
     dataset.PixelData = pixels.tobytes()
     output = BytesIO()
-    dcmwrite(output, dataset, write_like_original=False)
+    dcmwrite(output, dataset, enforce_file_format=True)
     return output.getvalue()
 
 

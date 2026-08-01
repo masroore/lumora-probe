@@ -101,15 +101,11 @@ def _make_dataset(pydicom: object, suffix: str) -> object:
     dataset.file_meta.MediaStorageSOPClassUID = dataset.SOPClassUID
     dataset.file_meta.MediaStorageSOPInstanceUID = dataset.SOPInstanceUID
     dataset.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
-    dataset.is_little_endian = True
-    dataset.is_implicit_VR = False
     return dataset
 
 
 def _set_transfer_syntax(dataset: object, transfer_syntax: str) -> None:
     dataset.file_meta.TransferSyntaxUID = transfer_syntax
-    dataset.is_little_endian = transfer_syntax != "1.2.840.10008.1.2.2"
-    dataset.is_implicit_VR = transfer_syntax == "1.2.840.10008.1.2"
 
 
 def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
@@ -124,6 +120,18 @@ def _start_receiver(tmp_path: Path, log_format: str = "json", **kwargs: object) 
     receiver.start()
     _wait_until(lambda: receiver.server is not None)
     return receiver
+
+
+def _release_association(association: object) -> None:
+    """Close the pinned pynetdicom transport before its release thread drops the socket."""
+    transport = getattr(getattr(association, "dul", None), "socket", None)
+    raw_socket = getattr(transport, "socket", transport)
+    if getattr(association, "is_established", False):
+        association.release()  # type: ignore[attr-defined]
+    if raw_socket is not None:
+        raw_socket.close()
+    if getattr(getattr(association, "_started", None), "is_set", lambda: False)():
+        association.join()  # type: ignore[attr-defined]
 
 
 def _send_store(
@@ -141,7 +149,7 @@ def _send_store(
     )
     assert association.is_established
     status = association.send_c_store(dataset)
-    association.release()
+    _release_association(association)
     return status
 
 
@@ -163,7 +171,7 @@ def test_echo_and_store_round_trip(tmp_path: Path, dicom_stack: tuple[object, ob
         assert association.send_c_echo().Status == SUCCESS
         dataset = _make_dataset(pydicom, "1")
         assert association.send_c_store(dataset).Status == SUCCESS
-        association.release()
+        _release_association(association)
         path = (
             tmp_path
             / dataset.StudyInstanceUID
@@ -194,7 +202,7 @@ def test_multiple_instances_are_partitioned_by_study_and_series(
         assert association.is_established
         datasets = [_make_dataset(pydicom, str(index)) for index in range(3)]
         assert all(association.send_c_store(dataset).Status == SUCCESS for dataset in datasets)
-        association.release()
+        _release_association(association)
         for dataset in datasets:
             assert (
                 tmp_path
@@ -225,7 +233,7 @@ def test_transfer_syntax_is_preserved(tmp_path: Path, dicom_stack: tuple[object,
             dataset = _make_dataset(pydicom, str(index))
             _set_transfer_syntax(dataset, transfer_syntax)
             assert association.send_c_store(dataset).Status == SUCCESS
-            association.release()
+            _release_association(association)
             path = (
                 tmp_path
                 / dataset.StudyInstanceUID
@@ -284,14 +292,18 @@ def test_rejected_calling_ae(tmp_path: Path, dicom_stack: tuple[object, object])
     from pynetdicom.sop_class import Verification
 
     receiver = _start_receiver(tmp_path, accept_ae=frozenset({"ALLOWED"}))
+    sender = AE(ae_title="REJECTED")
+    association = None
     try:
-        sender = AE(ae_title="REJECTED")
         sender.add_requested_context(Verification)
         association = sender.associate(
             "127.0.0.1", receiver.config.port, ae_title=receiver.config.ae_title
         )
         assert not association.is_established
     finally:
+        if association is not None:
+            _release_association(association)
+        sender.shutdown()
         receiver.stop()
 
 

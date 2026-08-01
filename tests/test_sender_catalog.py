@@ -9,7 +9,6 @@ import pytest
 from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import (
     ExplicitVRLittleEndian,
-    ImplicitVRLittleEndian,
     generate_uid,
 )
 
@@ -68,7 +67,7 @@ def _make_dicom(
         file_meta.MediaStorageSOPClassUID = fm_sop_class
     if not omit_ts:
         file_meta.TransferSyntaxUID = transfer_syntax
-    file_meta.MediaStorageApplicationTitle = "LUMORA"
+    file_meta.SourceApplicationEntityTitle = "LUMORA"
 
     ds = FileDataset(str(path), {}, file_meta=file_meta, preamble=b"\x00" * 128)
     if not omit_study:
@@ -82,14 +81,12 @@ def _make_dicom(
     ds.Modality = "CT"
     if instance_number is not None:
         ds.InstanceNumber = instance_number
-    ds.is_little_endian = True
-    ds.is_implicit_VR = transfer_syntax == ImplicitVRLittleEndian
-    # Use write_like_original when we intentionally set mismatched file-meta
-    # values so pydicom does not silently re-derive them from the dataset.
+    # Preserve intentionally mismatched file-meta values by using the legacy-compatible
+    # un-enforced file format path without deprecated writer arguments.
     mismatch = (fm_sop_class is not None and fm_sop_class != sop_class_uid) or (
         fm_sop_instance is not None and fm_sop_instance != sop_instance_uid
     )
-    ds.save_as(path, enforce_file_format=True, write_like_original=mismatch)
+    ds.save_as(path, enforce_file_format=not mismatch)
     return path
 
 
@@ -179,7 +176,8 @@ def test_invalid_transfer_syntax_rejected(tmp_path: Path) -> None:
         sop_instance_uid="1.2.3.100.1",
         transfer_syntax="1.2.3.999",  # not a transfer syntax
     )
-    catalog = build_catalog(tmp_path)
+    with pytest.warns(UserWarning, match="Expected explicit VR"):
+        catalog = build_catalog(tmp_path)
     assert catalog.sendable_count == 0
     assert catalog.issues[0].reason == REASON_INVALID_TRANSFER_SYNTAX
 
@@ -335,9 +333,7 @@ def test_instance_number_missing_or_invalid(tmp_path: Path) -> None:
     ds.SeriesInstanceUID = SERIES_A1
     ds.SOPInstanceUID = "1.2.3.100.2"
     ds.SOPClassUID = SOP_CLASS
-    ds.is_little_endian = True
-    ds.is_implicit_VR = False
-    ds.save_as(path_bad, write_like_original=True)
+    ds.save_as(path_bad, enforce_file_format=False)
 
     # Now manually patch the InstanceNumber in the file
     # Read the file, find a good place to insert the element
@@ -359,7 +355,8 @@ def test_instance_number_missing_or_invalid(tmp_path: Path) -> None:
     with open(path_bad, "wb") as f:
         f.write(patched_data)
 
-    catalog = build_catalog(tmp_path)
+    with pytest.warns(UserWarning, match="Invalid value for VR IS"):
+        catalog = build_catalog(tmp_path)
     assert catalog.sendable_count == 2
     by_sop = {i.sop_instance_uid: i for i in catalog.studies[0].instances}
     assert by_sop["1.2.3.100.1"].instance_number is None

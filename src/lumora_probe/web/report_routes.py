@@ -44,7 +44,7 @@ def create_reports_router(
         return report.model_dump(mode="json")
 
     @router.post("/{capture_id}/report", status_code=202)
-    async def start_capture_report(
+    async def start_capture_report(  # pyright: ignore[reportUnusedFunction]
         capture_id: str,
         format: str = "html",
         rule_set_version: str | None = None,

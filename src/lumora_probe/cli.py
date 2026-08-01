@@ -173,8 +173,8 @@ def _run_plugin_install(args: argparse.Namespace) -> dict[str, Any]:
             raise ApiClientError("Plugin manifest changed during installation")
         temporary.replace(destination)
     except Exception:
-        if "temporary" in locals() and temporary.exists():
-            shutil.rmtree(temporary, ignore_errors=True)
+        if "temporary" in locals() and temporary.exists():  # pyright: ignore[reportPossiblyUnboundVariable]
+            shutil.rmtree(temporary, ignore_errors=True)  # pyright: ignore[reportPossiblyUnboundVariable]
         raise
     from lumora_probe.core.audit import AuditCategory, AuditLog
     from lumora_probe.core.clock import SystemClock

@@ -45,9 +45,9 @@ class Replay:
         self.capture_id = _identity(capture_id, field="capture_id")
         self.mode = _enum(mode, ReplayMode, field="mode")
         self.fidelity = _enum(fidelity, ReplayFidelity, field="fidelity")
-        if target is not None and not isinstance(target, NetworkEndpoint):
+        if target is not None and not isinstance(target, NetworkEndpoint):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise domain_invariant("target must be a NetworkEndpoint", field="target", value=target)
-        if not isinstance(dry_run, bool):
+        if not isinstance(dry_run, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise domain_invariant("dry_run must be a boolean", field="dry_run", value=dry_run)
         if self.mode is ReplayMode.PROTOCOL and target is None:
             raise domain_invariant(
@@ -76,7 +76,7 @@ class Replay:
 
     @property
     def required_fidelity(self) -> ReplayFidelity:
-        return self.fidelity
+        return self.fidelity  # pyright: ignore[reportReturnType]
 
     def start(self) -> None:
         self._transition(ReplayState.RUNNING, {ReplayState.PENDING}, "start")

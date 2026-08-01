@@ -934,25 +934,35 @@ Implementation is complete only when all boxes are true:
 - [x] Partial engine/lifecycle wiring is retained, completed, and covered at the process boundary.
 - [x] PR-001 through PR-004 composition/recovery/settings acceptance passes; residual lanes remain tracked.
 - [x] SEC-001 is fixed; SEC-002 startup gates and configured-host process coverage pass without weakening exposure policy.
-- [ ] CON-001/CON-002 ownership and saturation behavior are ratified and adversarially tested.
+- [x] CON-001/CON-002 ownership and saturation behavior are ratified and adversarially tested (ADR-0036; `tests/test_production_concurrency.py`).
 - [x] `executor_workers` controls the production default executor.
 - [x] Startup rebuilds/reconciles authoritative captures before readiness.
-- [ ] No production route uses an empty in-memory/null provider for every advertised optional capability; production-required providers are wired.
+- [x] No production route uses an empty in-memory/null provider for every advertised optional capability; production-required providers are wired (`tests/test_production_composition.py`).
 - [x] Runtime settings persist, report provenance, and supported settings apply live.
 - [x] DICOM port and HTTP API are verified through installed wheel and sdist smoke environments.
-- [x] Graceful shutdown and deadline interruption preserve explicit evidence state at component level; process active-traffic evidence remains.
+- [x] Graceful shutdown and deadline interruption preserve explicit evidence state at component and process level (`tests/test_bootstrap.py`, `tests/test_production_composition.py`).
 - [x] Archive extraction and plugin installation are contained and bounded.
 - [ ] Database pagination and rebuild performance meet ratified budgets.
 - [x] SQLAlchemy/sqlite3 architecture drift is resolved by accepted ADR and documentation.
 - [x] Ruff check and format pass.
 - [x] Import-linter passes all contracts.
-- [ ] BasedPyright passes its expanded application slices; core/shared and bootstrap pass.
+- [x] BasedPyright passes its expanded application slices; core/shared and bootstrap pass (canonical `uv run basedpyright`).
 - [x] Full pytest passes; remaining skips are justified/opt-in, but release-required external suites remain to run.
 - [x] Frontend assets match source (`npm run check:assets`); generated event/OpenAPI artifacts were not changed.
 - [x] Exported-lock dependency audit passes; CI retains the report artifact.
 - [x] External DICOM interoperability passes against pinned DCMTK, dcm4che, and Orthanc containers (`15 passed`).
-- [ ] README, known limitations, troubleshooting, upgrade, and release status match verified behavior.
-- [ ] No real or de-identified patient data was introduced.
+- [x] README, known limitations, troubleshooting, upgrade, and release status match verified behavior (`docs/release-notes-0.1.0.md`).
+- [x] No real or de-identified patient data was introduced; release tests and fixtures use synthetic DICOM UIDs/data only.
+
+### Release-closure evidence update — August 1, 2026
+
+The closure implementation adds ADR-0036 and ADR-0037, a production runtime verification handle,
+bounded DICOM ingress and capture ownership, segmented ring persistence, SQL-backed pagination,
+canonical whole-package strict typing, installed wheel/sdist smoke, and adversarial shutdown/traffic
+tests. Local evidence is recorded in `docs/planning/phase-18-performance-report.md` and
+`docs/release-notes-0.1.0.md`. The database p95 budget, six hosted artifact jobs, dependency-audit
+artifact, and scheduled external interoperability result remain evidence gates rather than claims
+made from this working tree.
 
 ## 10. Final implementation guidance
 

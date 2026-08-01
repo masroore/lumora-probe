@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from .pagination import Page, PaginationParams, paginate
-from .query import QueryError, QueryPolicy, apply_query
+from .query import QueryError, QueryPolicy, apply_query, parse_filter, parse_sort
 from .resources import InMemoryResourceStore, ResourceStore
 
 
@@ -32,13 +32,20 @@ def create_collection_router(
         sort: str | None = None,
         filter: str | None = None,
     ) -> dict[str, object]:
-        page_loader = getattr(resource_store, "list_page", None)
-        if callable(page_loader) and sort is None and filter is None:
-            items, total = await page_loader(
-                resource, offset=(page - 1) * page_size, limit=page_size
+        try:
+            parse_sort(sort, policy)
+            parse_filter(filter, policy)
+            items, total = await resource_store.list_page(
+                resource,
+                offset=(page - 1) * page_size,
+                limit=page_size,
+                sort=sort,
+                filter=filter,
             )
             return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
-        try:
+        except QueryError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except (AttributeError, NotImplementedError):
             records = apply_query(
                 await resource_store.list(resource),
                 policy=policy,
@@ -46,8 +53,6 @@ def create_collection_router(
                 sort=sort,
                 filter=filter,
             )
-        except QueryError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
         return paginate(records, PaginationParams(page=page, page_size=page_size)).as_dict()
 
     @router.get("/{resource_id}")

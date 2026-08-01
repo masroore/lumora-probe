@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 import socket
 import subprocess
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -46,12 +49,12 @@ def _wait_ready(base_url: str, *, timeout: float = 30.0) -> dict[str, Any]:
     raise AssertionError(f"production app did not become ready: {last_error}")
 
 
-def _dataset() -> Dataset:
+def _dataset(index: int = 901) -> Dataset:
     dataset = Dataset()
     dataset.SOPClassUID = SecondaryCaptureImageStorage
-    dataset.SOPInstanceUID = "1.2.826.0.1.3680043.10.543.901"
-    dataset.StudyInstanceUID = "1.2.826.0.1.3680043.10.543.902"
-    dataset.SeriesInstanceUID = "1.2.826.0.1.3680043.10.543.903"
+    dataset.SOPInstanceUID = f"1.2.826.0.1.3680043.10.543.{index}.3"
+    dataset.StudyInstanceUID = f"1.2.826.0.1.3680043.10.543.{index}.1"
+    dataset.SeriesInstanceUID = f"1.2.826.0.1.3680043.10.543.{index}.2"
     dataset.PatientName = "SYNTHETIC^PRODUCTION"
     dataset.file_meta = FileMetaDataset()
     dataset.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
@@ -59,7 +62,12 @@ def _dataset() -> Dataset:
 
 
 def _start(
-    data_dir: Path, http_port: int, dicom_port: int, *, non_loopback: bool = True
+    data_dir: Path,
+    http_port: int,
+    dicom_port: int,
+    *,
+    non_loopback: bool = True,
+    shutdown_grace_seconds: float | None = None,
 ) -> subprocess.Popen[str]:
     environment = os.environ.copy()
     environment.update(
@@ -72,6 +80,8 @@ def _start(
             "LUMORA_ALLOWED_HOSTS": "127.0.0.1,localhost,probe.example" if non_loopback else "",
         }
     )
+    if shutdown_grace_seconds is not None:
+        environment["LUMORA_SHUTDOWN_GRACE_SECONDS"] = str(shutdown_grace_seconds)
     host = "0.0.0.0" if non_loopback else "127.0.0.1"
     trust = ["--trust-network"] if non_loopback else []
     return subprocess.Popen(
@@ -83,14 +93,17 @@ def _start(
     )
 
 
-def _stop(process: subprocess.Popen[str]) -> None:
-    process.send_signal(signal.SIGTERM)
+def _stop(process: subprocess.Popen[str]) -> tuple[str, str]:
+    if process.poll() is None:
+        process.send_signal(signal.SIGTERM)
     try:
-        process.wait(timeout=15)
-    except subprocess.TimeoutExpired:
+        stdout, stderr = process.communicate(timeout=15)
+    except subprocess.TimeoutExpired as error:
         process.kill()
-        process.wait(timeout=5)
+        process.communicate(timeout=5)
+        raise AssertionError("production process required kill fallback") from error
     assert process.returncode in {0, -signal.SIGTERM, 128 + signal.SIGTERM}
+    return stdout, stderr
 
 
 @pytest.mark.component
@@ -199,5 +212,106 @@ def test_production_process_composes_dicom_capture_recovery_and_settings(tmp_pat
             assert next(
                 item for item in settings["items"] if item["name"] == "ring_buffer_seconds"
             ) == {"name": "ring_buffer_seconds", "value": 60, "source": "runtime"}
+    finally:
+        _stop(restarted)
+
+
+@pytest.mark.component
+@pytest.mark.dicom
+@pytest.mark.slow
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM evidence is POSIX-specific")
+def test_production_process_drains_sustained_dicom_traffic(tmp_path: Path) -> None:
+    """SIGTERM closes admission, drains acknowledged C-STOREs, and survives restart."""
+    http_port = _free_port()
+    dicom_port = _free_port()
+    process = _start(tmp_path, http_port, dicom_port, shutdown_grace_seconds=5)
+    base_url = f"http://127.0.0.1:{http_port}"
+    successes: list[str] = []
+    successes_lock = threading.Lock()
+    stop_senders = threading.Event()
+    run_started = datetime.now(UTC)
+
+    try:
+        _wait_ready(base_url)
+
+        def send_loop(worker_id: int) -> None:
+            index = worker_id * 10_000
+            while not stop_senders.is_set():
+                dataset = _dataset(index)
+                client = DICOMSCUClient(
+                    DICOMSCUConfig(
+                        host="127.0.0.1",
+                        port=dicom_port,
+                        calling_ae=f"TRAFFIC{worker_id}",
+                        called_ae="LUMORA",
+                    )
+                )
+                result = client.store_dataset(
+                    dataset,
+                    abstract_syntax=str(SecondaryCaptureImageStorage),
+                    transfer_syntax=str(ExplicitVRLittleEndian),
+                    file_meta=dataset.file_meta,
+                )
+                if result.success:
+                    with successes_lock:
+                        successes.append(str(dataset.SOPInstanceUID))
+                index += 1
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            futures = [workers.submit(send_loop, worker_id) for worker_id in (1, 2)]
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                with successes_lock:
+                    if len(successes) >= 4:
+                        break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("sustained traffic did not produce four acknowledged C-STOREs")
+
+            process.send_signal(signal.SIGTERM)
+            try:
+                try:
+                    _stdout, stderr = process.communicate(timeout=20)
+                except subprocess.TimeoutExpired as error:
+                    process.kill()
+                    process.communicate(timeout=5)
+                    raise AssertionError("SIGTERM shutdown required kill fallback") from error
+                assert process.returncode in {0, -signal.SIGTERM, 128 + signal.SIGTERM}
+                assert "Task exception was never retrieved" not in stderr
+                assert "unhandled exception" not in stderr.lower()
+            finally:
+                stop_senders.set()
+            for future in futures:
+                future.result(timeout=10)
+    finally:
+        stop_senders.set()
+        if process.poll() is None:
+            _stop(process)
+
+    restarted_http = _free_port()
+    restarted_dicom = _free_port()
+    restarted = _start(tmp_path, restarted_http, restarted_dicom, shutdown_grace_seconds=5)
+    try:
+        restarted_url = f"http://127.0.0.1:{restarted_http}"
+        _wait_ready(restarted_url)
+        now = datetime.now(UTC)
+        with httpx.Client(base_url=restarted_url, timeout=5) as client:
+            promoted = client.post(
+                "/api/v1/captures/ring-buffer/promote",
+                json={
+                    "start": (run_started - timedelta(seconds=1)).isoformat(),
+                    "end": (now + timedelta(seconds=1)).isoformat(),
+                },
+            )
+            assert promoted.status_code == 200, promoted.text
+            instances = client.get("/api/v1/instances").json()["items"]
+            durable_uids = {item["sop_instance_uid"] for item in instances}
+            with successes_lock:
+                acknowledged = set(successes)
+            assert acknowledged <= durable_uids
+
+        for manifest_path in (tmp_path / "captures").glob("*/manifest.json"):
+            state = json.loads(manifest_path.read_text())["state"]
+            assert state not in {"created", "running", "stopping"}
     finally:
         _stop(restarted)

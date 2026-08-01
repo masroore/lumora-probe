@@ -75,6 +75,8 @@ def observe() -> ThreadObservation:
         association.send_c_store(_dataset())
         handler_completed_before_send_return = handler_completed.is_set()
         association.release()
+        association.join()
+        client_ae.shutdown()
         deadline = time.monotonic() + 2.0
         while not handler_completed.is_set() and time.monotonic() < deadline:
             time.sleep(0.01)

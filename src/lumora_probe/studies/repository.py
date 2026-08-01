@@ -255,7 +255,7 @@ class StudyProjectionRepository:
 
 def _clock_now(clock: object | None) -> datetime:
     if clock is not None and hasattr(clock, "now"):
-        value = clock.now()
+        value = clock.now()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
         if isinstance(value, datetime):
             return value
     return datetime.now(UTC)

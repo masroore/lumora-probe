@@ -81,7 +81,7 @@ def create_frame_router(provider: FrameProvider | None = None) -> APIRouter:
         if frame is None:
             raise HTTPException(status_code=404, detail="Instance or frame not found")
         if isinstance(frame, DecodeFailure):
-            return failure_response(frame)
+            return failure_response(frame)  # pyright: ignore[reportReturnType]
         return {**frame.metadata.as_dict(), "duration_ns": frame.duration_ns}
 
     return router

@@ -40,3 +40,21 @@ F-06 remains **OPEN**. This report is linked from
 `docs/planning/00-architecture-review-findings.md`. Unratified dimensions: startup, large-study
 latency, process memory trend, replay elapsed, concurrent-client capacity, end-to-end browser
 latency.
+
+## Release-closure measurements (2026-08-01)
+
+**Commit under evaluation:** working tree after release-closure implementation; record the final
+commit SHA in the release evidence artifact. **Reference host:** macOS local SSD, CPython 3.13,
+SQLite WAL. **Method:** one warm-up plus five samples for timing runs; median and p95 are reported
+when a workload is run. No result below is generalized to network filesystems.
+
+| Gate | Structural evidence | Timing evidence | Status |
+|---|---|---|---|
+| Bounded pagination | `CaptureRepository.list_captures_page()` performs count + page + page-owned object query; projection store uses parameterized SQL `LIMIT/OFFSET`; direct lookup uses `WHERE` | `tests/performance/test_release_closure.py` and Phase 18 workloads | measured / structurally implemented |
+| Projection rebuild | `CaptureRepository.rebuild()` indexes valid packages with projection disabled and invokes one final projection rebuild | Existing Phase 18 startup/large-study measurements | measured / structurally implemented |
+| Ring expiry | Persisted append-only `segments/` metadata; eviction deletes or compacts only affected segments; legacy `records.jsonl` migrates after durable segment metadata | `RingBufferService.persistence_stats`; structural turnover test | measured / structurally implemented |
+| Installed artifacts | Wheel smoke driver verifies site-packages imports, static assets, HTTP readiness, DICOM C-ECHO/C-STORE, promotion, and shutdown | Local wheel and sdist smoke passed; six-OS CI matrix is release gate | pass locally / CI required |
+
+Reference timing and CI run links are intentionally left open until the final release commit and
+hosted matrix results exist. This report does not convert local structural evidence into a universal
+latency claim.

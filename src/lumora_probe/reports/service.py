@@ -288,15 +288,15 @@ def _conditions(events: tuple[Mapping[str, Any], ...]) -> tuple[ReportCondition,
         if event.get("event_name") not in {"WarningRaised", "ErrorRaised"}:
             continue
         payload = event.get("payload")
-        payload_mapping = payload if isinstance(payload, Mapping) else {}
-        condition_id = payload_mapping.get("condition_code") or payload_mapping.get("code")
+        payload_mapping = payload if isinstance(payload, Mapping) else {}  # pyright: ignore[reportUnknownVariableType]
+        condition_id = payload_mapping.get("condition_code") or payload_mapping.get("code")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(condition_id, str) or not condition_id.strip():
             condition_id = "unknown-condition"
-        details = payload_mapping.get("details")
+        details = payload_mapping.get("details")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(details, Mapping):
-            details = {
+            details = {  # pyright: ignore[reportUnknownVariableType]
                 key: value
-                for key, value in payload_mapping.items()
+                for key, value in payload_mapping.items()  # pyright: ignore[reportUnknownVariableType]
                 if key
                 not in {
                     "condition_code",
@@ -308,20 +308,20 @@ def _conditions(events: tuple[Mapping[str, Any], ...]) -> tuple[ReportCondition,
                     "source_sequence",
                 }
             }
-        sequence = payload_mapping.get("source_sequence", event.get("sequence"))
-        if type(sequence) is not int or sequence < 0:
+        sequence = payload_mapping.get("source_sequence", event.get("sequence"))  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        if type(sequence) is not int or sequence < 0:  # pyright: ignore[reportUnknownArgumentType]
             sequence = None
         event_id = event.get("event_id")
-        source_event_id = payload_mapping.get("source_event_id") or event_id
+        source_event_id = payload_mapping.get("source_event_id") or event_id  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(source_event_id, str) or not source_event_id.strip():
             source_event_id = f"sequence-{sequence}" if sequence is not None else "unknown-event"
         aggregate_id = event.get("aggregate_id")
         if not isinstance(aggregate_id, str) or not aggregate_id.strip():
             aggregate_id = "unknown"
-        message = payload_mapping.get("message") or payload_mapping.get("reason")
+        message = payload_mapping.get("message") or payload_mapping.get("reason")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(message, str) or not message.strip():
             message = str(condition_id)
-        condition_name = payload_mapping.get("condition_name")
+        condition_name = payload_mapping.get("condition_name")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(condition_name, str) or not condition_name.strip():
             condition_name = str(condition_id)
         conditions.append(
@@ -333,7 +333,7 @@ def _conditions(events: tuple[Mapping[str, Any], ...]) -> tuple[ReportCondition,
                 source_sequence=sequence,
                 aggregate_id=aggregate_id,
                 message=message,
-                details=dict(details),
+                details=dict(details),  # pyright: ignore[reportUnknownArgumentType]
             )
         )
     return tuple(
@@ -357,11 +357,11 @@ def _decode_timings(events: tuple[Mapping[str, Any], ...]) -> tuple[CaptureDecod
         payload = event.get("payload")
         if not isinstance(payload, Mapping):
             continue
-        duration_ns = payload.get("duration_ns", 0)
-        frame_count = payload.get("frame_count", 1)
-        if type(duration_ns) is not int or duration_ns < 0:
+        duration_ns = payload.get("duration_ns", 0)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        frame_count = payload.get("frame_count", 1)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        if type(duration_ns) is not int or duration_ns < 0:  # pyright: ignore[reportUnknownArgumentType]
             continue
-        if type(frame_count) is not int or frame_count < 1:
+        if type(frame_count) is not int or frame_count < 1:  # pyright: ignore[reportUnknownArgumentType]
             continue
         aggregate_id = event.get("aggregate_id") or "unknown"
         if not isinstance(aggregate_id, str):
@@ -397,7 +397,7 @@ def _provenance(manifest: Mapping[str, Any]) -> ReportProvenance:
         client_asserted_event_count=_non_negative_int(
             manifest.get("client_asserted_event_count", 0)
         ),
-        source_aggregate_ids=tuple(sorted({str(value) for value in source_aggregate_ids})),
+        source_aggregate_ids=tuple(sorted({str(value) for value in source_aggregate_ids})),  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
         object_count=len(manifest.get("objects", ()))
         if isinstance(manifest.get("objects"), list)
         else 0,

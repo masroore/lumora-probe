@@ -13,6 +13,16 @@ class ResourceStore(Protocol):
 
     async def list(self, resource: str) -> tuple[Mapping[str, Any], ...]: ...
 
+    async def list_page(
+        self,
+        resource: str,
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]: ...
+
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None: ...
 
     async def delete(self, resource: str, resource_id: str) -> bool: ...
@@ -32,6 +42,38 @@ class InMemoryResourceStore:
     async def list(self, resource: str) -> tuple[Mapping[str, Any], ...]:
         values = self._resources.get(resource, {})
         return tuple(dict(value) for _, value in sorted(values.items()))
+
+    async def list_page(
+        self,
+        resource: str,
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        records = list(await self.list(resource))
+        if filter:
+            field, _, expected = filter.partition(":")
+            if expected:
+                records = [
+                    item
+                    for item in records
+                    if str(item.get(field, "")).casefold() == expected.casefold()
+                ]
+            else:
+                needle = filter.casefold()
+                records = [item for item in records if needle in str(item).casefold()]
+        if sort:
+            for raw in reversed(sort.split(",")):
+                descending = raw.startswith("-")
+                field = raw.lstrip("+-")
+                records.sort(
+                    key=lambda item, name=field: (item.get(name) is None, str(item.get(name, ""))),
+                    reverse=descending,
+                )
+        total = len(records)
+        return tuple(records[offset : offset + limit]), total
 
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
         value = self._resources.get(resource, {}).get(resource_id)

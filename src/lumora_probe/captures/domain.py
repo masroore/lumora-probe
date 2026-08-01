@@ -29,9 +29,9 @@ class Capture:
         association_ids: tuple[str, ...] = (),
     ) -> None:
         self.capture_id = _identity(capture_id, field="capture_id")
-        if not isinstance(partial, bool):
+        if not isinstance(partial, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise domain_invariant("partial must be a boolean", field="partial", value=partial)
-        if not isinstance(promoted_from_buffer, bool):
+        if not isinstance(promoted_from_buffer, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise domain_invariant(
                 "promoted_from_buffer must be a boolean",
                 field="promoted_from_buffer",

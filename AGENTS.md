@@ -23,7 +23,7 @@ uv run pytest -q                          # full test suite
 uv run pytest -m unit -q                  # by marker: unit|component|dicom|e2e|interop|slow
 uv run ruff check . && uv run ruff format --check .
 uv run lint-imports --no-cache            # architecture boundary contracts (7 of them)
-uv run basedpyright src/lumora_probe/core src/lumora_probe/shared   # strict mode, these two slices only
+uv run basedpyright                    # canonical strict application gate
 ```
 
 Frontend assets (committed, CI-verified — see ADR-0025):

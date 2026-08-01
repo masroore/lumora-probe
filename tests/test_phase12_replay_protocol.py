@@ -274,7 +274,7 @@ async def test_protocol_replay_scu_parses_bytes_off_loop_and_derives_sop_class(
     source.file_meta.MediaStorageSOPClassUID = CTImageStorage
     source.file_meta.MediaStorageSOPInstanceUID = source.SOPInstanceUID
     encoded = BytesIO()
-    dcmwrite(encoded, source, write_like_original=False)
+    dcmwrite(encoded, source, enforce_file_format=True)
 
     client = DICOMSCUClient(DICOMSCUConfig(host="127.0.0.1", port=11112))
     captured: dict[str, Any] = {}

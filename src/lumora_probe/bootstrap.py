@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -45,6 +45,18 @@ from lumora_probe.web.api import create_app
 from lumora_probe.web.live import LiveEventSource
 from lumora_probe.web.security import SecurityPolicy
 from lumora_probe.web.transfer_inspector import TransferInspectorService
+
+
+@dataclass(frozen=True, slots=True)
+class ProductionRuntime:
+    """Composed production graph exposed to process-boundary verification."""
+
+    app: FastAPI
+    lifecycle: LifecycleManager
+    capture_engine: CaptureEngine
+    dicom_listener: DICOMListener
+    bus: EventBus
+    paths: DataPaths
 
 
 class PluginServiceAdapter:
@@ -309,24 +321,98 @@ class _SQLiteResourceStore:
         return tuple(_row_mapping(resource, row) for row in rows)
 
     async def list_page(
-        self, resource: str = "captures", *, offset: int, limit: int
+        self,
+        resource: str = "captures",
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
     ) -> tuple[tuple[Mapping[str, Any], ...], int]:
         query = self._queries.get(resource)
         if query is None or offset < 0 or limit < 1:
             return (), 0
         table = resource if resource != "events" else "event_window"
-        rows = await self.storage.index.execute_read(f"SELECT COUNT(*) AS total FROM {table}")
+        allowed = {
+            "studies": {
+                "study_uid": "study_uid",
+                "first_seen_at": "first_seen_at",
+                "last_seen_at": "last_seen_at",
+                "instance_count": "instance_count",
+            },
+            "series": {
+                "study_uid": "study_uid",
+                "series_uid": "series_uid",
+                "first_seen_at": "first_seen_at",
+                "last_seen_at": "last_seen_at",
+                "instance_count": "instance_count",
+            },
+            "instances": {
+                "instance_id": "instance_id",
+                "study_uid": "study_uid",
+                "series_uid": "series_uid",
+                "sop_instance_uid": "sop_instance_uid",
+                "created_at": "created_at",
+                "capture_id": "capture_id",
+            },
+            "events": {
+                "capture_id": "capture_id",
+                "sequence": "sequence",
+                "event_id": "event_id",
+                "observed_at": "observed_at",
+            },
+        }.get(resource, {})
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if filter:
+            field, separator, expected = filter.partition(":")
+            if separator:
+                column = allowed.get(field)
+                if column is None:
+                    raise ValueError(f"unsupported {resource} filter: {field}")
+                clauses.append(f"LOWER(CAST({column} AS TEXT)) = LOWER(?)")
+                parameters.append(expected)
+            else:
+                column = next(iter(allowed.values()), "")
+                if not column:
+                    return (), 0
+                clauses.append(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)")
+                parameters.append(f"%{filter}%")
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        default_order = query[0].split(" ORDER BY ", 1)[1]
+        order: list[str] = []
+        for raw in (sort or default_order).split(","):
+            descending = raw.startswith("-")
+            name = raw.lstrip("+-")
+            column = allowed.get(name)
+            if column is None:
+                raise ValueError(f"unsupported {resource} sort: {name}")
+            order.append(f"{column} {'DESC' if descending else 'ASC'}")
+        tie = query[1]
+        if (
+            tie not in {raw.lstrip("+-") for raw in (sort or default_order).split(",")}
+            and tie in allowed
+        ):
+            order.append(f"{allowed[tie]} ASC")
+        rows = await self.storage.index.execute_read(
+            f"SELECT COUNT(*) AS total FROM {table}{where}", parameters
+        )
         total = int(rows[0]["total"]) if rows else 0
         page_rows = await self.storage.index.execute_read(
-            f"{query[0].split(' ORDER BY ', 1)[0]} ORDER BY {query[0].split(' ORDER BY ', 1)[1]} LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"SELECT * FROM {table}{where} ORDER BY {', '.join(order)} LIMIT ? OFFSET ?",
+            (*parameters, limit, offset),
         )
         return tuple(_row_mapping(resource, row) for row in page_rows), total
 
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
-        records = await self.list(resource)
-        key = self._queries.get(resource, ("", ""))[1]
-        return next((row for row in records if str(row.get(key)) == resource_id), None)
+        query = self._queries.get(resource)
+        if query is None:
+            return None
+        rows = await self.storage.index.execute_read(
+            f"{query[0].split(' ORDER BY ', 1)[0]} WHERE {query[1]} = ? LIMIT 1",
+            (resource_id,),
+        )
+        return _row_mapping(resource, rows[0]) if rows else None
 
     async def delete(self, resource: str, resource_id: str) -> bool:
         return False
@@ -345,19 +431,27 @@ class _CaptureResourceStore(_SQLiteResourceStore):
         return tuple(_capture_mapping(record) for record in records)
 
     async def list_page(
-        self, resource: str = "captures", *, offset: int, limit: int
+        self,
+        resource: str = "captures",
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
     ) -> tuple[tuple[Mapping[str, Any], ...], int]:
         if resource != "captures":
-            return await super().list_page(resource, offset=offset, limit=limit)
-        records, total = await self.repository.list_captures_page(offset=offset, limit=limit)
+            return await super().list_page(
+                resource, offset=offset, limit=limit, sort=sort, filter=filter
+            )
+        records, total = await self.repository.list_captures_page(
+            offset=offset, limit=limit, sort=sort, filter=filter
+        )
         return tuple(_capture_mapping(record) for record in records), total
 
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
         if resource == "captures":
-            for record in await self.list(resource):
-                if record.get("capture_id") == resource_id:
-                    return record
-            return None
+            record = await self.repository.get_capture(resource_id)
+            return _capture_mapping(record) if record is not None else None
         return await super().get(resource, resource_id)
 
     async def delete(self, resource: str, resource_id: str) -> bool:
@@ -531,6 +625,27 @@ class _LiveEvidenceStore:
             return tuple(by_id.values())
         return ()
 
+    async def list_page(
+        self,
+        resource: str,
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        values = list(await self.list(resource))
+        if sort:
+            for raw in reversed(sort.split(",")):
+                descending = raw.startswith("-")
+                field = raw.lstrip("+-")
+                values.sort(
+                    key=lambda item, name=field: (item.get(name) is None, str(item.get(name, ""))),
+                    reverse=descending,
+                )
+        total = len(values)
+        return tuple(values[offset : offset + limit]), total
+
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
         records = await self.list(resource)
         key = "event_id" if resource == "events" else "association_id"
@@ -663,7 +778,7 @@ def _default_allowed_hosts(config: StartupConfig) -> tuple[str, ...]:
     return tuple(sorted(hosts))
 
 
-def build_production_app(config: StartupConfig) -> FastAPI:
+def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
     """Create the fully composed app using the canonical data root and production services."""
     paths = DataPaths.from_config(config)
     paths.initialise()
@@ -802,7 +917,8 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     health.register("plugin-host", lambda: _plugin_health(plugin_service))
     health.register("operation-jobs", job_lifecycle.health)
 
-    async def security_audit_sink(code: str, payload: Mapping[str, object]) -> None:
+    # pyright: ignore[reportArgumentType]
+    async def security_audit_sink(code: str, payload: Mapping[str, object]) -> None:  # pyright: ignore[reportArgumentType]
         await audit.append(
             AuditCategory.SECURITY_FAILURE,
             entity_type="http-request",
@@ -867,7 +983,19 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     application.state.decode_service = decode_service
     application.state.settings_store = settings_store
     application.state.executor_workers = config.executor_workers
-    return application
+    return ProductionRuntime(
+        app=application,
+        lifecycle=lifecycle,
+        capture_engine=capture_engine,
+        dicom_listener=dicom_listener,
+        bus=bus,
+        paths=paths,
+    )
+
+
+def build_production_app(config: StartupConfig) -> FastAPI:
+    """Create the fully composed app using the canonical data root and production services."""
+    return build_production_runtime(config).app
 
 
 def _database_health(name: str, database: Any, required_tables: tuple[str, ...]) -> ServiceHealth:
@@ -909,4 +1037,10 @@ def _thresholds(config: StartupConfig) -> AlertThresholds:
     )
 
 
-__all__ = ["HealthRegistryAdapter", "PluginServiceAdapter", "build_production_app"]
+__all__ = [
+    "HealthRegistryAdapter",
+    "PluginServiceAdapter",
+    "ProductionRuntime",
+    "build_production_app",
+    "build_production_runtime",
+]

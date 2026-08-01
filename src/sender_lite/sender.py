@@ -127,8 +127,6 @@ class Sender:
             duration = time.monotonic() - started
             status_code = _read_status(response)
             success = status_code == DICOM_SUCCESS_STATUS
-            if assoc.is_established:
-                assoc.release()
             return EchoResult(
                 success=success,
                 status=status_code,
@@ -144,9 +142,16 @@ class Sender:
                 error=str(exc),
             )
         finally:
+            raw_socket = _association_raw_socket(assoc)
             if assoc is not None and assoc.is_established:
                 with contextlib.suppress(Exception):
                     assoc.release()
+            _force_close_association_socket(assoc, raw_socket)
+            with contextlib.suppress(Exception):
+                assoc.join()
+            _force_close_association_socket(assoc)
+            with contextlib.suppress(Exception):
+                ae.shutdown()
 
     # ------------------------------------------------------------- send_study
     def send_study(
@@ -490,14 +495,35 @@ class Sender:
             )
             return _study_result(study.study_uid, failed, started)
         finally:
+            raw_socket = _association_raw_socket(assoc)
             if assoc is not None and assoc.is_established:
                 with contextlib.suppress(Exception):
                     assoc.release()
+            _force_close_association_socket(assoc, raw_socket)
+            with contextlib.suppress(Exception):
+                assoc.join()
+            _force_close_association_socket(assoc)
+            with contextlib.suppress(Exception):
+                ae.shutdown()
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _association_raw_socket(association: Any) -> Any:
+    transport = getattr(getattr(association, "dul", None), "socket", None)
+    return getattr(transport, "socket", transport)
+
+
+def _force_close_association_socket(association: Any, raw_socket: Any = None) -> None:
+    """Close a raced pynetdicom transport socket after association thread teardown."""
+    if raw_socket is None:
+        raw_socket = _association_raw_socket(association)
+    if raw_socket is not None:
+        with contextlib.suppress(Exception):
+            raw_socket.close()
 
 
 def _read_status(response: Any) -> int | None:

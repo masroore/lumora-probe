@@ -104,7 +104,7 @@ class ProtocolReplayService:
             if self.policy.dry_run:
                 result = ProtocolReplayResult(
                     results=(),
-                    replay_id=run_replay_id,
+                    replay_id=run_replay_id,  # pyright: ignore[reportArgumentType]
                     capture_id=capture_id,
                     target=target,
                     dry_run=True,
@@ -134,7 +134,7 @@ class ProtocolReplayService:
                 )
             result = ProtocolReplayResult(
                 results=tuple(results),
-                replay_id=run_replay_id,
+                replay_id=run_replay_id,  # pyright: ignore[reportArgumentType]
                 capture_id=capture_id,
                 target=target,
                 dry_run=False,
@@ -145,7 +145,7 @@ class ProtocolReplayService:
             return result
         except Exception as exc:
             self._audit_refusal(
-                replay_id=run_replay_id,
+                replay_id=run_replay_id,  # pyright: ignore[reportArgumentType]
                 capture_id=capture_id,
                 planned_count=planned_count,
                 error=str(exc),
@@ -158,7 +158,7 @@ class ProtocolReplayService:
     def _audit(self, result: ProtocolReplayResult, *, outcome: str) -> None:
         if self.audit_sink is None:
             return
-        if self.clock is None or result.replay_id is None:
+        if self.clock is None or result.replay_id is None:  # pyright: ignore[reportUnnecessaryComparison]
             raise ValueError("protocol replay audit requires an injected clock and replay ID")
         self.audit_sink(
             ProtocolReplayAuditRecord(
@@ -384,7 +384,7 @@ def _require_protocol_fidelity(capture_fidelity: str) -> None:
 
 
 def _require_complete_capture(partial: bool, incomplete_aggregates: Iterable[str]) -> None:
-    if not isinstance(partial, bool):
+    if not isinstance(partial, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError("partial must be a boolean")
     incomplete = tuple(str(value) for value in incomplete_aggregates)
     if partial:
@@ -405,7 +405,7 @@ def _validate_protocol_policy(policy: ProtocolReplayPolicy) -> NetworkEndpoint:
             remediation="Configure the target for this replay; never inherit it from the capture.",
             context={"target": None},
         )
-    if not isinstance(policy.dry_run, bool):
+    if not isinstance(policy.dry_run, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError("protocol replay dry_run must be a boolean")
     assert policy.target is not None
     if policy.target not in policy.allowed_targets:

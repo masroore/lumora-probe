@@ -6,7 +6,7 @@ import asyncio
 import sqlite3
 import threading
 from collections.abc import Generator, Iterable, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -239,7 +239,7 @@ class SQLiteDatabase:
                 recreate_index_schema(self.path, policy=self.policy)
             else:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-                with self.policy.connect(self.path) as connection:
+                with closing(self.policy.connect(self.path)) as connection:
                     connection.executescript(_INDEX_SCHEMA)
                     columns = {row[1] for row in connection.execute("PRAGMA table_info(instances)")}
                     if "object_size" not in columns:
@@ -291,7 +291,7 @@ def recreate_index_schema(path: Path, *, policy: SQLiteConnectionPolicy | None =
     connection_policy = policy or SQLiteConnectionPolicy()
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with connection_policy.connect(path) as connection:
+    with closing(connection_policy.connect(path)) as connection:
         connection.executescript(
             "DROP TABLE IF EXISTS event_window; DROP TABLE IF EXISTS instances;"
         )
@@ -329,7 +329,7 @@ def migrate_app_schema(path: Path, *, policy: SQLiteConnectionPolicy | None = No
     connection_policy = policy or SQLiteConnectionPolicy()
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with connection_policy.connect(path) as connection:
+    with closing(connection_policy.connect(path)) as connection:
         connection.executescript(_APP_SCHEMA)
         connection.execute(
             "INSERT INTO schema_metadata(key, value) VALUES ('schema_version', ?) "

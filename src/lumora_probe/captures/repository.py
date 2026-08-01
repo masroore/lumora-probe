@@ -115,7 +115,7 @@ def row_to_capture(
         capture_id=str(values[0]),
         path=str(values[1]),
         source_root=str(values[2]),
-        format_version=int(values[3]),
+        format_version=int(values[3]),  # pyright: ignore[reportArgumentType]
         created_at=_parse_datetime(values[4]),
         completed_at=_parse_optional_datetime(values[5]),
         state=str(values[6]),
@@ -189,7 +189,12 @@ class CaptureRepository:
         return await asyncio.to_thread(read)
 
     async def list_captures_page(
-        self, *, offset: int, limit: int
+        self,
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
     ) -> tuple[tuple[CaptureIndexRecord, ...], int]:
         """Read one stable capture page and its count without scanning object files."""
         if offset < 0 or limit < 1:
@@ -197,13 +202,56 @@ class CaptureRepository:
 
         def read() -> tuple[tuple[CaptureIndexRecord, ...], int]:
             with self.databases.index.connection(read_only=True) as connection:
-                total = int(connection.execute("SELECT COUNT(*) FROM captures").fetchone()[0])
+                allowed_sort = {
+                    "capture_id": "capture_id",
+                    "created_at": "created_at",
+                    "completed_at": "completed_at",
+                    "state": "state",
+                    "fidelity": "fidelity",
+                }
+                allowed_filter = {
+                    "capture_id": "capture_id",
+                    "state": "state",
+                    "fidelity": "fidelity",
+                    "source_root": "source_root",
+                }
+                clauses: list[str] = []
+                parameters: list[object] = []
+                if filter:
+                    field, separator, expected = filter.partition(":")
+                    if separator:
+                        column = allowed_filter.get(field)
+                        if column is None:
+                            raise ValueError(f"unsupported capture filter: {field}")
+                        clauses.append(f"LOWER({column}) = LOWER(?)")
+                        parameters.append(expected)
+                    else:
+                        clauses.append("LOWER(capture_id) LIKE LOWER(?)")
+                        parameters.append(f"%{filter}%")
+                where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+                total = int(
+                    connection.execute(
+                        f"SELECT COUNT(*) FROM captures{where}", parameters
+                    ).fetchone()[0]
+                )
+                order: list[str] = []
+                for raw in (sort or "created_at,capture_id").split(","):
+                    descending = raw.startswith("-")
+                    name = raw.lstrip("+-")
+                    column = allowed_sort.get(name)
+                    if column is None:
+                        raise ValueError(f"unsupported capture sort: {name}")
+                    order.append(f"{column} {'DESC' if descending else 'ASC'}")
+                if "capture_id" not in {
+                    raw.lstrip("+-") for raw in (sort or "created_at,capture_id").split(",")
+                }:
+                    order.append("capture_id ASC")
                 rows = connection.execute(
                     "SELECT capture_id, path, source_root, format_version, created_at, completed_at, "
                     "state, fidelity, partial, promoted_from_buffer, interruption_reason, "
-                    "manifest_sha256, indexed_at FROM captures "
-                    "ORDER BY created_at, capture_id LIMIT ? OFFSET ?",
-                    (limit, offset),
+                    "manifest_sha256, indexed_at FROM captures"
+                    f"{where} ORDER BY {', '.join(order)} LIMIT ? OFFSET ?",
+                    (*parameters, limit, offset),
                 ).fetchall()
                 if not rows:
                     return (), total
@@ -236,6 +284,41 @@ class CaptureRepository:
                     ),
                     total,
                 )
+
+        return await asyncio.to_thread(read)
+
+    async def get_capture(self, capture_id: str) -> CaptureIndexRecord | None:
+        """Read one indexed capture and its owned objects without materializing the index."""
+
+        def read() -> CaptureIndexRecord | None:
+            with self.databases.index.connection(read_only=True) as connection:
+                row = connection.execute(
+                    "SELECT capture_id, path, source_root, format_version, created_at, completed_at, "
+                    "state, fidelity, partial, promoted_from_buffer, interruption_reason, "
+                    "manifest_sha256, indexed_at FROM captures WHERE capture_id = ? LIMIT 1",
+                    (capture_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                objects = connection.execute(
+                    "SELECT object_digest, study_uid, series_uid, sop_instance_uid, object_size, "
+                    "transfer_syntax_uid, rows, columns FROM instances WHERE capture_id = ? ORDER BY instance_id",
+                    (capture_id,),
+                ).fetchall()
+                mapped = tuple(
+                    CaptureObject(
+                        digest=item["object_digest"],
+                        study_uid=item["study_uid"],
+                        series_uid=item["series_uid"],
+                        sop_instance_uid=item["sop_instance_uid"],
+                        size=int(item["object_size"]),
+                        transfer_syntax_uid=item["transfer_syntax_uid"],
+                        rows=item["rows"],
+                        columns=item["columns"],
+                    )
+                    for item in objects
+                )
+                return row_to_capture(row, mapped)
 
         return await asyncio.to_thread(read)
 
@@ -282,7 +365,7 @@ class CaptureRepository:
         for package, source_root in packages:
             try:
                 package = await self.recover_package(package)
-                records.append(
+                records.append(  # pyright: ignore[reportUnknownMemberType]
                     await self.index(package, source_root=source_root, rebuild_projection=False)
                 )
             except (CaptureFormatError, OSError, ValueError) as exc:
@@ -291,7 +374,7 @@ class CaptureRepository:
                     f"{package.path}: {type(exc).__name__}: {exc}",
                 )
         await asyncio.to_thread(self._rebuild_projection)
-        return tuple(records)
+        return tuple(records)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
 
     async def recover_package(self, package: CapturePackage) -> CapturePackage:
         """Discard a torn trailing event and mark an active package interrupted."""
@@ -373,9 +456,9 @@ class CaptureRepository:
                         sequence,
                         str(event.get("event_id", f"{record.capture_id}:{sequence}")),
                         str(event.get("event_name", "Unknown")),
-                        int(event.get("event_version", 1)),
+                        int(event.get("event_version", 1)),  # pyright: ignore[reportArgumentType]
                         str(event.get("observed_at", record.created_at.isoformat())),
-                        int(event.get("monotonic_ns", sequence)),
+                        int(event.get("monotonic_ns", sequence)),  # pyright: ignore[reportArgumentType]
                         str(event.get("origin", "capture")),
                         event["_raw_json"],
                     ),

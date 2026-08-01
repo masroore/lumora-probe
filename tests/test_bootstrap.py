@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
-from lumora_probe.bootstrap import build_production_app
+import pytest
+
+from lumora_probe.bootstrap import build_production_app, build_production_runtime
 from lumora_probe.core.config import StartupConfig
+from lumora_probe.core.errors import LifecycleError
 from lumora_probe.plugins.contracts import PluginDiagnostic
 
 
@@ -53,3 +57,49 @@ def test_bootstrap_exposes_lifecycle_manager(tmp_path: Path) -> None:
 
     assert hasattr(application.state, "lifecycle_manager")
     assert isinstance(application.state.lifecycle_manager, LifecycleManager)
+
+
+@pytest.mark.component
+@pytest.mark.slow
+@pytest.mark.asyncio
+async def test_production_runtime_forced_deadline_interrupts_active_capture(
+    tmp_path: Path, unused_tcp_port: int, unused_tcp_port_factory: object
+) -> None:
+    runtime = build_production_runtime(
+        StartupConfig(
+            data_dir=tmp_path,
+            port=unused_tcp_port,
+            dicom_port=unused_tcp_port_factory(),
+            shutdown_grace_seconds=0.05,
+        )
+    )
+    await runtime.lifecycle.start()
+    capture_id = await runtime.capture_engine.start_session(source="forced-deadline-test")
+    original_drain = runtime.capture_engine.drain
+    drain_entered = asyncio.Event()
+    drain_calls = 0
+
+    async def block_first_drain() -> None:
+        nonlocal drain_calls
+        drain_calls += 1
+        if drain_calls == 1:
+            drain_entered.set()
+            await asyncio.Event().wait()
+        await original_drain()
+
+    runtime.capture_engine.drain = block_first_drain  # type: ignore[method-assign]
+    try:
+        shutdown = asyncio.create_task(runtime.lifecycle.shutdown(grace_seconds=0.05))
+        await asyncio.wait_for(drain_entered.wait(), 1)
+        with pytest.raises(LifecycleError, match="exceeded"):
+            await asyncio.wait_for(shutdown, 2)
+
+        manifest = await runtime.capture_engine.interrupt_session(
+            capture_id, reason="test deadline"
+        )
+        assert manifest.state == "interrupted"
+        assert manifest.interruption_reason == "shutdown deadline"
+        assert not runtime.capture_engine.sessions
+    finally:
+        if runtime.lifecycle.state.value != "stopped":
+            await runtime.lifecycle.shutdown(grace_seconds=2)

@@ -843,7 +843,7 @@ def _make_dicom_file(
     file_meta.MediaStorageSOPInstanceUID = sop_instance_uid
     file_meta.MediaStorageSOPClassUID = sop_class_uid
     file_meta.TransferSyntaxUID = transfer_syntax
-    file_meta.MediaStorageApplicationTitle = "TEST"
+    file_meta.SourceApplicationEntityTitle = "TEST"
 
     ds = FileDataset(str(path), {}, file_meta=file_meta, preamble=b"\x00" * 128)
     ds.StudyInstanceUID = study_uid
@@ -854,7 +854,7 @@ def _make_dicom_file(
     ds.PatientID = "12345"
     ds.Modality = "CT"
     ds.InstanceNumber = 1
-    ds.save_as(path, write_like_original=False)
+    ds.save_as(path, enforce_file_format=True)
     return path
 
 

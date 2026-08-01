@@ -73,3 +73,24 @@ Cross-links: [capture-engine.md](../capture-engine.md), [vendor-handover.md](ven
 [privacy-and-compliance-posture.md](privacy-and-compliance-posture.md).
 
 Upgrade and recovery details: [upgrade-and-migration.md](upgrade-and-migration.md).
+
+## Bounded drain and interruption
+
+On `SIGTERM`, the listener closes admission first. Existing associations, bounded event-bus
+thread ingress, capture writers, and durable flushes drain in dependency order. The configured
+`shutdown_grace_seconds` is a deadline, not a sleep. If it expires, active captures are sealed as
+`interrupted` with `interruption_reason=shutdown deadline`; restart does not report them as
+completed.
+
+Inspect `/api/v1/health` and service detail after a restart. For DICOM pressure, inspect listener
+counters for `ingress_saturation`, `ingress_timeout`, `ingress_completion_error`, and
+`c_store_persistence_failure`. C-STORE outcomes are explicit: malformed input `0xC210`, resource
+exhaustion or saturation `0xA700`, internal processing failure `0xC211`, and success `0x0000`.
+
+## Ring-buffer storage and sizing
+
+The persisted ring buffer uses append-only `ringbuffer/segments/segment-*.jsonl` files plus atomic
+metadata. Eviction removes expired segments or compacts one affected segment; it does not rewrite
+the retained ring as one whole file. The configured byte cap remains hard. Keep free local disk
+headroom for one active segment and its metadata rename; SQLite databases must remain on local
+storage. Older `records.jsonl` data is migrated only after segment metadata is durably written.

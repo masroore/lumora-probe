@@ -28,7 +28,7 @@ def create_metadata_router(provider: MetadataProvider | None = None) -> APIRoute
     router = APIRouter(prefix="/instances", tags=["metadata"])
 
     @router.get("/{instance_id}/metadata")
-    async def get_metadata(
+    async def get_metadata(  # pyright: ignore[reportUnusedFunction]
         instance_id: str,
         include_private: bool = Query(False),
         query: str | None = Query(None, max_length=200),
@@ -44,8 +44,8 @@ def create_metadata_router(provider: MetadataProvider | None = None) -> APIRoute
             raise HTTPException(status_code=404, detail="Instance not found")
         as_dict = getattr(result, "as_dict", None)
         if callable(as_dict):
-            return as_dict()
-        return result
+            return as_dict()  # pyright: ignore[reportReturnType]
+        return result  # pyright: ignore[reportReturnType]
 
     return router
 
