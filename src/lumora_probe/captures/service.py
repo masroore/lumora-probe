@@ -9,12 +9,12 @@ import json
 import os
 import threading
 from collections import deque
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import pydicom
 
@@ -29,6 +29,10 @@ from .format import (
     ClockAnchor,
     FsyncPolicy,
 )
+
+
+def _empty_metadata() -> dict[str, Any]:
+    return {}
 
 
 class CaptureClock(Protocol):
@@ -88,7 +92,7 @@ class RingBufferRecord:
     recorded_at: datetime
     monotonic_ns: int
     aggregate_id: str | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=_empty_metadata)
 
     @property
     def size(self) -> int:
@@ -144,13 +148,29 @@ class RingBufferService:
         self.clock = clock
         self.root = root.expanduser().resolve() if root is not None else None
         self._records: deque[RingBufferRecord] = deque()
+        self._record_segments: deque[int] = deque()
         self._bytes_used = 0
         self._started = False
+        self._segment_target_bytes = 8 * 1024 * 1024
+        self._active_segment = 0
+        self._active_segment_bytes = 0
+        self._persisted_bytes = 0
+        self._compaction_bytes = 0
         self._lock = threading.RLock()
 
     @property
     def started(self) -> bool:
         return self._started
+
+    @property
+    def persistence_stats(self) -> Mapping[str, int]:
+        """Expose bounded segment write accounting for structural release gates."""
+        with self._lock:
+            return {
+                "append_bytes": self._persisted_bytes,
+                "compaction_bytes": self._compaction_bytes,
+                "segment_count": len(set(self._record_segments)),
+            }
 
     def update_config(
         self,
@@ -174,6 +194,7 @@ class RingBufferService:
             removed = self._expire(self.clock.now())
             while self._records and self._bytes_used > self.config.max_bytes:
                 removed_record = self._records.popleft()
+                self._record_segments.popleft()
                 self._bytes_used -= removed_record.size
                 removed = True
             if removed and self.root is not None:
@@ -349,15 +370,17 @@ class RingBufferService:
     def _append(self, record: RingBufferRecord) -> None:
         with self._lock:
             self._records.append(record)
+            self._record_segments.append(self._active_segment)
             self._bytes_used += record.size
             removed = self._expire(record.recorded_at)
             while self._records and self._bytes_used > self.config.max_bytes:
                 expired = self._records.popleft()
+                self._record_segments.popleft()
                 self._bytes_used -= expired.size
                 removed = True
             if self.root is not None:
                 if removed:
-                    self._rewrite()
+                    self._compact_persisted()
                 else:
                     self._append_persisted(record)
 
@@ -366,6 +389,7 @@ class RingBufferService:
         cutoff = now - timedelta(seconds=self.config.retention_seconds)
         while self._records and self._records[0].recorded_at < cutoff:
             expired = self._records.popleft()
+            self._record_segments.popleft()
             self._bytes_used -= expired.size
             removed = True
         return removed
@@ -374,9 +398,52 @@ class RingBufferService:
     def _records_path(self) -> Path | None:
         return self.root / "records.jsonl" if self.root is not None else None
 
+    @property
+    def _segments_path(self) -> Path | None:
+        return self.root / "segments" if self.root is not None else None
+
+    @property
+    def _metadata_path(self) -> Path | None:
+        return self.root / "metadata.json" if self.root is not None else None
+
+    def _segment_path(self, segment: int) -> Path:
+        segments = self._segments_path
+        assert segments is not None
+        return segments / f"segment-{segment:08d}.jsonl"
+
     def _load(self) -> None:
-        path = self._records_path
-        if path is None or not path.is_file() or self._records:
+        if self.root is None or self._records:
+            return
+        metadata = self._metadata_path
+        segments = self._segments_path
+        if metadata is not None and segments is not None and metadata.is_file():
+            try:
+                value = json.loads(metadata.read_text(encoding="utf-8"))
+                segment_ids = tuple(int(item) for item in value["segments"])
+                self._active_segment = int(
+                    value.get("active_segment", segment_ids[-1] if segment_ids else 0)
+                )
+                for segment in segment_ids:
+                    self._load_segment(self._segment_path(segment), segment)
+                self._active_segment_bytes = (
+                    self._segment_path(self._active_segment).stat().st_size
+                    if self._segment_path(self._active_segment).is_file()
+                    else 0
+                )
+                return
+            except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
+                self._records.clear()
+                self._record_segments.clear()
+                self._bytes_used = 0
+        legacy = self._records_path
+        if legacy is None or not legacy.is_file():
+            return
+        self._load_segment(legacy, 0)
+        self._active_segment = 0
+        self._compact_persisted()
+
+    def _load_segment(self, path: Path, segment: int) -> None:
+        if not path.is_file():
             return
         for line in path.read_bytes().splitlines():
             try:
@@ -393,32 +460,97 @@ class RingBufferService:
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 continue
             self._records.append(record)
+            self._record_segments.append(segment)
             self._bytes_used += record.size
 
     def _append_persisted(self, record: RingBufferRecord) -> None:
-        path = self._records_path
-        if path is None:
+        segments = self._segments_path
+        if segments is None:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _ring_json(record) + b"\n"
+        segments.mkdir(parents=True, exist_ok=True)
+        if (
+            self._active_segment_bytes
+            and self._active_segment_bytes + len(payload) > self._segment_target_bytes
+        ):
+            self._active_segment += 1
+            self._active_segment_bytes = 0
+            self._record_segments[-1] = self._active_segment
+        path = self._segment_path(self._active_segment)
         with path.open("ab") as handle:
-            handle.write(_ring_json(record))
-            handle.write(b"\n")
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+        self._active_segment_bytes += len(payload)
+        self._persisted_bytes += len(payload)
+        self._write_metadata()
 
-    def _rewrite(self) -> None:
-        path = self._records_path
-        if path is None:
+    def _compact_persisted(self) -> None:
+        segments = self._segments_path
+        if segments is None:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
+        segments.mkdir(parents=True, exist_ok=True)
+        grouped: dict[int, list[RingBufferRecord]] = {}
+        for record, segment in zip(self._records, self._record_segments, strict=True):
+            grouped.setdefault(segment, []).append(record)
+        existing: set[int] = {
+            int(path.stem.split("-")[-1])
+            for path in segments.glob("segment-*.jsonl")
+            if path.stem.split("-")[-1].isdigit()
+        }
+        for segment in sorted(existing - set(grouped)):
+            self._segment_path(segment).unlink(missing_ok=True)
+        for segment, records in grouped.items():
+            path = self._segment_path(segment)
+            current = path.read_bytes() if path.is_file() else b""
+            payload = b"".join(_ring_json(record) + b"\n" for record in records)
+            if current != payload:
+                temporary = path.with_name(f".{path.name}.tmp")
+                with temporary.open("wb") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, path)
+                self._compaction_bytes += len(payload)
+        if grouped:
+            self._active_segment = max(grouped)
+            self._active_segment_bytes = self._segment_path(self._active_segment).stat().st_size
+        else:
+            self._active_segment = 0
+            self._active_segment_bytes = 0
+        self._write_metadata()
+
+    def _write_metadata(self) -> None:
+        path = self._metadata_path
+        segments = self._segments_path
+        if path is None or segments is None:
+            return
+        segments.mkdir(parents=True, exist_ok=True)
+        names = tuple(
+            sorted(
+                int(item.stem.split("-")[-1])
+                for item in segments.glob("segment-*.jsonl")
+                if item.stem.split("-")[-1].isdigit()
+            )
+        )
         temporary = path.with_name(f".{path.name}.tmp")
         with temporary.open("wb") as handle:
-            for record in self._records:
-                handle.write(_ring_json(record))
-                handle.write(b"\n")
+            handle.write(
+                json.dumps(
+                    {
+                        "format_version": 1,
+                        "active_segment": self._active_segment,
+                        "segments": names,
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            )
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+
+    def _rewrite(self) -> None:
+        self._compact_persisted()
 
 
 @dataclass(slots=True)
@@ -458,6 +590,7 @@ class CaptureEngine:
         self._sessions: dict[str, _CaptureSession] = {}
         self._session_lock = threading.RLock()
         self._persistence_failures = 0
+        self._sealed_manifests: dict[str, CaptureManifest] = {}
 
     @property
     def sessions(self) -> tuple[str, ...]:
@@ -475,8 +608,9 @@ class CaptureEngine:
         bus = event_bus or self.event_ingress
         if self.event_ingress is None and bus is not None and hasattr(bus, "publish"):
             self.event_ingress = bus
-        if bus is not None and hasattr(bus, "subscribe"):
-            self._subscription = await bus.subscribe(channel="capture")
+        subscribe = cast(Callable[..., Any] | None, getattr(bus, "subscribe", None))
+        if subscribe is not None:
+            self._subscription = await subscribe(channel="capture")
             self._worker = asyncio.create_task(self._consume(), name="lumora-capture-writer")
 
     async def stop_accepting(self) -> None:
@@ -576,6 +710,10 @@ class CaptureEngine:
         return identifier
 
     async def stop_session(self, capture_id: str) -> CaptureManifest:
+        with self._session_lock:
+            sealed = self._sealed_manifests.get(capture_id)
+            if sealed is not None:
+                return sealed
         session = self._session(capture_id)
         with self._session_lock:
             session.capture.stop()
@@ -597,10 +735,15 @@ class CaptureEngine:
             sealed = session.writer.seal(completed_at=self.clock.now())
         with self._session_lock:
             self._sessions.pop(capture_id, None)
+            self._sealed_manifests[capture_id] = sealed
         await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
     async def interrupt_session(self, capture_id: str, *, reason: str) -> CaptureManifest:
+        with self._session_lock:
+            sealed = self._sealed_manifests.get(capture_id)
+            if sealed is not None:
+                return sealed
         session = self._session(capture_id)
         with self._session_lock:
             session.capture.interrupt(reason)
@@ -623,6 +766,7 @@ class CaptureEngine:
             sealed = session.writer.seal(completed_at=self.clock.now())
         with self._session_lock:
             self._sessions.pop(capture_id, None)
+            self._sealed_manifests[capture_id] = sealed
         await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
@@ -774,7 +918,8 @@ class CaptureEngine:
             return 0xA700
         try:
             output = BytesIO()
-            pydicom.dcmwrite(output, dataset, enforce_file_format=False)
+            pydicom_module = cast(Any, pydicom)
+            pydicom_module.dcmwrite(output, dataset, enforce_file_format=False)
             study_uid = str(dataset.StudyInstanceUID)
             series_uid = str(dataset.SeriesInstanceUID)
             sop_instance_uid = str(dataset.SOPInstanceUID)

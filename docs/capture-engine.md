@@ -3,8 +3,9 @@
 Lumora Probe keeps two evidence lifecycles:
 
 - **Ring buffer:** always-on, bounded, enabled by default. Default retention is 30 minutes
-  and 2 GiB. Records are persisted under `LUMORA_DATA_DIR/ringbuffer/records.jsonl` when
-  the engine is composed with `DataPaths.ringbuffer`.
+  and 2 GiB. Records are persisted under `LUMORA_DATA_DIR/ringbuffer/segments/` with atomic
+  `metadata.json` when the engine is composed with `DataPaths.ringbuffer`. Legacy
+  `records.jsonl` data migrates on first successful start.
 - **Capture session:** explicit, unbounded until completed or interrupted. A session is
   sealed as a self-contained capture directory under the configured captures root.
 
