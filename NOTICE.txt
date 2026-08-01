@@ -1,0 +1,9 @@
+Lumora Probe
+
+Copyright (c) 2026 Dr. Masroor Ehsan.
+All rights reserved except as granted under the GNU Affero General Public License v3.0 or later.
+
+This project is licensed under the GNU Affero General Public License v3.0 or later.
+See the LICENSE file for details.
+
+Commercial licensing is available separately. Contact the project maintainers for licensing inquiries.
