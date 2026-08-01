@@ -231,9 +231,21 @@ class SQLiteDatabase:
             else:
                 connection.commit()
 
-    def initialise(self) -> None:
+    def initialise(self, *, recreate: bool = False) -> None:
+        """Create or migrate the database without discarding derived data by default."""
         if self.kind is DatabaseKind.INDEX:
-            recreate_index_schema(self.path, policy=self.policy)
+            if recreate:
+                recreate_index_schema(self.path, policy=self.policy)
+            else:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.policy.connect(self.path) as connection:
+                    connection.executescript(_INDEX_SCHEMA)
+                    connection.execute(
+                        "INSERT INTO schema_metadata(key, value) VALUES ('schema_version', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (str(INDEX_SCHEMA_VERSION),),
+                    )
+                    connection.commit()
         else:
             migrate_app_schema(self.path, policy=self.policy)
 
@@ -351,8 +363,9 @@ class StorageDatabases:
             ),
         )
 
-    def initialise(self) -> None:
-        self.index.initialise()
+    def initialise(self, *, recreate_index: bool = False) -> None:
+        """Initialise both stores; index recreation is explicit because index rows are recoverable."""
+        self.index.initialise(recreate=recreate_index)
         self.app.initialise()
 
 

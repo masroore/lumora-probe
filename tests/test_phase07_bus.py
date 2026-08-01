@@ -61,7 +61,7 @@ async def test_async_subscriber_is_awaited_and_sequences_are_gap_free() -> None:
 
 @pytest.mark.asyncio
 async def test_threaded_ingress_preserves_order_for_one_capture() -> None:
-    bus = EventBus(ingress_capacity=8)
+    bus = EventBus(ingress_capacity=8, thread_ingress_capacity=50)
     subscription = await bus.subscribe(channel=SubscriberChannel.CAPTURE)
 
     async def publish_from_worker(index: int) -> None:
@@ -73,6 +73,19 @@ async def test_threaded_ingress_preserves_order_for_one_capture() -> None:
     sequences = [subscription.get_nowait().sequence for _ in range(50)]
     await bus.stop()
     assert sequences == list(range(1, 51))
+
+
+@pytest.mark.asyncio
+async def test_threaded_ingress_saturation_is_rejected_and_observable() -> None:
+    bus = EventBus(thread_ingress_capacity=1)
+    await bus.subscribe(channel=SubscriberChannel.CAPTURE)
+    first = bus.publish_from_thread(make_event(monotonic_ns=1))
+    with pytest.raises(RuntimeError, match="threaded ingress capacity is saturated"):
+        bus.publish_from_thread(make_event(monotonic_ns=2))
+    assert bus.pending_thread_submissions >= 1
+    await asyncio.to_thread(first.result)
+    await bus.stop()
+    assert bus.pending_thread_submissions == 0
 
 
 @pytest.mark.asyncio

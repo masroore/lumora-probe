@@ -43,6 +43,9 @@ class StartupConfig(BaseSettings):
     executor_workers: int = Field(default=4, ge=1, le=256)
     shutdown_grace_seconds: float = Field(default=10.0, gt=0, le=300)
     read_only: bool = False
+    allowed_hosts: tuple[str, ...] = ()
+    allowed_origins: tuple[str, ...] = ()
+    trusted_proxies: tuple[str, ...] = ()
     plugin_errors_warning: int = Field(default=1, ge=0)
     plugin_errors_critical: int = Field(default=3, ge=0)
     budget_breaches_warning: int = Field(default=1, ge=0)
@@ -109,6 +112,9 @@ _ENV_NAMES: dict[str, str] = {
     "executor_workers": "LUMORA_EXECUTOR_WORKERS",
     "shutdown_grace_seconds": "LUMORA_SHUTDOWN_GRACE_SECONDS",
     "read_only": "LUMORA_READ_ONLY",
+    "allowed_hosts": "LUMORA_ALLOWED_HOSTS",
+    "allowed_origins": "LUMORA_ALLOWED_ORIGINS",
+    "trusted_proxies": "LUMORA_TRUSTED_PROXIES",
     "plugin_errors_warning": "LUMORA_PLUGIN_ERRORS_WARNING",
     "plugin_errors_critical": "LUMORA_PLUGIN_ERRORS_CRITICAL",
     "budget_breaches_warning": "LUMORA_BUDGET_BREACHES_WARNING",
@@ -226,8 +232,13 @@ def _find_config_file(cwd: Path, environ: Mapping[str, str]) -> Path | None:
 
 
 def _coerce_env_value(field_name: str, value: str) -> Any:
-    if field_name in {"additional_capture_roots"}:
-        return tuple(item.strip() for item in value.split(os.pathsep) if item.strip())
+    if field_name in {
+        "additional_capture_roots",
+        "allowed_hosts",
+        "allowed_origins",
+        "trusted_proxies",
+    }:
+        return tuple(item.strip() for item in value.split(",") if item.strip())
     return value
 
 

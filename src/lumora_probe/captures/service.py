@@ -429,6 +429,7 @@ class CaptureEngine:
         self._worker: asyncio.Task[None] | None = None
         self._accepting = False
         self._sessions: dict[str, _CaptureSession] = {}
+        self._session_lock = threading.RLock()
 
     @property
     def sessions(self) -> tuple[str, ...]:
@@ -451,7 +452,7 @@ class CaptureEngine:
 
     async def drain(self) -> None:
         if self._subscription is not None:
-            await self._subscription._queue.join()
+            await self._subscription.join()
 
     async def flush(self) -> None:
         await self.drain()
@@ -496,11 +497,14 @@ class CaptureEngine:
         source_capture_id: str | None = None,
         incomplete_aggregates: Iterable[str] = (),
     ) -> str:
+        if not self._accepting:
+            raise RuntimeError("capture engine is not accepting new sessions")
         if CaptureFidelity(fidelity) is CaptureFidelity.WIRE:
             raise ValueError("wire fidelity is unavailable until raw wire capture is enabled")
         identifier = capture_id or self.id_generator.new_id()
-        if identifier in self._sessions:
-            raise ValueError(f"capture session already exists: {identifier}")
+        with self._session_lock:
+            if identifier in self._sessions:
+                raise ValueError(f"capture session already exists: {identifier}")
         capture = Capture(
             identifier,
             partial=partial,
@@ -527,7 +531,8 @@ class CaptureEngine:
             manifest,
             fsync_policy=self.fsync_policy,
         )
-        self._sessions[identifier] = _CaptureSession(capture=capture, writer=writer)
+        with self._session_lock:
+            self._sessions[identifier] = _CaptureSession(capture=capture, writer=writer)
         await self._publish_lifecycle(
             "CaptureStarted",
             identifier,
@@ -537,45 +542,52 @@ class CaptureEngine:
 
     async def stop_session(self, capture_id: str) -> CaptureManifest:
         session = self._session(capture_id)
-        session.capture.stop()
+        with self._session_lock:
+            session.capture.stop()
         await self._publish_lifecycle("CaptureStopped", capture_id, {"capture_id": capture_id})
         await self.drain()
-        session.capture.complete()
+        with self._session_lock:
+            session.capture.complete()
         await self._publish_lifecycle("CaptureCompleted", capture_id, {"capture_id": capture_id})
         await self.drain()
-        session.writer.update_manifest(
-            session.writer.manifest.model_copy(
-                update={
-                    "state": CaptureState.COMPLETED.value,
-                    "client_asserted_event_count": session.client_asserted_event_count,
-                }
+        with self._session_lock:
+            session.writer.update_manifest(
+                session.writer.manifest.model_copy(
+                    update={
+                        "state": CaptureState.COMPLETED.value,
+                        "client_asserted_event_count": session.client_asserted_event_count,
+                    }
+                )
             )
-        )
-        sealed = session.writer.seal(completed_at=self.clock.now())
-        self._sessions.pop(capture_id)
+            sealed = session.writer.seal(completed_at=self.clock.now())
+        with self._session_lock:
+            self._sessions.pop(capture_id, None)
         await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
     async def interrupt_session(self, capture_id: str, *, reason: str) -> CaptureManifest:
         session = self._session(capture_id)
-        session.capture.interrupt(reason)
+        with self._session_lock:
+            session.capture.interrupt(reason)
         await self._publish_lifecycle(
             "CaptureInterrupted",
             capture_id,
             {"capture_id": capture_id, "reason": reason},
         )
         await self.drain()
-        session.writer.update_manifest(
-            session.writer.manifest.model_copy(
-                update={
-                    "state": CaptureState.INTERRUPTED.value,
-                    "client_asserted_event_count": session.client_asserted_event_count,
-                    "interruption_reason": reason,
-                }
+        with self._session_lock:
+            session.writer.update_manifest(
+                session.writer.manifest.model_copy(
+                    update={
+                        "state": CaptureState.INTERRUPTED.value,
+                        "client_asserted_event_count": session.client_asserted_event_count,
+                        "interruption_reason": reason,
+                    }
+                )
             )
-        )
-        sealed = session.writer.seal(completed_at=self.clock.now())
-        self._sessions.pop(capture_id)
+            sealed = session.writer.seal(completed_at=self.clock.now())
+        with self._session_lock:
+            self._sessions.pop(capture_id, None)
         await self._index_if_configured(sealed, session.writer.capture_path)
         return sealed
 
@@ -687,9 +699,13 @@ class CaptureEngine:
         )
         if record is None:
             return None
-        for session in self._sessions.values():
-            if session.writer.manifest.fidelity is not CaptureFidelity.EVENTS:
-                session.writer.append_pdu_raw(record.raw)
+        with self._session_lock:
+            for session in self._sessions.values():
+                if (
+                    session.capture.state is CaptureState.RUNNING
+                    and session.writer.manifest.fidelity is not CaptureFidelity.EVENTS
+                ):
+                    session.writer.append_pdu_raw(record.raw)
         return record
 
     def record_object(self, data: bytes, **metadata: Any) -> RingBufferRecord | None:
@@ -697,13 +713,14 @@ class CaptureEngine:
         record = self.ring_buffer.record_object(data, **metadata)
         if record is None:
             return None
-        for session in self._sessions.values():
-            if session.writer.manifest.fidelity in {
-                CaptureFidelity.OBJECTS,
-                CaptureFidelity.PROTOCOL,
-                CaptureFidelity.WIRE,
-            }:
-                session.writer.put_object(record.raw, **dict(record.metadata))
+        with self._session_lock:
+            for session in self._sessions.values():
+                if (
+                    session.capture.state is CaptureState.RUNNING
+                    and session.writer.manifest.fidelity
+                    in {CaptureFidelity.OBJECTS, CaptureFidelity.PROTOCOL, CaptureFidelity.WIRE}
+                ):
+                    session.writer.put_object(record.raw, **dict(record.metadata))
         return record
 
     def __call__(self, record: Mapping[str, Any]) -> RingBufferRecord | None:
@@ -751,10 +768,12 @@ class CaptureEngine:
 
     def _record_event(self, event: EventEnvelope) -> None:
         self.ring_buffer.record_event(event)
-        for session in self._sessions.values():
-            session.writer.append_event_raw(event.to_json_bytes())
-            if event.origin is EventOrigin.CLIENT_ASSERTED:
-                session.client_asserted_event_count += 1
+        with self._session_lock:
+            sessions = tuple(self._sessions.values())
+            for session in sessions:
+                session.writer.append_event_raw(event.to_json_bytes())
+                if event.origin is EventOrigin.CLIENT_ASSERTED:
+                    session.client_asserted_event_count += 1
 
     async def _publish_lifecycle(
         self,
@@ -780,7 +799,8 @@ class CaptureEngine:
 
     def _session(self, capture_id: str) -> _CaptureSession:
         try:
-            return self._sessions[capture_id]
+            with self._session_lock:
+                return self._sessions[capture_id]
         except KeyError as exc:
             raise ValueError(f"capture session not found: {capture_id}") from exc
 

@@ -142,11 +142,15 @@ class CaptureRepository:
         self.clock = clock
 
     async def index(
-        self, package: CapturePackage, *, source_root: Path | None = None
+        self,
+        package: CapturePackage,
+        *,
+        source_root: Path | None = None,
+        rebuild_projection: bool = True,
     ) -> CaptureIndexRecord:
         package.verify_or_raise()
         record = self._record_from_package(package, source_root=source_root)
-        await asyncio.to_thread(self._write_record, record, package)
+        await asyncio.to_thread(self._write_record, record, package, rebuild_projection)
         return record
 
     async def list_captures(self) -> tuple[CaptureIndexRecord, ...]:
@@ -219,11 +223,14 @@ class CaptureRepository:
         additional_roots: Iterable[Path] = (),
     ) -> tuple[CaptureIndexRecord, ...]:
         packages = discover_capture_packages(primary_root, additional_roots=additional_roots)
-        await asyncio.to_thread(self.databases.index.initialise)
+        await asyncio.to_thread(self.databases.index.initialise, recreate=True)
         records = []
         for package, source_root in packages:
             package = await self.recover_package(package)
-            records.append(await self.index(package, source_root=source_root))
+            records.append(
+                await self.index(package, source_root=source_root, rebuild_projection=False)
+            )
+        await asyncio.to_thread(self._rebuild_projection)
         return tuple(records)
 
     async def recover_package(self, package: CapturePackage) -> CapturePackage:
@@ -260,7 +267,9 @@ class CaptureRepository:
             objects=manifest.objects,
         )
 
-    def _write_record(self, record: CaptureIndexRecord, package: CapturePackage) -> None:
+    def _write_record(
+        self, record: CaptureIndexRecord, package: CapturePackage, rebuild_projection: bool = True
+    ) -> None:
         with self.databases.index.write_transaction() as connection:
             connection.execute("DELETE FROM captures WHERE capture_id = ?", (record.capture_id,))
             connection.execute(
@@ -289,7 +298,8 @@ class CaptureRepository:
                     for item in record.objects
                 ),
             )
-            rebuild_study_projection(connection)
+            if rebuild_projection:
+                rebuild_study_projection(connection)
             for sequence, event in enumerate(
                 _read_complete_events(package.path / "events.jsonl"), 1
             ):
@@ -309,6 +319,10 @@ class CaptureRepository:
                         event["_raw_json"],
                     ),
                 )
+
+    def _rebuild_projection(self) -> None:
+        with self.databases.index.write_transaction() as connection:
+            rebuild_study_projection(connection)
 
     def _recover_package(self, package: CapturePackage) -> CapturePackage:
         events_path = package.path / "events.jsonl"

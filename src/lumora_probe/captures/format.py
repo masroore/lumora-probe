@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import stat
+import tempfile
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -22,6 +23,9 @@ from lumora_probe.core.errors import LumoraError
 from lumora_probe.core.paths import assert_contained, resolve_capture_path
 
 CURRENT_CAPTURE_FORMAT_VERSION = 1
+ARCHIVE_MAX_MEMBERS = 100_000
+ARCHIVE_MAX_MEMBER_BYTES = 512 * 1024 * 1024
+ARCHIVE_MAX_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
 MANIFEST_NAME = "manifest.json"
 EVENTS_NAME = "events.jsonl"
 PDUS_NAME = "pdus.jsonl"
@@ -459,24 +463,64 @@ def unpack_capture(archive_path: Path, destination_root: Path) -> Path:
     archive_path = archive_path.expanduser().resolve()
     destination_root = destination_root.expanduser().resolve()
     destination_root.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(archive_path) as archive:
-        members = archive.infolist()
-        for member in members:
-            target = assert_contained(destination_root / member.filename, destination_root)
-            if _zip_member_is_symlink(member):
+    temporary_root = Path(tempfile.mkdtemp(prefix="lumora-unpack-", dir=destination_root.parent))
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            members = archive.infolist()
+            if len(members) > ARCHIVE_MAX_MEMBERS:
                 raise CaptureFormatError(
-                    code="LUMORA-CAPTURE-FMT-007",
-                    message="Symlinks are not allowed in a capture archive",
-                    remediation="Create the archive from a regular capture directory.",
-                    context={"member": member.filename},
+                    code="LUMORA-CAPTURE-FMT-013",
+                    message="Capture archive contains too many members",
+                    remediation="Repack the capture within the archive resource limits.",
+                    context={"members": len(members)},
                 )
-            if member.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(member) as source, target.open("wb") as destination:
-                shutil.copyfileobj(source, destination)
-    return CapturePackage.open(destination_root).path
+            expanded = 0
+            for member in members:
+                target = assert_contained(temporary_root / member.filename, temporary_root)
+                if _zip_member_is_symlink(member):
+                    raise CaptureFormatError(
+                        code="LUMORA-CAPTURE-FMT-007",
+                        message="Symlinks are not allowed in a capture archive",
+                        remediation="Create the archive from a regular capture directory.",
+                        context={"member": member.filename},
+                    )
+                if member.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                if member.file_size > ARCHIVE_MAX_MEMBER_BYTES:
+                    raise CaptureFormatError(
+                        code="LUMORA-CAPTURE-FMT-014",
+                        message="Capture archive member is too large",
+                        remediation="Repack the capture within the archive resource limits.",
+                        context={"member": member.filename},
+                    )
+                expanded += member.file_size
+                if expanded > ARCHIVE_MAX_EXPANDED_BYTES:
+                    raise CaptureFormatError(
+                        code="LUMORA-CAPTURE-FMT-015",
+                        message="Capture archive expands beyond the limit",
+                        remediation="Repack the capture within the archive resource limits.",
+                        context={"expanded_bytes": expanded},
+                    )
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member) as source, target.open("wb") as output:
+                    copied = 0
+                    while chunk := source.read(1024 * 1024):
+                        copied += len(chunk)
+                        if copied > ARCHIVE_MAX_MEMBER_BYTES:
+                            raise CaptureFormatError(
+                                code="LUMORA-CAPTURE-FMT-016",
+                                message="Capture archive member exceeds its declared size",
+                                remediation="Repack the capture within the archive resource limits.",
+                                context={"member": member.filename},
+                            )
+                        output.write(chunk)
+        shutil.rmtree(destination_root)
+        temporary_root.replace(destination_root)
+        return CapturePackage.open(destination_root).path
+    except Exception:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+        raise
 
 
 def _read_manifest(path: Path) -> CaptureManifest:

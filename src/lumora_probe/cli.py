@@ -158,8 +158,22 @@ def _run_plugin_install(args: argparse.Namespace) -> dict[str, Any]:
     if destination.exists():
         raise ApiClientError(f"Plugin is already installed: {manifest.plugin_id}")
     destination_root.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, destination)
-    PluginRepository(destination_root).read_manifest(destination)
+    try:
+        destination = destination.resolve()
+        if destination.parent != destination_root.resolve():
+            raise ApiClientError("Plugin ID must resolve to a direct child of the plugin root")
+        temporary = destination_root / f".{manifest.plugin_id}.installing-{os.getpid()}"
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        shutil.copytree(source, temporary, symlinks=False)
+        installed = PluginRepository(destination_root).read_manifest(temporary)
+        if installed.plugin_id != manifest.plugin_id:
+            raise ApiClientError("Plugin manifest changed during installation")
+        temporary.replace(destination)
+    except Exception:
+        if "temporary" in locals() and temporary.exists():
+            shutil.rmtree(temporary, ignore_errors=True)
+        raise
     from lumora_probe.core.audit import AuditCategory, AuditLog
     from lumora_probe.core.clock import SystemClock
     from lumora_probe.core.config import StartupConfig

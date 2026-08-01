@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import inspect
+import threading
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -119,6 +120,10 @@ class EventSubscription:
     def task_done(self) -> None:
         self._queue.task_done()
 
+    async def join(self) -> None:
+        """Wait until every queued event has been delivered to this subscription."""
+        await self._queue.join()
+
     async def close(self) -> None:
         await self._bus.unsubscribe(self)
 
@@ -167,6 +172,7 @@ class EventBus:
         *,
         ingress_capacity: int = 1024,
         subscriber_budget_seconds: float = 0.1,
+        thread_ingress_capacity: int | None = None,
         ui_queue_size: int = 256,
         clock_anomaly_threshold_ns: int = 1_000_000_000,
         clock: Clock | None = None,
@@ -176,6 +182,8 @@ class EventBus:
     ) -> None:
         if ingress_capacity < 1:
             raise ValueError("ingress_capacity must be positive")
+        if thread_ingress_capacity is not None and thread_ingress_capacity < 1:
+            raise ValueError("thread_ingress_capacity must be positive")
         if ui_queue_size < 1:
             raise ValueError("ui_queue_size must be positive")
         if subscriber_budget_seconds <= 0:
@@ -183,6 +191,7 @@ class EventBus:
         if clock_anomaly_threshold_ns < 0:
             raise ValueError("clock_anomaly_threshold_ns must not be negative")
         self.ingress_capacity = ingress_capacity
+        self.thread_ingress_capacity = thread_ingress_capacity or ingress_capacity
         self.subscriber_budget_seconds = subscriber_budget_seconds
         self.ui_queue_size = ui_queue_size
         self.clock_anomaly_threshold_ns = clock_anomaly_threshold_ns
@@ -199,6 +208,9 @@ class EventBus:
         self._diagnostic_guard = False
         self._diagnostics: list[EventEnvelope] = []
         self._subscription_counter = 0
+        self._thread_ingress = threading.BoundedSemaphore(self.thread_ingress_capacity)
+        self._thread_pending = 0
+        self._thread_pending_lock = threading.Lock()
 
     @property
     def ingress(self) -> EventIngress:
@@ -260,9 +272,29 @@ class EventBus:
         """Cross the only thread boundary through ``call_soon_threadsafe``."""
         if not self._accepting or self._loop is None:
             raise RuntimeError("EventBus must be started before threaded ingress")
-        return asyncio.run_coroutine_threadsafe(
-            self.publish(event, capture_id=capture_id), self._loop
-        )
+        if not self._thread_ingress.acquire(blocking=False):
+            raise RuntimeError("EventBus threaded ingress capacity is saturated")
+        with self._thread_pending_lock:
+            self._thread_pending += 1
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.publish(event, capture_id=capture_id), self._loop
+            )
+        except BaseException:
+            self._release_thread_ingress()
+            raise
+        future.add_done_callback(lambda _: self._release_thread_ingress())
+        return future
+
+    @property
+    def pending_thread_submissions(self) -> int:
+        with self._thread_pending_lock:
+            return self._thread_pending
+
+    def _release_thread_ingress(self) -> None:
+        self._thread_ingress.release()
+        with self._thread_pending_lock:
+            self._thread_pending -= 1
 
     async def subscribe(
         self,

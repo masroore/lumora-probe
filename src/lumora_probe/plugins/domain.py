@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -37,6 +38,10 @@ class PluginManifest:
     path: Path
 
     def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", self.plugin_id):
+            raise ValueError(
+                "plugin_id must contain only lowercase ASCII segments separated by dots or hyphens"
+            )
         for field_name in ("plugin_id", "name", "version", "author", "description", "entry_point"):
             value = getattr(self, field_name)
             if type(value) is not str or not value.strip():
