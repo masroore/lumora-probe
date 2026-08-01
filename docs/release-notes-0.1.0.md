@@ -19,8 +19,8 @@ August 1, 2026. Hosted final-SHA artifacts remain promotion evidence.
 
 ## Evidence still environment-specific
 
-- Six installed-artifact OS combinations are gated by CI; local execution does not replace their
-  hosted artifacts.
+- Six installed-artifact OS combinations passed in hosted CI run `30714291883` (wheel and sdist on
+  Ubuntu, macOS, and Windows). The run is the release evidence; local execution does not replace it.
 - The retained pinned-container interoperability artifact records 14 passed, 0 failed on July 31,
   2026; the final-SHA scheduled CI artifact remains pending.
 - Reference performance timing is limited to the Phase 18 local host; unresolved p95 budgets remain

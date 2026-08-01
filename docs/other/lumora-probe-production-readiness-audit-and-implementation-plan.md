@@ -956,13 +956,13 @@ Implementation is complete only when all boxes are true:
 
 ### Release-closure evidence update — August 1, 2026
 
-The closure implementation at `25f4be6` adds ADR-0036 and ADR-0037, a production runtime verification handle,
+The closure implementation at `17fa82b` adds ADR-0036 and ADR-0037, a production runtime verification handle,
 bounded DICOM ingress and capture ownership, segmented ring persistence, SQL-backed pagination,
 canonical whole-package strict typing, installed wheel/sdist smoke, and adversarial shutdown/traffic
 tests. Local evidence is recorded in `docs/planning/phase-18-performance-report.md` and
-`docs/release-notes-0.1.0.md`. The database p95 budget, six hosted artifact jobs, dependency-audit
-artifact, and final-SHA scheduled external interoperability result remain evidence gates rather
-than claims made from this working tree.
+`docs/release-notes-0.1.0.md`. Hosted CI run `30714291883` passed source quality plus all six
+installed-artifact jobs and the dependency-audit step. The database p95 budget and final-SHA
+scheduled external interoperability result remain open; the scheduled interop job in that run was skipped.
 
 ## 10. Final implementation guidance
 

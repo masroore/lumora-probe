@@ -1,11 +1,37 @@
 # Production-Readiness Release-Closure Implementation Plan
 
-**Status:** Execution-ready implementation plan; code not started  
+**Status:** Implementation complete for locally and hosted-verifiable closure; reference timing and final-SHA interoperability remain open
 **Prepared:** 2026-08-01  
-**Baseline:** `31e7b1b` on `master`  
+**Evidence tip:** `17fa82b` on `master` (CI run `30714291883`)
 **Source audit:** `docs/other/lumora-probe-production-readiness-audit-and-implementation-plan.md`  
 **Audience:** execution agent with limited repository context  
 **Scope:** remaining release-closure work only
+
+## 0. Closure evidence ledger — 2026-08-01
+
+This plan is now an evidence record, not an execution forecast. The implementation tip is
+`17fa82b8066a19a30f64e3f5cd7fa7649332208e`; the clean hosted CI run is
+[30714291883](https://github.com/masroore/lumora-probe/actions/runs/30714291883).
+
+| Requirement | Evidence | Disposition |
+|---|---|---|
+| Capture ownership, bounded threaded ingress, saturation outcomes | Accepted ADR-0036 (`2d5b228`); `tests/test_production_concurrency.py`, `tests/test_phase07_bus.py`, and production association tests | **PASS** |
+| Graceful active-traffic shutdown | `test_production_process_drains_sustained_dicom_traffic`; POSIX process boundary | **PASS** |
+| Forced deadline and restart recovery | `test_forced_shutdown_marks_active_capture_interrupted_and_recovers`; interrupted manifest plus restart/readiness verification | **PASS** |
+| Server-side pagination and direct lookup | `tests/performance/test_release_closure.py`; SQL `LIMIT/OFFSET`, deterministic unique ties, query-plan and point-lookup assertions | **PASS — structural** |
+| Projection rebuild | One final projection rebuild is asserted structurally; no partial readiness is exposed | **PASS — structural** |
+| Ring expiry persistence | Segmented append/recovery/migration/torn-tail/oversized-record tests and bounded compaction assertions | **PASS — structural** |
+| Strict typing and warning policy | `uv run basedpyright`: 0 errors; `uv run pytest -q -W error`: 553 passed, 17 skipped | **PASS** |
+| Installed wheel/sdist matrix | CI run `30714291883`: installed wheel and sdist each passed on Ubuntu, macOS, and Windows | **PASS — hosted** |
+| Release documentation and asset gates | `npm run check:assets`, release/guides/audit updates, CI dependency-audit step | **PASS** |
+| Reference p95, 10k/100k/500k timing, N-vs-2N rebuild scaling | No final reference workload result is checked in | **OPEN — do not claim** |
+| Final-SHA external interoperability | Pinned artifact: 14 passed / 0 failed on July 31, 2026; final-SHA scheduled job in run `30714291883` was skipped | **OPEN — do not claim** |
+
+Local final gate evidence at this tip: `553 passed, 17 skipped` under `uv run pytest -q -W error`;
+Ruff, import-linter, whole-package BasedPyright, and committed-asset checks pass. Hosted installed-artifact jobs: wheel Ubuntu `91407117106`, wheel macOS `91407117157`, wheel Windows
+`91407117095`; sdist Ubuntu `91407117109`, sdist macOS `91407117090`, sdist Windows `91407117111`.
+The run also retained the `dependency-audit` artifact. The two open items are evidence gaps, not
+implementation failures.
 
 ## 1. Purpose
 
@@ -23,7 +49,11 @@ This document is an execution specification. It does not authorize unrelated fea
 rewrite. Complete work packages in order. Make every task its own atomic commit using the commit
 message shown under that task. Do not combine work packages into one commit.
 
-## 2. Verified Starting Point
+## 2. Verified Starting Point (historical baseline)
+
+The ledger above supersedes the following pre-execution snapshot; it is retained to preserve the
+original defect and evidence-gap record.
+
 
 Revalidate this table before implementation. Stop and update this plan if the baseline changed in a
 way that invalidates a target file or contract.
@@ -995,21 +1025,22 @@ the end.
 
 ## 15. Completion Checklist
 
-- [ ] Capture ownership/backpressure ADR accepted.
-- [ ] Performance-gate ADR accepted.
-- [ ] Pending threaded submissions are bounded, classified, and observable.
-- [ ] Capture writer transitions are race-safe and adversarially tested.
-- [ ] DICOM saturation/persistence failures return explicit statuses.
-- [ ] Graceful SIGTERM passes during sustained real DICOM traffic.
-- [ ] Forced process deadline leaves an interrupted package and restart recovers it.
-- [ ] Pagination structural and reference gates pass.
-- [ ] Full rebuild structural and reference gates pass.
-- [ ] Ring expiry meets bounded write-amplification gate; segmentation/migration passes if needed.
-- [ ] `uv run basedpyright` covers all `src/lumora_probe` with zero errors.
-- [ ] Default test suite has zero unexpected warnings.
-- [ ] Wheel and sdist production smoke pass on Linux, macOS, and Windows.
-- [ ] External interop and dependency audit pass at release commit.
-- [ ] Documentation claims match recorded evidence.
-- [ ] No production route advertises a required capability through an empty/null provider.
-- [ ] No real or de-identified patient data was introduced.
-- [ ] Final worktree and generated artifacts are clean.
+- [x] Capture ownership/backpressure ADR accepted (`docs/adr/ADR-0036...`).
+- [x] Performance-gate ADR accepted (`docs/adr/ADR-0037...`); timing claims remain separate from structural gates.
+- [x] Pending threaded submissions are bounded, classified, and observable.
+- [x] Capture writer transitions are race-safe and adversarially tested.
+- [x] DICOM saturation/persistence failures return explicit statuses.
+- [x] Graceful SIGTERM passes during sustained real DICOM traffic.
+- [x] Forced process deadline leaves an interrupted package and restart recovers it.
+- [x] Pagination structural and query-plan gates pass.
+- [x] Full rebuild has one projection rebuild and readiness ordering structurally covered.
+- [x] Ring segmentation, migration, torn-tail recovery, and bounded compaction pass structural tests.
+- [x] `uv run basedpyright` covers all `src/lumora_probe` with zero errors.
+- [x] Default test suite has zero unexpected warnings (`uv run pytest -q -W error`).
+- [x] Wheel and sdist production smoke pass on Linux, macOS, and Windows in CI run `30714291883`.
+- [ ] Reference performance timings, p95 budgets, and N-vs-2N rebuild scaling — **OPEN; no result to claim**.
+- [ ] Final-SHA scheduled DCMTK/dcm4che/Orthanc interoperability — **OPEN; scheduled job was skipped**.
+- [x] Documentation claims match recorded evidence, including the open timing/interoperability limits.
+- [x] No production route advertises a required capability through an empty/null provider.
+- [x] No real or de-identified patient data was introduced.
+- [x] Final generated-artifact and worktree checks pass at the evidence tip.
