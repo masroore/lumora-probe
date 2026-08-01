@@ -2,14 +2,14 @@
 
 **Status:** Release closure complete; implementation, reference timing, and final-SHA interoperability are evidenced
 **Prepared:** 2026-08-01  
-**Evidence tip:** source implementation tip `c445bec`; documentation tip `1b450d7`; final hosted CI run `30716744830` at release-evidence SHA `44edd6e`
+**Evidence tip:** source implementation tip `c445bec`; documentation tip `45973b5`; final hosted CI run `30716744830` at release-evidence SHA `44edd6e`
 **Source audit:** `docs/other/lumora-probe-production-readiness-audit-and-implementation-plan.md`  
 **Audience:** execution agent with limited repository context  
 **Scope:** remaining release-closure work only
 
 ## 0. Closure evidence ledger — 2026-08-01
 
-This plan is now an evidence record, not an execution forecast. The source implementation tip is `c445bec`; documentation is current through `1b450d7`.
+This plan is now an evidence record, not an execution forecast. The source implementation tip is `c445bec`; documentation is current through `45973b5`.
 The final hosted CI run is [30716744830](https://github.com/masroore/lumora-probe/actions/runs/30716744830)
 at release-evidence SHA `44edd6e`.
 
