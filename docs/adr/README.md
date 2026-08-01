@@ -59,6 +59,8 @@ section 9). `00` is the Charter, `01` the Product Vision, `02` the PRD.
 | [0033](ADR-0033-analysis-ownership-and-transfer-boundary.md) | Analysis ownership and Transfer Analysis boundary |
 | [0034](ADR-0034-neutral-dicom-common-infrastructure.md) | Neutral DICOM mechanics shared without sharing product workflows |
 | [0035](ADR-0035-direct-sqlite-index-and-application-storage.md) | Direct sqlite3 is the ratified local persistence implementation |
+| [0036](ADR-0036-capture-ingress-ownership-and-saturation.md) | Capture ingress ownership, bounded handoff, and saturation outcomes |
+| [0037](ADR-0037-release-closure-performance-gates.md) | Structural and reference performance gates for release closure |
 
 ## Probe Lite tools
 

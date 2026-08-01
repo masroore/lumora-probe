@@ -22,7 +22,7 @@ platform. Reject scope creep toward clinical use.
 
 Three layers, in precedence order:
 
-1. `docs/adr/` — **the authoritative resolution layer.** 33 ADRs (0001–0031, 0033, 0034). Start at
+1. `docs/adr/` — **the authoritative resolution layer.** 35 ADRs (0001–0031, 0033–0037). Start at
    `docs/adr/README.md`, which indexes them and lists every recorded deviation from the
    baseline. Where an ADR contradicts a baseline document, the ADR wins.
 2. `docs/architecture-baseline/` — 20 numbered documents (00–19) plus the unnumbered PRD, binding where specific and silent
