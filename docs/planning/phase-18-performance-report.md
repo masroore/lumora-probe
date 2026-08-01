@@ -43,8 +43,8 @@ latency.
 
 ## Release-closure measurements (2026-08-01)
 
-**Commit under evaluation:** working tree after release-closure implementation; record the final
-commit SHA in the release evidence artifact. **Reference host:** macOS local SSD, CPython 3.13,
+**Commit under evaluation:** `9d54e05` (release-closure implementation tip; evidence-only
+documentation follows in a separate commit). **Reference host:** macOS local SSD, CPython 3.13,
 SQLite WAL. **Method:** one warm-up plus five samples for timing runs; median and p95 are reported
 when a workload is run. No result below is generalized to network filesystems.
 
@@ -54,6 +54,7 @@ when a workload is run. No result below is generalized to network filesystems.
 | Projection rebuild | `CaptureRepository.rebuild()` indexes valid packages with projection disabled and invokes one final projection rebuild | Existing Phase 18 startup/large-study measurements | measured / structurally implemented |
 | Ring expiry | Persisted append-only `segments/` metadata; eviction deletes or compacts only affected segments; legacy `records.jsonl` migrates after durable segment metadata | `RingBufferService.persistence_stats`; structural turnover test | measured / structurally implemented |
 | Installed artifacts | Wheel smoke driver verifies site-packages imports, static assets, HTTP readiness, DICOM C-ECHO/C-STORE, promotion, and shutdown | Local wheel and sdist smoke passed; six-OS CI matrix is release gate | pass locally / CI required |
+| Warning cleanliness | Pytest defaults to `error`; direct SQLite fixtures and locked pynetdicom transport teardown are closed explicitly | `uv run pytest -q` and `uv run pytest -q -W error`: 546 passed, 17 skipped | pass locally |
 
 Reference timing and CI run links are intentionally left open until the final release commit and
 hosted matrix results exist. This report does not convert local structural evidence into a universal
