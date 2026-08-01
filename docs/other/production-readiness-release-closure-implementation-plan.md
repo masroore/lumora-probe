@@ -21,7 +21,7 @@ This plan is now an evidence record, not an execution forecast. The implementati
 | Server-side pagination and direct lookup | `tests/performance/test_release_closure.py`; SQL `LIMIT/OFFSET`, deterministic unique ties, query-plan and point-lookup assertions | **PASS — structural** |
 | Projection rebuild | One final projection rebuild is asserted structurally; no partial readiness is exposed | **PASS — structural** |
 | Ring expiry persistence | Segmented append/recovery/migration/torn-tail/oversized-record tests and bounded compaction assertions | **PASS — structural** |
-| Strict typing and warning policy | `uv run basedpyright`: 0 errors; `uv run pytest -q -W error`: 553 passed, 17 skipped | **PASS** |
+| Strict typing and warning policy | `uv run basedpyright`: 0 errors; `uv run pytest -q -W error`: 554 passed, 17 skipped | **PASS** |
 | Installed wheel/sdist matrix | CI run `30716410290`: installed wheel and sdist each passed on Ubuntu, macOS, and Windows; job IDs `91412594137`, `91412594142`, `91412594151`, `91412594153`, `91412594165`, `91412594211` | **PASS — hosted** |
 | Release documentation and asset gates | `npm run check:assets`, release/guides/audit updates, CI dependency-audit step | **PASS** |
 | Reference p95, 10k/100k/500k timing, N-vs-2N rebuild scaling | `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json` at benchmark commit `c445bec`; one warm-up plus five measured samples on the documented local host | **PASS — reference host only** |

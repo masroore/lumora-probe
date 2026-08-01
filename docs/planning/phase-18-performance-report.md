@@ -64,7 +64,7 @@ to network filesystems.
 | Projection rebuild | `CaptureRepository.rebuild()` indexes valid packages with projection disabled and invokes one final projection rebuild | Existing Phase 18 startup/large-study measurements | measured / structurally implemented |
 | Ring expiry | Persisted append-only `segments/` metadata; eviction deletes or compacts only affected segments; oversized records remain as a single retained segment; legacy `records.jsonl` migrates after durable segment metadata | `RingBufferService.persistence_stats`; structural turnover, torn-tail, migration, oversized-record, and metadata-publication tests | measured / structurally implemented |
 | Installed artifacts | Wheel smoke driver verifies site-packages imports, static assets, HTTP readiness, DICOM C-ECHO/C-STORE, promotion, and shutdown | Local wheel and sdist smoke passed; hosted six-job matrix passed in CI run `30716410290` | pass locally and hosted |
-| Warning cleanliness | Pytest defaults to `error`; direct SQLite fixtures and locked pynetdicom transport teardown are closed explicitly | `uv run pytest -q -W error`: 553 passed, 17 skipped | pass locally |
+| Warning cleanliness | Pytest defaults to `error`; direct SQLite fixtures and locked pynetdicom transport teardown are closed explicitly | `uv run pytest -q -W error`: 554 passed, 17 skipped | pass locally |
 
 The current structural release-closure suite also covers deterministic unique pagination ties,
 direct projection point lookups, SQL query-plan presence for the indexed instance sort, and a

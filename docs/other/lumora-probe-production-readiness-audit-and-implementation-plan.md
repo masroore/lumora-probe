@@ -19,7 +19,7 @@ degraded diagnostics. Additional hardening covers archive limits, plugin install
 IPv6 Host parsing, event-bus shutdown admission, persisted object sizes, and direct-sqlite
 architecture ratification in ADR-0035.
 
-Verified in the current worktree: full pytest (`540 passed, 17 skipped`), Ruff check/format,
+Verified in the current worktree: full pytest (`554 passed, 17 skipped`), Ruff check/format,
 import-linter, strict BasedPyright for `core`/`shared` plus the production bootstrap, asset drift
 checks, process-boundary DICOM/C-STORE/restart smoke, and isolated wheel/sdist import/template
 smoke. The release-closure work described below subsequently supplied the adversarial shutdown/process
@@ -70,7 +70,7 @@ revalidated on August 1, 2026; historical commit references below explain findin
 | `uv run ruff format --check .` | Pass | Current worktree is formatted. |
 | `uv run lint-imports --no-cache` | Pass, 7/7 | Static package boundaries are enforced. |
 | `uv run basedpyright src/lumora_probe/core src/lumora_probe/shared` | Pass | Mandatory strict slices pass; bootstrap also passes an incremental strict check. |
-| `uv run pytest -q` | `540 passed, 17 skipped` | Full current suite; skips remain opt-in external/browser coverage. |
+| `uv run pytest -q` | `554 passed, 17 skipped` | Full current suite; skips remain opt-in external/browser coverage. |
 | affected bootstrap/capture/startup tests | `12 passed` at lifecycle source `25351b4` | New adapter/shutdown tests pass; full suite must still be rerun on the implementation branch. |
 | exported-requirements `pip-audit` | Pass | Exported locked requirements audited with `--strict --no-deps --disable-pip`; no known vulnerabilities found. |
 | installed-environment `pip-audit --strict` | Inconclusive | It refuses the unpublished local `lumora-probe==0.1.0` package; CI audits the exported lock instead. |
