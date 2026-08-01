@@ -209,10 +209,10 @@ increment. Remove the name-based special case from `_counter()`.
 ```python
 session.capture.stop()
 await self._publish_lifecycle("CaptureStopped", ...)
-await self.drain()          # drain 1
+await self.drain()  # drain 1
 session.capture.complete()
 await self._publish_lifecycle("CaptureCompleted", ...)
-await self.drain()          # drain 2
+await self.drain()  # drain 2
 ...
 sealed = session.writer.seal(...)
 self._sessions.pop(capture_id)

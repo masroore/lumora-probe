@@ -51,7 +51,10 @@ Enforced by import-linter (`.importlinter`) — violations fail CI:
 - **`time` and `uuid` may only be imported inside `core/`** (ADR-0022). Everywhere else,
   inject the `Clock` / `IdGenerator` protocols (`core/clock.py`, `core/ids.py`).
   Tests use `SeededUUIDv7Generator` and the doubles in `tests/doubles/` — advance counters, never sleep.
-- No `domain.py` imports fastapi/sqlalchemy/jinja2. SQLAlchemy is Core-only (no ORM).
+- No `domain.py` imports fastapi/sqlalchemy/jinja2 (the sqlalchemy entry is defensive — the
+  app has no SQLAlchemy dependency; storage is stdlib `sqlite3`, WAL + single writer in
+  `core/storage.py`). The baseline's SQLAlchemy-Core choice is a tracked deviation (ARC-001
+  in `docs/other/lumora-probe-production-readiness-audit-and-implementation-plan.md`).
 
 Modeling conventions (ADR-0006):
 
@@ -83,8 +86,9 @@ Event system (`shared/events.py`, `core/bus.py`):
 
 ## Documentation governance (do not skip)
 
-Three layers, in precedence order: `docs/adr/` (authoritative, 32 ADRs, index in
-`docs/adr/README.md`) > `docs/architecture-baseline/` (21 numbered docs) > `docs/planning/`.
+Three layers, in precedence order: `docs/adr/` (authoritative, 33 ADRs, index in
+`docs/adr/README.md`) > `docs/architecture-baseline/` (20 numbered docs 00–19 plus the
+unnumbered PRD) > `docs/planning/`.
 
 - **Deviating from an accepted decision requires a new ADR before the code change** —
   never silently revise an ADR, never work around one with a code comment (CONTRIBUTING.md).

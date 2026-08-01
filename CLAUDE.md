@@ -22,10 +22,10 @@ platform. Reject scope creep toward clinical use.
 
 Three layers, in precedence order:
 
-1. `docs/adr/` — **the authoritative resolution layer.** 32 ADRs. Start at
+1. `docs/adr/` — **the authoritative resolution layer.** 33 ADRs (0001–0031, 0033, 0034). Start at
    `docs/adr/README.md`, which indexes them and lists every recorded deviation from the
    baseline. Where an ADR contradicts a baseline document, the ADR wins.
-2. `docs/architecture-baseline/` — 21 numbered documents, binding where specific and silent
+2. `docs/architecture-baseline/` — 20 numbered documents (00–19) plus the unnumbered PRD, binding where specific and silent
    elsewhere (ADR-0001). Cited by number: `06` §9 = `06-event-driven-architecture.md` §9.
 3. `docs/planning/` — WBS, phase plan, dependency graph, definition of done, risk register.
 
@@ -39,8 +39,12 @@ these.
 
 `uv` + Hatchling, Python 3.13+. Ruff (format, lint, import order), BasedPyright (static
 analysis), pytest + pytest-asyncio, import-linter for boundary contracts. FastAPI +
-Uvicorn, Pydantic v2, pydantic-settings, structlog, orjson, SQLAlchemy **Core only — no
-ORM** (`04` §6), pydicom + pynetdicom.
+Uvicorn, Pydantic v2, pydantic-settings, structlog, pydicom + pynetdicom. Storage is the
+standard library's `sqlite3` (WAL, `busy_timeout`, single writer — `core/storage.py`);
+SQLAlchemy is **not** a runtime dependency. The baseline's SQLAlchemy-Core choice is a
+tracked deviation (ARC-001 in
+`docs/other/lumora-probe-production-readiness-audit-and-implementation-plan.md`) pending a
+ratifying ADR.
 
 The repository has locked development commands and tool configuration in `pyproject.toml`;
 use the commands in `AGENTS.md` and the root `README.md` for the current quality gates.

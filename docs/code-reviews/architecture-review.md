@@ -138,8 +138,20 @@ prevents accidentally creating envelope with implicit time.
 
 ```python
 _RESERVED_IMPERATIVE_PREFIXES = (
-    "Start", "Stop", "Accept", "Reject", "Release", "Abort", "Parse", "Load",
-    "Do", "Request", "Create", "Delete", "Update", "Set",
+    "Start",
+    "Stop",
+    "Accept",
+    "Reject",
+    "Release",
+    "Abort",
+    "Parse",
+    "Load",
+    "Do",
+    "Request",
+    "Create",
+    "Delete",
+    "Update",
+    "Set",
 )
 ```
 
@@ -215,9 +227,7 @@ The bus enforces the quarantine rule:
 if event.origin is EventOrigin.CLIENT_ASSERTED and (
     category is not EventCategory.VIEWER or event.producer != "web-ui"
 ):
-    raise ValueError(
-        "client-asserted events must be registered Viewer events produced by web-ui"
-    )
+    raise ValueError("client-asserted events must be registered Viewer events produced by web-ui")
 ```
 
 This check fires at publish time on the loop, before sequencing. The registry must know the

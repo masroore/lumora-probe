@@ -18,10 +18,11 @@ shutdown, drain-before-close, and startup sweep are guaranteed.
 from lumora_probe.core.lifecycle import LifecycleManager
 
 lifecycle = LifecycleManager(shutdown_grace_seconds=config.shutdown_grace_seconds)
-lifecycle.register(bus_service_adapter)       # wraps EventBus
-lifecycle.register(capture_engine)            # CaptureEngine
-lifecycle.register(dicom_listener)            # DICOMListener
-lifecycle.register(replay_runtime_adapter)    # ReplayRuntime
+lifecycle.register(bus_service_adapter)  # wraps EventBus
+lifecycle.register(capture_engine)  # CaptureEngine
+lifecycle.register(dicom_listener)  # DICOMListener
+lifecycle.register(replay_runtime_adapter)  # ReplayRuntime
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     await replay_runtime.startup()
     yield
     await lifecycle.shutdown()
+
 
 app = FastAPI(lifespan=lifespan)
 ```
@@ -53,6 +55,7 @@ async def join(self) -> None:
     if self.callback is not None:
         raise RuntimeError("callback subscriptions do not expose a queue join")
     await self._queue.join()
+
 
 # In captures/service.py, CaptureEngine.drain():
 async def drain(self) -> None:
@@ -99,7 +102,7 @@ local reference for sealing:
 
 ```python
 async def stop_session(self, capture_id: str) -> CaptureManifest:
-    session = self._sessions.pop(capture_id)   # pop early
+    session = self._sessions.pop(capture_id)  # pop early
     session.capture.stop()
     await self._publish_lifecycle("CaptureStopped", capture_id, {...})
     await self.drain()
@@ -124,7 +127,7 @@ async def stop_session(self, capture_id: str) -> CaptureManifest:
 for record in retained:
     size = sum(item.size for item in record.objects)
     if total + size > self.max_bytes:
-        break   # stop retaining; everything from here is older
+        break  # stop retaining; everything from here is older
     size_limited.append(record)
     total += size
 retained = size_limited
@@ -145,8 +148,9 @@ Add a test that verifies: given captures with sizes [80, 30, 5] and max_bytes=10
 ```python
 async def execute_read(self, sql: str, parameters: Sequence[Any] = ()) -> list[sqlite3.Row]:
     def read() -> list[sqlite3.Row]:
-        with self.connection(read_only=True) as connection:   # always read-only
+        with self.connection(read_only=True) as connection:  # always read-only
             return list(connection.execute(sql, parameters).fetchall())
+
     return await asyncio.to_thread(read)
 ```
 
@@ -173,7 +177,7 @@ except OSError:
 ### R-08 · Fix `indexed_at` to use current clock time (F-013)
 
 **How:**
-```python
+```text
 indexed_at=self.clock.now(),   # was: manifest.created_at
 ```
 
@@ -303,6 +307,7 @@ to support strict checking.
 def _counter(self, name: str, **labels: str) -> None:
     key = (name, _labels(labels))
     self._counters[key] += 1
+
 
 def _counter_by(self, name: str, amount: int, **labels: str) -> None:
     key = (name, _labels(labels))

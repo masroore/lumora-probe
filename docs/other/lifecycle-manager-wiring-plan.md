@@ -79,9 +79,7 @@ class _CaptureEngineAdapter:
 After the `bus = EventBus(clock=clock)` line, add:
 
 ```python
-lifecycle = LifecycleManager(
-    shutdown_grace_seconds=config.shutdown_grace_seconds
-)
+lifecycle = LifecycleManager(shutdown_grace_seconds=config.shutdown_grace_seconds)
 ```
 
 After the block that builds `capture_service` / `capture_engine` (search for where
@@ -89,7 +87,7 @@ After the block that builds `capture_service` / `capture_engine` (search for whe
 
 ```python
 _capture_adapter = _CaptureEngineAdapter(
-    capture_engine,                          # the CaptureEngine instance
+    capture_engine,  # the CaptureEngine instance
     event_bus=None if bus is None else bus,  # use the production bus
 )
 lifecycle.register(_capture_adapter)
@@ -139,7 +137,7 @@ they are used in the warning log below.
 
 In the `create_app()` signature, add after the last existing parameter:
 
-```python
+```text
 lifecycle_manager: LifecycleManager | None = None,
 ```
 
@@ -243,17 +241,19 @@ async def test_lifecycle_shutdown_marks_active_captures_interrupted_on_deadline(
     bus = EventBus(clock=clock)
     await bus.start()
 
-    engine = CaptureEngine(...)   # match how other tests in this file build it
-    capture_id = await engine.start_session(...)   # open one capture
+    engine = CaptureEngine(...)  # match how other tests in this file build it
+    capture_id = await engine.start_session(...)  # open one capture
 
     # Make drain() hang so the grace period will be exceeded.
     original_drain = engine.drain
+
     async def _hanging_drain() -> None:
-        await asyncio.sleep(60)   # far beyond any reasonable grace period
+        await asyncio.sleep(60)  # far beyond any reasonable grace period
+
     engine.drain = _hanging_drain  # type: ignore[method-assign]
 
     adapter = _CaptureEngineAdapter(engine, event_bus=bus)
-    lifecycle = LifecycleManager(shutdown_grace_seconds=0.05)   # very short for the test
+    lifecycle = LifecycleManager(shutdown_grace_seconds=0.05)  # very short for the test
     lifecycle.register(adapter)
     await lifecycle.start()
 
@@ -264,16 +264,16 @@ async def test_lifecycle_shutdown_marks_active_captures_interrupted_on_deadline(
     engine.drain = _hanging_drain  # type: ignore[method-assign]
 
     from lumora_probe.core.errors import LifecycleError
+
     with pytest.raises(LifecycleError):
         await lifecycle.shutdown()
 
     # The manifest must be sealed as INTERRUPTED.
     sealed = engine._sessions.get(capture_id)
     # Session should be gone (interrupt_session pops it) — confirm via the written manifest.
-    manifest_path = (
-        tmp_path / "captures" / capture_id / "manifest.json"
-    )
+    manifest_path = tmp_path / "captures" / capture_id / "manifest.json"
     import json
+
     manifest = json.loads(manifest_path.read_text())
     assert manifest["state"] == "interrupted"
     assert manifest["interruption_reason"] is not None

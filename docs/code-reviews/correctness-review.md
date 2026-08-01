@@ -57,10 +57,10 @@ async def stop_session(self, capture_id: str) -> CaptureManifest:
     session = self._session(capture_id)
     session.capture.stop()
     await self._publish_lifecycle("CaptureStopped", ...)
-    await self.drain()                    # drain #1
+    await self.drain()  # drain #1
     session.capture.complete()
     await self._publish_lifecycle("CaptureCompleted", ...)
-    await self.drain()                    # drain #2
+    await self.drain()  # drain #2
     ...
     sealed = session.writer.seal(completed_at=self.clock.now())
     self._sessions.pop(capture_id)
@@ -133,7 +133,7 @@ promotion use case), this is a performance bottleneck.
 
 ### 3.2 `list_captures()` does `stat()` calls for each object inside a thread
 
-```python
+```text
 size=object_path.stat().st_size if object_path.is_file() else 0,
 ```
 
@@ -145,7 +145,7 @@ repository this will take tens of seconds and block the executor thread.
 
 ### 3.3 `indexed_at` is set to `manifest.created_at` instead of clock time
 
-```python
+```text
 indexed_at=manifest.created_at,
 ```
 

@@ -110,6 +110,7 @@ def _with_previous(events):
         yield previous, event
         previous = event
 
+
 def _with_previous_dataset(datasets):
     previous = None
     for dataset in datasets:
