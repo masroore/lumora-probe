@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Structured errors shared by Lumora Probe infrastructure components."""
 
 from __future__ import annotations

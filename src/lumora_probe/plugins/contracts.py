@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Stable DTOs exposed to trusted Lumora Probe plugins."""
 
 from __future__ import annotations

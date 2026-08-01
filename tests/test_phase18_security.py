@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 security gap coverage for validation, containment, and redaction."""
 
 from __future__ import annotations

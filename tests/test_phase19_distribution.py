@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 19 wheel and source distribution checks."""
 
 from __future__ import annotations

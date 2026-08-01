@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 concurrent local client matrix for /ws/ui and /api/v1/events/stream."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 07 event bus acceptance tests."""
 
 from __future__ import annotations

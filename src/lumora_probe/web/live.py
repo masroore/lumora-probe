@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared live-update governor and WebSocket transport adapters."""
 
 from __future__ import annotations

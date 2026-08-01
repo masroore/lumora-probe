@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Unified Search panel routes over existing projection and event contracts."""
 
 from __future__ import annotations

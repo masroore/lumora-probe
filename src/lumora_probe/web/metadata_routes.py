@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """REST routes for capture-backed DICOM metadata inspection."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Structural release-closure gates for pagination, rebuild, and ring expiry."""
 
 from __future__ import annotations

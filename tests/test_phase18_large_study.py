@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 large synthetic study projection workload (2,000 instances)."""
 
 from __future__ import annotations

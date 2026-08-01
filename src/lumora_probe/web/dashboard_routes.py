@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Server-rendered operational metrics dashboard."""
 
 from __future__ import annotations

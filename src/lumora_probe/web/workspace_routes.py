@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """HTML workspace shell route with no application data dependencies."""
 
 from __future__ import annotations

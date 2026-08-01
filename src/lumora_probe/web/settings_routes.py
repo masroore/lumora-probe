@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """REST routes for runtime settings with provenance."""
 
 from __future__ import annotations

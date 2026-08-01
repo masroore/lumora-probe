@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """JSON metrics and alert endpoints."""
 
 from __future__ import annotations

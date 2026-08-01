@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Append-only application audit records and category coverage."""
 
 from __future__ import annotations

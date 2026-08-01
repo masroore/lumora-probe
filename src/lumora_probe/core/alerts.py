@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Configurable in-process alert thresholds over event-derived metrics."""
 
 from __future__ import annotations

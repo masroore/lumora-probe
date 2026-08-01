@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Universal DICOM endpoint constants shared by product adapters."""
 
 from __future__ import annotations

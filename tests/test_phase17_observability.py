@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 17 observability acceptance coverage."""
 
 from __future__ import annotations

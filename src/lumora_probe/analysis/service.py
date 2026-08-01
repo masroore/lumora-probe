@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Deterministic observed-condition detection for the analysis slice."""
 
 from __future__ import annotations

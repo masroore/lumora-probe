@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Durable operation audit records with in-memory execution state elsewhere."""
 
 from __future__ import annotations

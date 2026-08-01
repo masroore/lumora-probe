@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Capture index persistence, discovery, and rebuild operations."""
 
 from __future__ import annotations

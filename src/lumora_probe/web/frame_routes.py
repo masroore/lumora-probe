@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Per-instance, per-frame normalized pixel endpoints."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Safe handover export for captures.
 
 The default export drops object data and writes an ``events``-fidelity capture. A

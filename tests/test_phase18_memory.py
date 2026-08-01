@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 ring-buffer memory/eviction measurement cycles."""
 
 from __future__ import annotations

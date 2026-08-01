@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Background report generation on the shared operation and event infrastructure."""
 
 from __future__ import annotations

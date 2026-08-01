@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Process-boundary acceptance tests for the shipped production composition."""
 
 from __future__ import annotations

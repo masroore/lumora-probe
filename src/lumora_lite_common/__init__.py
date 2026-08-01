@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared helpers for the Lumora Lite tools (Probe Lite and Sender Lite).
 
 This package holds the genuinely duplicated behaviour between the two Lite

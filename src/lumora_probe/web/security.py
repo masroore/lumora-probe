@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Central request security seams for the unauthenticated v1 API."""
 
 from __future__ import annotations

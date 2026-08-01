@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Domain errors with stable operator-facing context."""
 
 from __future__ import annotations

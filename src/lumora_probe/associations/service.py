@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public service boundary for the ``associations`` slice."""
 
 __all__: tuple[str, ...] = ()

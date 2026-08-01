@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Reusable read/query adapters for projection-backed REST collections."""
 
 from __future__ import annotations

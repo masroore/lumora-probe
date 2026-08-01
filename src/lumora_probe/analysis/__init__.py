@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Transfer analysis and diagnostic rule evaluation."""
 
 __all__: tuple[str, ...] = ()

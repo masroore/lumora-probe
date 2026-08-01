@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public domain boundary for the ``core`` slice."""
 
 __all__: tuple[str, ...] = ()

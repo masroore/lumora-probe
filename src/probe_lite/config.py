@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Command-line and environment configuration for Probe Lite."""
 
 from __future__ import annotations

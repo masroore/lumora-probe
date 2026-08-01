@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 keyboard-only accessibility e2e scenarios.
 
 Setup: uv run playwright install chromium

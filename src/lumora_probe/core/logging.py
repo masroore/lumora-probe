@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Structured logging setup with correlation context and sensitive-value redaction."""
 
 from __future__ import annotations

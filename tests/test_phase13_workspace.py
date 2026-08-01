@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Focused tests for the Phase 13 workspace shell."""
 
 from __future__ import annotations

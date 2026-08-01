@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Architecture guard for the neutral DICOM package."""
 
 from __future__ import annotations

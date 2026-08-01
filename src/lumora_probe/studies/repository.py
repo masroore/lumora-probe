@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Read-only study projections and cross-capture deletion cascades."""
 
 from __future__ import annotations

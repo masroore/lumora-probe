@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public contracts for capture-backed study and image projections."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Loop-owned event bus with explicit ingress and split subscriber backpressure."""
 
 from __future__ import annotations

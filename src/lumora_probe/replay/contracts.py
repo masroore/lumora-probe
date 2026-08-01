@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public contracts for offline event replay."""
 
 from __future__ import annotations

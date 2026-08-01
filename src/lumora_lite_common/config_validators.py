@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared config leaf validators for the Lumora Lite tools.
 
 These are the small, pure checks that both tools' ``Config`` validation

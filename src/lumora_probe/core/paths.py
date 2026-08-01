@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Data-root layout, containment checks, and filesystem safety guards."""
 
 from __future__ import annotations

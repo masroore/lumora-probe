@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Study, series, instance, and metadata projections."""
 
 __all__: tuple[str, ...] = ()

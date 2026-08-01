@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Catalog model for Sender Lite.
 
 Scans an input directory, validates DICOM files, detects duplicate SOP

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Tests for the shared event-logger engine (`lumora_lite_common.logging`)."""
 
 from __future__ import annotations

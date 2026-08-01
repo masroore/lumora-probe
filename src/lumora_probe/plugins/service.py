@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Plugin discovery, validation, loading, and hook containment."""
 
 from __future__ import annotations

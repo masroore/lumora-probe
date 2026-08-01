@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Composition service joining association legs with transfer evidence."""
 
 from __future__ import annotations

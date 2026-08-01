@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Event-derived operational metrics with one projection path."""
 
 from __future__ import annotations

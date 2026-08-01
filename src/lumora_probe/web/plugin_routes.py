@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Plugin inspection and restart-scoped enablement routes."""
 
 from __future__ import annotations

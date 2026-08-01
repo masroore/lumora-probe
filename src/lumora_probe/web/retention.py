@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Composition adapters joining live ring-buffer records to study browser retention."""
 
 from __future__ import annotations

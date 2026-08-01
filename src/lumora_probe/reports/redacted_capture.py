@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Create a new capture containing tag-redacted DICOM object copies."""
 
 from __future__ import annotations

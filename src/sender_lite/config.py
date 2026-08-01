@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Command-line and TOML configuration for Sender Lite."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 startup-time measurement at the real process boundary."""
 
 from __future__ import annotations

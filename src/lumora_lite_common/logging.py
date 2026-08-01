@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared stdout-only event logger for the Lumora Lite tools.
 
 `EventLogger` holds the text/JSONL rendering engine that `ProbeLogger` and

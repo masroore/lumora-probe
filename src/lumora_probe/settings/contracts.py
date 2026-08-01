@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public contracts boundary for the ``settings`` slice."""
 
 __all__: tuple[str, ...] = ()

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Opt-in interoperability suite boundary."""
 
 from __future__ import annotations

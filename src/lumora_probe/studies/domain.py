@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Pure domain errors and invariants for the study viewer."""
 
 from __future__ import annotations

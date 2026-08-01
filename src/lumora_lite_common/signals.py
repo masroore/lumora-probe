@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Portable signal handler install/restore for the Lumora Lite CLIs.
 
 CPython only permits signal registration from the main thread, and the set of

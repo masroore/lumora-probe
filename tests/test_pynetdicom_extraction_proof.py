@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Test-only proof for the proposed narrow pynetdicom adapter surface."""
 
 from __future__ import annotations

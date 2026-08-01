@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 07 settings provenance event tests."""
 
 from __future__ import annotations

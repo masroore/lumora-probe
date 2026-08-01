@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared test fixtures and harness configuration."""
 
 from __future__ import annotations

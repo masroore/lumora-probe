@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Injected UUIDv7 identity generation."""
 
 from __future__ import annotations

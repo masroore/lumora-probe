@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Read-only filesystem access for capture evidence used by reports."""
 
 from __future__ import annotations

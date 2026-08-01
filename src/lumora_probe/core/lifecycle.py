@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Single-process service lifecycle with bounded, draining shutdown."""
 
 from __future__ import annotations

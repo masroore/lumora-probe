@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Production composition root for the Phase 17 observable application."""
 
 from __future__ import annotations

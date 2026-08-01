@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Characterization tests for behavior preserved by neutral DICOM extraction."""
 
 from __future__ import annotations

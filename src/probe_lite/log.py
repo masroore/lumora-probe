@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Stdout-only text and JSONL event logging."""
 
 from __future__ import annotations

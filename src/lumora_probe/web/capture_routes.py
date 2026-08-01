@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """REST routes for capture resources."""
 
 from __future__ import annotations

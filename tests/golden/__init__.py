@@ -3,4 +3,5 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Golden capture comparison test helpers."""

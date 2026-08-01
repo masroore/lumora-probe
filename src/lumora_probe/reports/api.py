@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public composition helpers for report generation."""
 
 from __future__ import annotations

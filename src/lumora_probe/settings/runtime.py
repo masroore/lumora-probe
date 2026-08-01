@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Persistent live settings with provenance and source-lock enforcement."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Capture lifecycle, bounded rolling evidence, promotion, and shutdown handling."""
 
 from __future__ import annotations
@@ -186,6 +187,7 @@ class RingBufferService:
         self._active_segment_bytes = 0
         self._segment_rotations = 0
         self._dirty_segments: set[int] = set()
+        self._segment_heads: dict[int, int] = {}
         self._legacy_loaded = False
         self._persisted_bytes = 0
         self._compaction_bytes = 0
@@ -426,20 +428,31 @@ class RingBufferService:
             )
             self._records.append(stored)
             self._bytes_used += stored.size
-            removed = self._expire(record.recorded_at)
+            self._expire(record.recorded_at)
             while len(self._records) > 1 and self._bytes_used > self.config.max_bytes:
                 self._drop_left()
-                removed = True
             if self.root is not None:
                 self._append_persisted(stored, record)
-                if removed:
-                    self._compact_persisted()
 
     def _drop_left(self) -> None:
         removed = self._records.popleft()
         self._bytes_used -= removed.size
-        if removed.segment is not None:
-            self._dirty_segments.add(removed.segment)
+        if removed.segment is None or removed.offset is None or removed.line_length is None:
+            return
+        segment = removed.segment
+        next_segment = self._records[0].segment if self._records else None
+        if next_segment != segment:
+            self._segment_heads.pop(segment, None)
+            self._dirty_segments.discard(segment)
+            if self.root is not None:
+                self._segment_path(segment).unlink(missing_ok=True)
+            if segment == self._active_segment:
+                self._active_segment_bytes = 0
+            return
+        self._segment_heads[segment] = max(
+            self._segment_heads.get(segment, 0), removed.offset + removed.line_length
+        )
+        self._dirty_segments.add(segment)
 
     def _expire(self, now: datetime) -> bool:
         removed = False
@@ -490,6 +503,12 @@ class RingBufferService:
                 if version < 1:
                     raise ValueError("invalid ring format version")
                 segment_ids = tuple(int(item) for item in value.get("segments", ()))
+                heads = value.get("heads", {})
+                if not isinstance(heads, Mapping):
+                    raise TypeError("ring segment heads must be an object")
+                self._segment_heads = {
+                    int(segment): int(offset) for segment, offset in heads.items()
+                }
                 self._active_segment = int(
                     value.get("active_segment", segment_ids[-1] if segment_ids else 0)
                 )
@@ -497,6 +516,7 @@ class RingBufferService:
                 raise
             except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
                 segment_ids = ()
+                self._segment_heads.clear()
                 self._active_segment = 0
         if segments is not None:
             discovered = {
@@ -528,9 +548,12 @@ class RingBufferService:
         if not path.is_file():
             return
         offset = 0
+        head = self._segment_heads.get(segment, 0)
         for line in path.read_bytes().splitlines(keepends=True):
             line_offset = offset
             offset += len(line)
+            if offset <= head:
+                continue
             try:
                 value = json.loads(line)
                 raw = base64.b64decode(value["raw"], validate=True)
@@ -604,8 +627,10 @@ class RingBufferService:
         }
         for segment in sorted(existing - set(grouped)):
             self._segment_path(segment).unlink(missing_ok=True)
+            self._segment_heads.pop(segment, None)
         for segment in sorted(self._dirty_segments & set(grouped)):
             self._rewrite_segment(segment, grouped[segment])
+            self._segment_heads.pop(segment, None)
         self._dirty_segments.clear()
         if grouped:
             self._active_segment = max(grouped)
@@ -704,6 +729,11 @@ class RingBufferService:
                         "format_version": RING_BUFFER_FORMAT_VERSION,
                         "active_segment": self._active_segment,
                         "segments": names,
+                        "heads": {
+                            str(segment): offset
+                            for segment, offset in self._segment_heads.items()
+                            if segment in names and offset > 0
+                        },
                     },
                     sort_keys=True,
                 ).encode("utf-8")

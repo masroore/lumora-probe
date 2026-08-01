@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Dedicated, quarantined endpoint for client-asserted Viewer events."""
 
 from __future__ import annotations

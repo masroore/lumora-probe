@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Capture evidence lifecycle and ring-buffer coordination."""
 
 __all__: tuple[str, ...] = ()

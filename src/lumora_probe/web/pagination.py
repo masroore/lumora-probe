@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Shared pagination policy for REST collection resources."""
 
 from __future__ import annotations

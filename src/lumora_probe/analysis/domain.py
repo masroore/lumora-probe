@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Pure domain primitives for deterministic diagnostic conditions."""
 
 from __future__ import annotations

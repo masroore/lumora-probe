@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Deterministic boundary models for rendered investigation reports."""
 
 from __future__ import annotations

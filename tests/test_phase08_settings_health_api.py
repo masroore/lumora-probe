@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Tests for Phase 08 settings and health resources."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Deterministic wall and monotonic clocks for component tests."""
 
 from __future__ import annotations

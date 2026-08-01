@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Narrow, product-neutral pynetdicom runtime compatibility helpers."""
 
 from __future__ import annotations

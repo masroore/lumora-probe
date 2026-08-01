@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Entry point for ``python -m sender_lite``."""
 
 import sys

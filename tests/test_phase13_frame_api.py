@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 13 normalized frame endpoint tests."""
 
 from __future__ import annotations

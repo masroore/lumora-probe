@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """DICOM UID validation for the Lumora Lite tools.
 
 Both tools enforce the same DICOM rule (UI value: dotted-decimal digits, ≤64

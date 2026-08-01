@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Offline event replay into the loop-owned event bus."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Service-agnostic relay primitives and protocol trace records."""
 
 from __future__ import annotations

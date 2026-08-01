@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Byte-comparison helpers for golden ``.lpcap`` fixtures."""
 
 from __future__ import annotations

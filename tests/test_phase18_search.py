@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 18 Search panel API composing existing read contracts."""
 
 from __future__ import annotations

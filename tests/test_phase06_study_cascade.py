@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

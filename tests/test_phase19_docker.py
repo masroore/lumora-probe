@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 19 Docker image contract checks."""
 
 from __future__ import annotations

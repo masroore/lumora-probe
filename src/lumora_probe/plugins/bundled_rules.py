@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Bundled seed analyzers implemented against the public plugin SDK."""
 
 from __future__ import annotations

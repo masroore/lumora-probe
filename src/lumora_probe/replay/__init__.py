@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Replay captured evidence with explicit fidelity guarantees."""
 
 __all__: tuple[str, ...] = ()

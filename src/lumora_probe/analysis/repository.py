@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Filesystem persistence for regenerable capture analysis output."""
 
 from __future__ import annotations

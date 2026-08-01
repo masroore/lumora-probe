@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 16 plugin API trust and restart-scope tests."""
 
 from __future__ import annotations

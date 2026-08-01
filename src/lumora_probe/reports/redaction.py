@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Configurable, honest tag-level redaction for pydicom datasets."""
 
 from __future__ import annotations

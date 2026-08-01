@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Plain-Python association aggregates and their lifecycle rules."""
 
 from __future__ import annotations

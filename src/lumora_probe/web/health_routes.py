@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """REST health and readiness endpoints."""
 
 from __future__ import annotations

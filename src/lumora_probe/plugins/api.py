@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Public pluggy hook specifications and SDK entry points."""
 
 from __future__ import annotations

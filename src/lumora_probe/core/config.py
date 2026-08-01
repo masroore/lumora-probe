@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Immutable startup configuration and source/provenance resolution."""
 
 from __future__ import annotations

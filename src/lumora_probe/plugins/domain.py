@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Plugin lifecycle state and validated discovery records."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """SQLite storage primitives and schemas for the rebuildable index and app database."""
 
 from __future__ import annotations

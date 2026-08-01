@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Configuration and runtime settings management."""
 
 __all__: tuple[str, ...] = ()

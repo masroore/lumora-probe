@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Regression test for the empirical pynetdicom threading result."""
 
 from __future__ import annotations

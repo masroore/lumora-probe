@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Tests for durable Phase 08 operation audit records."""
 
 from __future__ import annotations

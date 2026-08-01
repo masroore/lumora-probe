@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 15 redacted capture output tests."""
 
 from __future__ import annotations

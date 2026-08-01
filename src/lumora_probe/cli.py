@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Lumora Probe command-line client and offline capture inspection."""
 
 from __future__ import annotations

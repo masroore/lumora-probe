@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """FastAPI application and versioned REST API router."""
 
 from __future__ import annotations

@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Phase 12 event replay acceptance tests."""
 
 from __future__ import annotations

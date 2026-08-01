@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Readiness and liveness reporting for the service boundary."""
 
 from __future__ import annotations

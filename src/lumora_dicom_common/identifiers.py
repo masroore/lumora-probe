@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Pure lexical DICOM UID and AE-title inspection primitives."""
 
 from __future__ import annotations

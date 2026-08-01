@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Trusted plugin loading and public extension contracts."""
 
 from .api import build_plugin_manager, hookimpl, hookspec

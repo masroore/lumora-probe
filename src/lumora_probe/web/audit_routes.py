@@ -3,6 +3,7 @@
 #
 # Part of the Lumora Probe project.
 # See the LICENSE file for details.
+
 """Read-only audit log endpoint for incident investigation."""
 
 from __future__ import annotations
