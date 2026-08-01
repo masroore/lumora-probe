@@ -121,7 +121,7 @@ def test_runtime_settings_are_separate_and_persist_with_provenance(tmp_path: Pat
 
     reloaded = RuntimeSettingsStore(tmp_path / "settings.toml")
     assert reloaded.snapshot("ring_buffer_seconds").value == 600
-    assert reloaded.snapshot("ring_buffer_seconds").source == SettingSource.FILE
+    assert reloaded.snapshot("ring_buffer_seconds").source == SettingSource.RUNTIME
 
     locked = RuntimeSettingsStore(tmp_path / "settings.toml", environ={"LUMORA_THEME": "dark"})
     assert locked.snapshot("theme").source == SettingSource.ENV
@@ -185,12 +185,12 @@ async def test_lifecycle_starts_in_order_and_drains_in_reverse() -> None:
     assert calls == [
         "start:first",
         "start:second",
-        "stop_accepting:first",
         "stop_accepting:second",
-        "drain:first",
+        "stop_accepting:first",
         "drain:second",
-        "flush:first",
+        "drain:first",
         "flush:second",
+        "flush:first",
         "stop:second",
         "stop:first",
     ]

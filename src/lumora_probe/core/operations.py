@@ -180,6 +180,13 @@ class InMemoryJobRegistry:
         await self.interrupt_running(reason)
         return durable_count
 
+    async def shutdown(self, *, reason: str) -> None:
+        """Interrupt active jobs and wait for their tasks to release resources."""
+        await self.interrupt_running(reason)
+        tasks = tuple(self._tasks.values())
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def interrupt_running(self, reason: str) -> int:
         """Mark in-memory running jobs interrupted during shutdown."""
         count = 0

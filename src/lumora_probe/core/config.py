@@ -32,6 +32,19 @@ class StartupConfig(BaseSettings):
         frozen=True, extra="forbid", validate_assignment=True, env_prefix="LUMORA_"
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: Any,
+        env_settings: Any,
+        dotenv_settings: Any,
+        file_secret_settings: Any,
+    ) -> tuple[Any, ...]:
+        """Use the explicit loader below as the sole precedence implementation."""
+        del settings_cls, env_settings, dotenv_settings, file_secret_settings
+        return (init_settings,)
+
     data_dir: Path
     captures_root: Path | None = None
     additional_capture_roots: tuple[Path, ...] = ()
@@ -306,7 +319,8 @@ def load_startup_config(
         config = StartupConfig.model_validate(values)
     except ValidationError as exc:
         first_error = exc.errors()[0]
-        location = str(first_error.get("loc", ("configuration",))[0])
+        location_values = first_error.get("loc", ("configuration",))
+        location = str(location_values[0]) if location_values else "configuration"
         source = sources.get(location, ConfigSource.DEFAULT)
         raise ConfigurationError(
             code="LUMORA-CORE-CONFIG-006",

@@ -202,6 +202,7 @@ class EventBus:
         self._ingress_queue: asyncio.Queue[_IngressRequest] | None = None
         self._dispatch_task: asyncio.Task[None] | None = None
         self._accepting = False
+        self._closing = False
         self._subscribers: dict[str, EventSubscription] = {}
         self._next_sequence: dict[str, int] = {}
         self._last_times: dict[str, tuple[datetime, int]] = {}
@@ -229,6 +230,8 @@ class EventBus:
         """Start accepting events on the current event loop."""
         if self._accepting:
             return
+        if self._closing:
+            raise RuntimeError("EventBus has been stopped")
         running_loop = asyncio.get_running_loop()
         if self._loop is not None and self._loop is not running_loop:
             raise RuntimeError("EventBus must be owned by one asyncio event loop")
@@ -241,6 +244,7 @@ class EventBus:
         """Stop ingress after draining all accepted events and close subscriptions."""
         if not self._accepting:
             return
+        self._closing = True
         self._accepting = False
         assert self._ingress_queue is not None
         await self._ingress_queue.join()
@@ -258,6 +262,8 @@ class EventBus:
         self, event: EventEnvelope, *, capture_id: str | None = None
     ) -> EventEnvelope:
         """Enqueue an event and return the immutable, sequenced published envelope."""
+        if self._closing:
+            raise RuntimeError("EventBus is shutting down")
         if not self._accepting:
             await self.start()
         assert self._ingress_queue is not None
@@ -270,8 +276,8 @@ class EventBus:
         self, event: EventEnvelope, *, capture_id: str | None = None
     ) -> concurrent.futures.Future[EventEnvelope]:
         """Cross the only thread boundary through ``call_soon_threadsafe``."""
-        if not self._accepting or self._loop is None:
-            raise RuntimeError("EventBus must be started before threaded ingress")
+        if self._closing or not self._accepting or self._loop is None:
+            raise RuntimeError("EventBus is not accepting threaded ingress")
         if not self._thread_ingress.acquire(blocking=False):
             raise RuntimeError("EventBus threaded ingress capacity is saturated")
         with self._thread_pending_lock:
@@ -304,6 +310,8 @@ class EventBus:
         queue_size: int | None = None,
     ) -> EventSubscription:
         """Register a callback or queue subscription."""
+        if self._closing:
+            raise RuntimeError("EventBus is shutting down")
         if not self._accepting:
             await self.start()
         self._subscription_counter += 1

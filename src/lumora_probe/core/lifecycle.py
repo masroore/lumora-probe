@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
@@ -39,7 +39,7 @@ class Service(Protocol):
 
     async def stop(self) -> None: ...
 
-    async def health(self) -> ServiceHealth: ...
+    def health(self) -> ServiceHealth | Awaitable[ServiceHealth]: ...
 
 
 class Drainable(Protocol):
@@ -151,7 +151,9 @@ class LifecycleManager:
         return tuple(results)
 
     async def _call_optional(self, method_name: str) -> None:
-        for registration in self._services:
+        # Admission closes from the edge inward; drain/flush then follows the same dependency order.
+        registrations = tuple(reversed(self._services))
+        for registration in registrations:
             if not registration.started:
                 continue
             method = getattr(registration.service, method_name, None)

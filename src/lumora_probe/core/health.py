@@ -37,6 +37,9 @@ class HealthRegistry:
     def register(self, name: str, probe: HealthProbe) -> None:
         self._probes[name] = probe
 
+    def unregister(self, name: str) -> None:
+        self._probes.pop(name, None)
+
     async def check(self) -> HealthReport:
         results: list[ServiceHealth] = []
         for name, probe in self._probes.items():
