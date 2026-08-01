@@ -31,13 +31,13 @@ way that invalidates a target file or contract.
 | Area | Current evidence | Remaining defect or evidence gap |
 |---|---|---|
 | Full suite | `540 passed, 17 skipped, 166 warnings` | Warnings are not release-clean. |
-| EventBus thread ingress | `BoundedSemaphore`, pending count, completion callbacks, unit saturation test | DICOM behavior under saturation and process shutdown is not proved. |
+| EventBus thread ingress | `BoundedSemaphore` (`core/bus.py:212`), pending count, completion callbacks, asyncio-marked saturation test (`tests/test_phase07_bus.py`, not marked `unit`) | DICOM behavior under saturation and process shutdown is not proved. |
 | Capture ownership | One `threading.RLock` protects active sessions and writers | Lock protocol is undocumented; no concurrent C-STORE/stop/interrupt stress exists. |
 | Process acceptance | Real HTTP/DICOM C-ECHO/C-STORE, restart, settings, SIGTERM | No sustained active traffic or forced shutdown-deadline case. |
 | Capture pagination | `list_captures_page()` and persisted `object_size` exist | Sort/filter fallback and point lookup still materialize complete collections; no scale gate. |
 | Projection pagination | `_SQLiteResourceStore.list_page()` applies SQL `LIMIT/OFFSET` | No repository contract, query-plan assertion, deep-page evidence, or server-side sort/filter. |
 | Index rebuild | Capture rows are indexed with projection rebuild disabled, then projections rebuild once | No scale, write-amplification, failure, or process-readiness benchmark. |
-| Ring expiry | A persisted `records.jsonl` is rewritten after any eviction | Rewrite cost grows with retained bytes and is unmeasured at production retention. |
+| Ring expiry | A persisted `records.jsonl` is fully rewritten after any eviction, on every `stop()`, and on every retention config change (`captures/service.py:409-421`); all retained raw bytes are also held in the in-memory `_records` deque | Rewrite cost grows with retained bytes and is unmeasured at production retention; steady-state RSS carries a full second copy of the retained window. |
 | Strict typing | `core`, `shared`, `analysis`, `plugins`, and `bootstrap.py` pass independently | Current strict errors: associations 3, captures 15, studies 11, replay 11, settings 6, web 27, reports 76. |
 | Compatibility | Locked pydicom 3.0.2, pynetdicom 3.0.4, FastAPI 0.141.0, Starlette 1.3.1 | 166 warnings; direct deprecated fixture calls and a Starlette TestClient transport warning. |
 | OS support | Source suite runs in a 3-OS CI matrix | Wheel/sdist production smoke was only proved locally on macOS. |
@@ -55,6 +55,60 @@ Current warning inventory:
 | Deliberately invalid IS value | 1 | Negative sender catalog test |
 | Starlette TestClient using deprecated `httpx` transport | 1 | Test dependency configuration |
 
+### 2.1 Independent evaluation record (2026-08-01, HEAD `3cc86fa`)
+
+This plan was independently evaluated against the repository before execution. Every quantitative
+claim was re-measured and every structural claim was checked against source. Verdict: **sound and
+workable as written, with the corrections below applied in place.**
+
+Verified exact (no change needed):
+
+- `uv run pytest -q` reproduces `540 passed, 17 skipped, 166 warnings`.
+- Per-slice strict BasedPyright counts reproduce exactly: associations 3, captures 15, studies 11,
+  replay 11, settings 6, web 27, reports 76; analysis, plugins, and `bootstrap.py` are clean.
+- Locked versions match: pydicom 3.0.2, pynetdicom 3.0.4, FastAPI 0.141.0, Starlette 1.3.1.
+- Warning category counts reproduce (42 `write_like_original`, 20+20 `Dataset`, 30+30 `FileDataset`,
+  22 unknown keyword, 1 invalid IS, 1 Starlette transport).
+- ADR-0036 and ADR-0037 are confirmed unallocated; ADR-0035 exists (direct sqlite3, Accepted).
+- `httpx2` (PRC-501) is a real, Pydantic-maintained package; Starlette 1.2+ deprecates plain `httpx`
+  for `TestClient` and 1.3+ lists `httpx2` as the TestClient dependency (`starlette[full]`). The
+  preferred minimal path in PRC-501 is correct.
+- EventBus semaphore/pending-count/completion-callback, `list_captures_page()` + persisted
+  `object_size`, single final projection rebuild in `captures/repository.py:269-294`, and scattered
+  `0xA700` literals (`associations/network.py:289,732`; `captures/service.py:792-793`) all confirmed.
+
+Defects found and corrected in place:
+
+1. `_SQLiteResourceStore.list_page()` lives in `bootstrap.py:311-324`, not in a slice repository;
+   PRC-301 must move or re-home the paging protocol, not just extend it.
+2. PRC-101 step 6 overstated the defect: `_record_event()` catches only `(OSError, ValueError)` and
+   increments `_persistence_failures` (`captures/service.py:804-815`) — the real gap is that the
+   counter never affects C-STORE outcome or bus delivery, not broad swallowing. Wording corrected.
+3. PRC-103 referenced `pytest --count`, which requires `pytest-repeat` — a dependency the same
+   sentence forbids. Replaced with an external repeat loop.
+4. PRC-200 claimed the capture engine is already on `app.state`; it is passed only to `create_app()`
+   (`bootstrap.py:818`). The runtime result must carry it from bootstrap locals. Corrected.
+5. PRC-000 step 5 now names the audit finding it checks (API-001).
+6. §3 and Work Package 3 now reference ADR-0035 (the ratified sqlite3 storage seam governs
+   pagination/rebuild work); PRC-001 acceptance also references ADR-0008 (ring buffer) since the
+   ratified lock order includes the ring lock.
+7. §2 ring-expiry row understated the defect (rewrite also happens on every `stop()` and config
+   change; full retained bytes held in memory). Corrected.
+8. PRC-700 now includes refreshing the stale ADR inventory in `CLAUDE.md` (lists 33 ADRs, omits
+   ADR-0035).
+
+Residual risks accepted (no plan change required):
+
+- C-STORE status specifics `0xC210`/`0xC211` are implementation-defined codes inside the 0xCxxx
+  "cannot understand" class; PRC-001 already requires verifying semantics against the locked
+  pynetdicom/pydicom documentation before acceptance.
+- The PRC-002 structural gate "zero filesystem stats/opens" for capture pages depends on persisted
+  `object_size` being complete for legacy rows; PRC-301 must assert this during rebuild rather than
+  assume it.
+- Per-record fsync on ring append (`_append_persisted`) is out of scope for the eviction write-
+  amplification gate; if PRC-300 measurement shows append-path fsync dominating at production
+  retention, that is a new finding requiring its own ADR, not silent scope growth.
+
 ## 3. Non-Negotiable Constraints
 
 1. Preserve ADR-0002: one asyncio-owned EventBus and one explicit pynetdicom thread boundary.
@@ -64,7 +118,8 @@ Current warning inventory:
 4. Capture/persistence paths never silently drop. UI paths may retain their documented drop-oldest
    behavior with exact counters.
 5. Capture directories remain authoritative. `index.db` remains disposable. `app.db` remains
-   authoritative.
+   authoritative. Pagination, rebuild, and storage work must go through the ADR-0035
+   `StorageDatabases` seam and preserve WAL/busy-timeout/local-filesystem policy.
 6. No `time` or `uuid` imports outside `core`; tests use injected clocks/IDs except true
    process-boundary elapsed-time harnesses.
 7. No cross-slice internal imports. Add the smallest `contracts.py` protocol when a boundary must
@@ -111,10 +166,11 @@ Steps:
 3. Run each unchecked slice independently and update the strict-error counts in the PR. Counts are
    planning information, not acceptance targets; all must reach zero.
 4. Capture warning category/count output from one unfiltered full test run.
-5. Confirm the original readiness audit's unchecked provider item against
-   `build_production_app()`. Required production routes must use real providers. If any route still
-   uses an empty/null provider for a capability claimed by v0.1.0, stop and add a separately scoped
-   finding before continuing.
+5. Confirm the original readiness audit's unchecked provider item (finding API-001; audit checklist
+   entry "No production route uses an empty in-memory/null provider for every advertised optional
+   capability") against `build_production_app()`. Required production routes must use real
+   providers. If any route still uses an empty/null provider for a capability claimed by v0.1.0,
+   stop and add a separately scoped finding before continuing.
 6. Confirm all existing test DICOM files are generated synthetic fixtures.
 
 Acceptance:
@@ -156,7 +212,7 @@ choose and specify the following design unless review identifies a concrete viol
 
 Acceptance:
 
-- ADR is Accepted, indexed, and consistent with ADR-0002, ADR-0017, and ADR-0022;
+- ADR is Accepted, indexed, and consistent with ADR-0002, ADR-0008, ADR-0017, and ADR-0022;
 - no production code lands in this commit.
 
 Commit: `docs(adr): ratify capture ingress ownership and saturation`
@@ -254,8 +310,10 @@ Steps:
    immediately before durable append.
 5. Ensure ring append and active-session append have an explicit outcome. A partial success must be
    diagnosed; C-STORE cannot report success when required active-capture persistence failed.
-6. Convert broad persistence swallowing in `_record_event()` into a visible failure state. The bus
-   subscriber must not claim delivery while every active package append failed.
+6. `_record_event()` currently catches `(OSError, ValueError)` and only increments
+   `_persistence_failures`. Convert this into a visible failure state: the bus subscriber must not
+   claim delivery while every active package append failed, and the C-STORE outcome must reflect
+   required-persistence failure.
 7. Make stop, interrupt, and engine stop idempotent and safe when invoked concurrently.
 8. Preserve manifest digests, object inventories, client-asserted counts, sequence ordering, and
    package recovery behavior.
@@ -347,7 +405,8 @@ bounded polling only at the process/network boundary.
 
 Acceptance:
 
-- scenarios pass repeatedly (`pytest --count` may be used locally but must not add a dependency);
+- scenarios pass repeatedly (repeat via an external shell loop locally; do not add `pytest-repeat`
+  or any other test dependency);
 - test timeout produces a useful failure rather than hanging CI;
 - tests carry `component`, `dicom`, and `slow` markers as appropriate.
 
@@ -367,7 +426,10 @@ test environment variables or private lifecycle list access.
 Steps:
 
 1. Extract a small internal `ProductionRuntime` result from composition containing the ASGI app and
-   named handles already stored in `app.state` (lifecycle, capture engine, listener, bus, paths).
+   named handles (lifecycle, capture engine, listener, bus, paths). Note: the capture engine is
+   currently passed only to `create_app()` (`bootstrap.py:818`) and is not on `app.state`; carry it
+   from bootstrap locals into the runtime result. The remaining handles are already on `app.state`
+   (`bootstrap.py:852-869`).
 2. Keep `build_production_app(config)` unchanged as the public production entry and make it return
    `build_production_runtime(config).app`.
 3. Do not add runtime behavior switches, hidden HTTP routes, or environment-only fault injection.
@@ -484,8 +546,10 @@ bootstrap adapters, API tests, OpenAPI artifact only if contract changes
 Steps:
 
 1. Replace optional `getattr(list_page)` behavior in production with an explicit page-query
-   protocol. Keep the in-memory adapter for tests but make production conformance statically
-   checkable.
+   protocol. `_SQLiteResourceStore.list_page()` currently lives in `bootstrap.py:311-324`; re-home
+   the paging protocol into the owning slice's `contracts.py`/`repository.py` rather than extending
+   a bootstrap-local class. Keep the in-memory adapter for tests but make production conformance
+   statically checkable. All storage access stays behind the ADR-0035 `StorageDatabases` seam.
 2. Define validated query objects containing resource, page/limit, supported sort specs, supported
    filter expression, and deterministic tie-breaker.
 3. Translate only whitelisted sort/filter fields to parameterized SQL. Never interpolate user
@@ -545,7 +609,9 @@ Acceptance:
 - exactly one final projection rebuild;
 - N/2N structural scaling and accepted reference timing pass;
 - no ready response over partial current-process projections;
-- crash/restart converges byte-for-byte.
+- crash/restart converges byte-for-byte;
+- all schema/SQL changes conform to ADR-0035 (parameterized SQL, `StorageDatabases` seam, explicit
+  row-to-domain mapping).
 
 Commit: `perf(storage): prove linear recoverable index rebuilds`
 
@@ -827,7 +893,9 @@ Update only verified claims:
 7. update known limitations for anything measured but not ratified;
 8. update the original readiness audit checklist only after evidence exists. Keep original finding
    history; add closure references rather than rewriting discovery facts;
-9. confirm no real/de-identified patient data entered any commit.
+9. refresh the ADR inventory in `CLAUDE.md` (it currently lists 33 ADRs and omits ADR-0035) so it
+   covers ADR-0035 and the new ADRs from PRC-001/PRC-002;
+10. confirm no real/de-identified patient data entered any commit.
 
 Acceptance:
 
