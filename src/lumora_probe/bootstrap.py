@@ -42,6 +42,7 @@ from lumora_probe.studies.repository import (
 )
 from lumora_probe.studies.service import DecodeService, LRUFrameCache, MetadataInspectorService
 from lumora_probe.web.api import create_app
+from lumora_probe.web.event_routes import EventPageQuery
 from lumora_probe.web.live import LiveEventSource
 from lumora_probe.web.security import SecurityPolicy
 from lumora_probe.web.transfer_inspector import TransferInspectorService
@@ -303,11 +304,17 @@ class _IndexRecoveryAdapter:
 class _SQLiteResourceStore:
     """Async read adapter for rebuildable index projections."""
 
-    _queries: ClassVar[dict[str, tuple[str, str]]] = {
-        "studies": ("SELECT * FROM studies ORDER BY study_uid", "study_uid"),
-        "series": ("SELECT * FROM series ORDER BY study_uid, series_uid", "series_uid"),
-        "instances": ("SELECT * FROM instances ORDER BY instance_id", "sop_instance_uid"),
-        "events": ("SELECT * FROM event_window ORDER BY capture_id, sequence", "event_id"),
+    _queries: ClassVar[dict[str, tuple[str, tuple[str, ...]]]] = {
+        "studies": ("SELECT * FROM studies ORDER BY study_uid", ("study_uid",)),
+        "series": (
+            "SELECT * FROM series ORDER BY study_uid, series_uid",
+            ("study_uid", "series_uid"),
+        ),
+        "instances": ("SELECT * FROM instances ORDER BY instance_id", ("instance_id",)),
+        "events": (
+            "SELECT * FROM event_window ORDER BY capture_id, sequence",
+            ("capture_id", "sequence"),
+        ),
     }
 
     def __init__(self, storage: StorageDatabases) -> None:
@@ -388,12 +395,10 @@ class _SQLiteResourceStore:
             if column is None:
                 raise ValueError(f"unsupported {resource} sort: {name}")
             order.append(f"{column} {'DESC' if descending else 'ASC'}")
-        tie = query[1]
-        if (
-            tie not in {raw.lstrip("+-") for raw in (sort or default_order).split(",")}
-            and tie in allowed
-        ):
-            order.append(f"{allowed[tie]} ASC")
+        requested = {raw.lstrip("+-") for raw in (sort or default_order).split(",")}
+        for tie in query[1]:
+            if tie not in requested and tie in allowed:
+                order.append(f"{allowed[tie]} ASC")
         rows = await self.storage.index.execute_read(
             f"SELECT COUNT(*) AS total FROM {table}{where}", parameters
         )
@@ -634,6 +639,23 @@ class _LiveEvidenceStore:
         sort: str | None = None,
         filter: str | None = None,
     ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        if resource == "events":
+            return await self.list_events_page(
+                EventPageQuery(
+                    offset=offset,
+                    limit=limit,
+                    sort=sort,
+                    filter=filter,
+                    correlation_id=None,
+                    sequence=None,
+                    sequence_from=None,
+                    sequence_to=None,
+                    occurred_from=None,
+                    occurred_to=None,
+                )
+            )
+        if resource == "associations":
+            return await self.list_associations_page(offset=offset, limit=limit, sort=sort, filter=filter)
         values = list(await self.list(resource))
         if sort:
             for raw in reversed(sort.split(",")):
@@ -646,10 +668,170 @@ class _LiveEvidenceStore:
         total = len(values)
         return tuple(values[offset : offset + limit]), total
 
+    async def list_events_page(
+        self, query: EventPageQuery
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        """Page indexed events in SQLite without materializing the standing collection."""
+        allowed = {
+            "capture_id": "capture_id",
+            "event_id": "json_extract(raw_json, '$.event_id')",
+            "event_name": "json_extract(raw_json, '$.event_name')",
+            "correlation_id": "json_extract(raw_json, '$.correlation_id')",
+            "aggregate_id": "json_extract(raw_json, '$.aggregate_id')",
+            "origin": "json_extract(raw_json, '$.origin')",
+            "sequence": "sequence",
+            "occurred_at": "COALESCE(json_extract(raw_json, '$.occurred_at'), observed_at)",
+            "severity": "json_extract(raw_json, '$.severity')",
+        }
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if query.correlation_id is not None:
+            clauses.append(f"{allowed['correlation_id']} = ?")
+            parameters.append(query.correlation_id)
+        if query.sequence is not None:
+            clauses.append("sequence = ?")
+            parameters.append(query.sequence)
+        if query.sequence_from is not None:
+            clauses.append("sequence >= ?")
+            parameters.append(query.sequence_from)
+        if query.sequence_to is not None:
+            clauses.append("sequence <= ?")
+            parameters.append(query.sequence_to)
+        if query.occurred_from is not None:
+            clauses.append(f"{allowed['occurred_at']} >= ?")
+            parameters.append(query.occurred_from)
+        if query.occurred_to is not None:
+            clauses.append(f"{allowed['occurred_at']} <= ?")
+            parameters.append(query.occurred_to)
+        if query.filter:
+            field, separator, expected = query.filter.partition(":")
+            if separator:
+                clauses.append(f"LOWER(CAST({allowed[field]} AS TEXT)) = LOWER(?)")
+                parameters.append(expected)
+            else:
+                searchable = tuple(allowed[name] for name in ("event_id", "event_name", "correlation_id", "aggregate_id", "origin"))
+                clauses.append(" OR ".join(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in searchable))
+                parameters.extend([f"%{query.filter}%"] * len(searchable))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        order: list[str] = []
+        for raw in (query.sort or "capture_id,sequence").split(","):
+            descending = raw.startswith("-")
+            field = raw.lstrip("+-")
+            order.append(f"{allowed[field]} {'DESC' if descending else 'ASC'}")
+        requested = {raw.lstrip("+-") for raw in (query.sort or "capture_id,sequence").split(",")}
+        for field in ("capture_id", "sequence"):
+            if field not in requested:
+                order.append(f"{field} ASC")
+
+        count_rows = await self.storage.index.execute_read(
+            f"SELECT COUNT(*) AS total FROM event_window{where}", parameters
+        )
+        total = int(count_rows[0]["total"]) if count_rows else 0
+        rows = await self.storage.index.execute_read(
+            "SELECT raw_json, observed_at FROM event_window"
+            f"{where} ORDER BY {', '.join(order)} LIMIT ? OFFSET ?",
+            (*parameters, query.limit, query.offset),
+        )
+        return tuple(_event_mapping(json.loads(row["raw_json"])) for row in rows), total
+
+    async def list_associations_page(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        sort: str | None = None,
+        filter: str | None = None,
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        """Aggregate association evidence in SQL before applying page bounds."""
+        base = """
+            WITH ranked AS (
+                SELECT
+                    json_extract(raw_json, '$.aggregate_id') AS association_id,
+                    json_extract(raw_json, '$.event_name') AS event_name,
+                    COALESCE(json_extract(raw_json, '$.occurred_at'), observed_at) AS occurred_at,
+                    json_extract(raw_json, '$.payload.calling_ae') AS calling_ae,
+                    json_extract(raw_json, '$.payload.called_ae') AS called_ae,
+                    sequence,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY json_extract(raw_json, '$.aggregate_id')
+                        ORDER BY sequence DESC
+                    ) AS latest
+                FROM event_window
+                WHERE json_extract(raw_json, '$.aggregate_type') = 'Association'
+            ), grouped AS (
+                SELECT
+                    association_id,
+                    CASE
+                        WHEN MAX(CASE WHEN latest = 1 THEN event_name END) = 'AssociationReleased'
+                            THEN 'released'
+                        WHEN MAX(CASE WHEN latest = 1 THEN event_name END) = 'AssociationAborted'
+                            THEN 'aborted'
+                        WHEN MAX(CASE WHEN latest = 1 THEN event_name END) = 'AssociationRejected'
+                            THEN 'rejected'
+                        WHEN MAX(CASE WHEN latest = 1 THEN event_name END) IS NOT NULL
+                            THEN lower(substr(MAX(CASE WHEN latest = 1 THEN event_name END), 12))
+                        ELSE 'unknown'
+                    END AS status,
+                    MIN(occurred_at) AS started_at,
+                    MAX(CASE WHEN event_name IN
+                        ('AssociationReleased', 'AssociationAborted', 'AssociationRejected')
+                        THEN occurred_at END) AS completed_at,
+                    MAX(calling_ae) AS calling_ae,
+                    MAX(called_ae) AS called_ae
+                FROM ranked
+                GROUP BY association_id
+            )
+        """
+        allowed = {
+            "association_id": "association_id",
+            "status": "status",
+            "started_at": "started_at",
+            "completed_at": "completed_at",
+            "calling_ae": "calling_ae",
+            "called_ae": "called_ae",
+        }
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if filter:
+            field, separator, expected = filter.partition(":")
+            if separator:
+                clauses.append(f"LOWER(CAST({allowed[field]} AS TEXT)) = LOWER(?)")
+                parameters.append(expected)
+            else:
+                clauses.append(" OR ".join(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in allowed.values()))
+                parameters.extend([f"%{filter}%"] * len(allowed))
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        order: list[str] = []
+        for raw in (sort or "association_id").split(","):
+            descending = raw.startswith("-")
+            field = raw.lstrip("+-")
+            order.append(f"{allowed[field]} {'DESC' if descending else 'ASC'}")
+        if "association_id" not in {raw.lstrip("+-") for raw in (sort or "association_id").split(",")}: 
+            order.append("association_id ASC")
+        count_rows = await self.storage.index.execute_read(
+            f"{base} SELECT COUNT(*) AS total FROM grouped{where}", parameters
+        )
+        total = int(count_rows[0]["total"]) if count_rows else 0
+        rows = await self.storage.index.execute_read(
+            f"{base} SELECT * FROM grouped{where} ORDER BY {', '.join(order)} LIMIT ? OFFSET ?",
+            (*parameters, limit, offset),
+        )
+        return tuple(dict(row) for row in rows), total
+
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
-        records = await self.list(resource)
-        key = "event_id" if resource == "events" else "association_id"
-        return next((record for record in records if str(record.get(key)) == resource_id), None)
+        if resource == "events":
+            rows = await self.storage.index.execute_read(
+                "SELECT raw_json FROM event_window "
+                "WHERE json_extract(raw_json, '$.event_id') = ? LIMIT 1",
+                (resource_id,),
+            )
+            return _event_mapping(json.loads(rows[0]["raw_json"])) if rows else None
+        if resource == "associations":
+            records, _total = await self.list_associations_page(
+                offset=0, limit=1, filter=f"association_id:{resource_id}"
+            )
+            return records[0] if records else None
+        return None
 
     async def delete(self, resource: str, resource_id: str) -> bool:
         return False

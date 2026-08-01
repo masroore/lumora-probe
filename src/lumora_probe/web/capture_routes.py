@@ -8,8 +8,8 @@ from typing import Any, Protocol
 
 from fastapi import APIRouter, HTTPException, Query
 
-from .pagination import Page, PaginationParams, paginate
-from .query import QueryError, QueryPolicy, apply_query, parse_filter, parse_sort
+from .pagination import Page
+from .query import QueryError, QueryPolicy, parse_filter, parse_sort
 from .resources import InMemoryResourceStore, ResourceStore
 
 _CAPTURE_POLICY = QueryPolicy.from_fields(
@@ -83,19 +83,9 @@ def create_capture_router(
                 sort=sort,
                 filter=filter,
             )
-            return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
         except QueryError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        except (AttributeError, NotImplementedError):
-            records = await resource_store.list("captures")
-            records = apply_query(
-                records,
-                policy=_CAPTURE_POLICY,
-                value_for=_mapping_value,
-                sort=sort,
-                filter=filter,
-            )
-        return paginate(records, PaginationParams(page=page, page_size=page_size)).as_dict()
+        return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
 
     @router.get("/{capture_id}")
     async def get_capture(capture_id: str) -> Mapping[str, Any]:  # pyright: ignore[reportUnusedFunction]
@@ -112,10 +102,6 @@ def create_capture_router(
         return {"deleted": True, "capture_id": capture_id}
 
     return router
-
-
-def _mapping_value(item: Mapping[str, Any], field: str) -> Any:
-    return item.get(field)
 
 
 __all__: tuple[str, ...] = ()

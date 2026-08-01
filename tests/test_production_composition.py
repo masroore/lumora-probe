@@ -106,6 +106,71 @@ def _stop(process: subprocess.Popen[str]) -> tuple[str, str]:
     return stdout, stderr
 
 
+def _start_forced_deadline_process(
+    data_dir: Path, http_port: int, dicom_port: int
+) -> subprocess.Popen[str]:
+    """Start the real composition with only the test-owned drain barrier wrapped."""
+    script = r'''
+import asyncio
+import uvicorn
+
+from lumora_probe.bootstrap import build_production_runtime
+from lumora_probe.core.config import load_startup_config
+
+
+async def main() -> None:
+    config, _sources = load_startup_config()
+    runtime = build_production_runtime(config)
+    original_start = runtime.lifecycle.start
+    original_drain = runtime.capture_engine.drain
+    drain_entered = asyncio.Event()
+
+    async def start() -> None:
+        await original_start()
+        await runtime.capture_engine.start_session(source="forced-process-test")
+
+    async def drain() -> None:
+        drain_entered.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            # Lifecycle cancels the timed-out drain before invoking interrupt.  Restore the
+            # production method so interrupt_session can flush and seal the package.
+            runtime.capture_engine.drain = original_drain
+            raise
+        await original_drain()
+
+    runtime.lifecycle.start = start
+    runtime.capture_engine.drain = drain
+    server = uvicorn.Server(
+        uvicorn.Config(runtime.app, host=config.bind_host, port=config.port, log_level="error")
+    )
+    await server.serve()
+
+
+asyncio.run(main())
+'''
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "LUMORA_DATA_DIR": str(data_dir),
+            "LUMORA_BIND_HOST": "127.0.0.1",
+            "LUMORA_PORT": str(http_port),
+            "LUMORA_DICOM_BIND_HOST": "127.0.0.1",
+            "LUMORA_DICOM_PORT": str(dicom_port),
+            "LUMORA_ALLOWED_HOSTS": "127.0.0.1,localhost",
+            "LUMORA_SHUTDOWN_GRACE_SECONDS": "0.2",
+        }
+    )
+    return subprocess.Popen(
+        ["uv", "run", "python", "-c", script],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
 @pytest.mark.component
 @pytest.mark.slow
 def test_production_process_composes_dicom_capture_recovery_and_settings(tmp_path: Path) -> None:
@@ -313,5 +378,84 @@ def test_production_process_drains_sustained_dicom_traffic(tmp_path: Path) -> No
         for manifest_path in (tmp_path / "captures").glob("*/manifest.json"):
             state = json.loads(manifest_path.read_text())["state"]
             assert state not in {"created", "running", "stopping"}
+    finally:
+        _stop(restarted)
+
+
+@pytest.mark.component
+@pytest.mark.dicom
+@pytest.mark.slow
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM evidence is POSIX-specific")
+def test_forced_shutdown_marks_active_capture_interrupted_and_recovers(tmp_path: Path) -> None:
+    """A real child process must interrupt, seal, and recover a capture after its deadline."""
+    http_port = _free_port()
+    dicom_port = _free_port()
+    process = _start_forced_deadline_process(tmp_path, http_port, dicom_port)
+    base_url = f"http://127.0.0.1:{http_port}"
+    stop_sender = threading.Event()
+    successes: list[str] = []
+
+    def send_one() -> None:
+        index = 98_000
+        while not stop_sender.is_set():
+            dataset = _dataset(index)
+            try:
+                result = DICOMSCUClient(
+                    DICOMSCUConfig(
+                        host="127.0.0.1",
+                        port=dicom_port,
+                        calling_ae="FORCED-SCU",
+                        called_ae="LUMORA",
+                    )
+                ).store_dataset(
+                    dataset,
+                    abstract_syntax=str(SecondaryCaptureImageStorage),
+                    transfer_syntax=str(ExplicitVRLittleEndian),
+                    file_meta=dataset.file_meta,
+                )
+            except Exception:  # network closes are expected once shutdown starts
+                return
+            if result.success:
+                successes.append(str(dataset.SOPInstanceUID))
+            index += 1
+
+    sender = threading.Thread(target=send_one)
+    try:
+        _wait_ready(base_url)
+        sender.start()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and not successes:
+            time.sleep(0.05)
+        assert successes, "forced-shutdown child did not acknowledge synthetic C-STORE traffic"
+
+        stop_sender.set()
+        process.send_signal(signal.SIGTERM)
+        try:
+            _stdout, stderr = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired as error:
+            process.kill()
+            process.communicate(timeout=5)
+            raise AssertionError("forced shutdown child required kill fallback") from error
+        assert process.returncode in {0, -signal.SIGTERM, 128 + signal.SIGTERM, 143}, stderr
+        assert "Task exception was never retrieved" not in stderr
+    finally:
+        stop_sender.set()
+        sender.join(timeout=10)
+        if process.poll() is None:
+            _stop(process)
+
+    manifests = list((tmp_path / "captures").glob("*/manifest.json"))
+    assert manifests
+    states = [json.loads(path.read_text()) for path in manifests]
+    interrupted = [item for item in states if item["state"] == "interrupted"]
+    assert interrupted
+    assert all(item["interruption_reason"] for item in interrupted)
+
+    restarted_http = _free_port()
+    restarted_dicom = _free_port()
+    restarted = _start(tmp_path, restarted_http, restarted_dicom, shutdown_grace_seconds=5)
+    try:
+        _wait_ready(f"http://127.0.0.1:{restarted_http}")
+        assert all(json.loads(path.read_text())["state"] not in {"created", "running", "stopping"} for path in manifests)
     finally:
         _stop(restarted)

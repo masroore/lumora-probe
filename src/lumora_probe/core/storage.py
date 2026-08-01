@@ -103,10 +103,13 @@ CREATE TABLE IF NOT EXISTS event_window (
 );
 
 CREATE INDEX IF NOT EXISTS idx_captures_created_at ON captures(created_at);
+CREATE INDEX IF NOT EXISTS idx_captures_state_created_id ON captures(state, created_at, capture_id);
 CREATE INDEX IF NOT EXISTS idx_instances_study ON instances(study_uid);
 CREATE INDEX IF NOT EXISTS idx_instances_series ON instances(study_uid, series_uid);
 CREATE INDEX IF NOT EXISTS idx_instances_sop ON instances(sop_instance_uid);
+CREATE INDEX IF NOT EXISTS idx_instances_created_id ON instances(created_at, instance_id);
 CREATE INDEX IF NOT EXISTS idx_event_window_event_name ON event_window(capture_id, event_name);
+CREATE INDEX IF NOT EXISTS idx_event_window_observed ON event_window(observed_at, capture_id, sequence);
 """
 
 _APP_SCHEMA = """

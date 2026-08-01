@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 
 import pydicom
 
+from lumora_probe.core.errors import LumoraError
 from lumora_probe.core.lifecycle import ServiceHealth
 from lumora_probe.shared.events import EventEnvelope, EventOrigin
 
@@ -132,6 +133,31 @@ class RingBufferStatus:
         }
 
 
+RING_BUFFER_FORMAT_VERSION = 2
+
+
+class RingRecoveryError(LumoraError):
+    """A persisted ring buffer cannot be read safely by this release."""
+
+
+@dataclass(slots=True)
+class _StoredRingRecord:
+    """Metadata reference for one persisted record; raw bytes stay on disk."""
+
+    kind: str
+    occurred_at: datetime
+    recorded_at: datetime
+    monotonic_ns: int
+    aggregate_id: str | None
+    metadata: Mapping[str, Any]
+    size: int
+    segment: int | None = None
+    offset: int | None = None
+    line_length: int | None = None
+    source_path: Path | None = None
+    raw: bytes | None = None
+
+
 class RingBufferService:
     """Bounded, always-on evidence buffer with deterministic retention."""
 
@@ -147,13 +173,15 @@ class RingBufferService:
         self.config = config or RingBufferConfig()
         self.clock = clock
         self.root = root.expanduser().resolve() if root is not None else None
-        self._records: deque[RingBufferRecord] = deque()
-        self._record_segments: deque[int] = deque()
+        self._records: deque[_StoredRingRecord] = deque()
         self._bytes_used = 0
         self._started = False
         self._segment_target_bytes = 8 * 1024 * 1024
         self._active_segment = 0
         self._active_segment_bytes = 0
+        self._segment_rotations = 0
+        self._dirty_segments: set[int] = set()
+        self._legacy_loaded = False
         self._persisted_bytes = 0
         self._compaction_bytes = 0
         self._lock = threading.RLock()
@@ -169,7 +197,10 @@ class RingBufferService:
             return {
                 "append_bytes": self._persisted_bytes,
                 "compaction_bytes": self._compaction_bytes,
-                "segment_count": len(set(self._record_segments)),
+                "segment_count": len(
+                    {record.segment for record in self._records if record.segment is not None}
+                ),
+                "segment_rotations": self._segment_rotations,
             }
 
     def update_config(
@@ -192,24 +223,32 @@ class RingBufferService:
                 events_only=self.config.events_only if events_only is None else events_only,
             )
             removed = self._expire(self.clock.now())
-            while self._records and self._bytes_used > self.config.max_bytes:
-                removed_record = self._records.popleft()
-                self._record_segments.popleft()
-                self._bytes_used -= removed_record.size
+            # A single record larger than the configured cap is retained on its own.  Dropping
+            # it after durably appending would make the persisted ring disagree with its live
+            # index and silently lose the newest evidence.
+            while len(self._records) > 1 and self._bytes_used > self.config.max_bytes:
+                self._drop_left()
                 removed = True
             if removed and self.root is not None:
-                self._rewrite()
+                self._compact_persisted()
 
     async def start(self) -> None:
         with self._lock:
             self._load()
-            if self._expire(self.clock.now()) and self.root is not None:
-                self._rewrite()
+            removed = self._expire(self.clock.now())
+            while len(self._records) > 1 and self._bytes_used > self.config.max_bytes:
+                self._drop_left()
+                removed = True
+            if self.root is not None and (removed or self._dirty_segments or self._legacy_loaded):
+                self._compact_persisted()
+            elif self.root is not None:
+                self._write_metadata()
         self._started = True
 
     async def stop(self) -> None:
         with self._lock:
-            self._rewrite()
+            if self.root is not None:
+                self._compact_persisted()
         self._started = False
 
     async def stop_accepting(self) -> None:
@@ -340,13 +379,14 @@ class RingBufferService:
         start_utc = _utc(start) if start is not None else None
         end_utc = _utc(end) if end is not None else None
         with self._lock:
-            return tuple(
+            selected = tuple(
                 record
                 for record in self._records
                 if (start_utc is None or record.occurred_at >= start_utc)
                 and (end_utc is None or record.occurred_at <= end_utc)
                 and (aggregate_id is None or record.aggregate_id == aggregate_id)
             )
+            return tuple(self._materialize(record) for record in selected)
 
     def status(self) -> RingBufferStatus:
         with self._lock:
@@ -369,28 +409,38 @@ class RingBufferService:
 
     def _append(self, record: RingBufferRecord) -> None:
         with self._lock:
-            self._records.append(record)
-            self._record_segments.append(self._active_segment)
-            self._bytes_used += record.size
+            stored = _StoredRingRecord(
+                kind=record.kind,
+                occurred_at=record.occurred_at,
+                recorded_at=record.recorded_at,
+                monotonic_ns=record.monotonic_ns,
+                aggregate_id=record.aggregate_id,
+                metadata=dict(record.metadata),
+                size=record.size,
+                raw=None if self.root is not None else record.raw,
+            )
+            self._records.append(stored)
+            self._bytes_used += stored.size
             removed = self._expire(record.recorded_at)
-            while self._records and self._bytes_used > self.config.max_bytes:
-                expired = self._records.popleft()
-                self._record_segments.popleft()
-                self._bytes_used -= expired.size
+            while len(self._records) > 1 and self._bytes_used > self.config.max_bytes:
+                self._drop_left()
                 removed = True
             if self.root is not None:
+                self._append_persisted(stored, record)
                 if removed:
                     self._compact_persisted()
-                else:
-                    self._append_persisted(record)
+
+    def _drop_left(self) -> None:
+        removed = self._records.popleft()
+        self._bytes_used -= removed.size
+        if removed.segment is not None:
+            self._dirty_segments.add(removed.segment)
 
     def _expire(self, now: datetime) -> bool:
         removed = False
         cutoff = now - timedelta(seconds=self.config.retention_seconds)
         while self._records and self._records[0].recorded_at < cutoff:
-            expired = self._records.popleft()
-            self._record_segments.popleft()
-            self._bytes_used -= expired.size
+            self._drop_left()
             removed = True
         return removed
 
@@ -414,56 +464,99 @@ class RingBufferService:
     def _load(self) -> None:
         if self.root is None or self._records:
             return
+        self._cleanup_temporary_files()
         metadata = self._metadata_path
         segments = self._segments_path
-        if metadata is not None and segments is not None and metadata.is_file():
+        segment_ids: tuple[int, ...] = ()
+        if metadata is not None and metadata.is_file():
             try:
                 value = json.loads(metadata.read_text(encoding="utf-8"))
-                segment_ids = tuple(int(item) for item in value["segments"])
+                version = int(value["format_version"])
+                if version > RING_BUFFER_FORMAT_VERSION:
+                    raise RingRecoveryError(
+                        code="LUMORA-CAP-RING-001",
+                        message=f"Ring buffer format version {version} is unsupported",
+                        remediation="Upgrade Lumora Probe before opening this data directory.",
+                        context={
+                            "format_version": version,
+                            "supported": RING_BUFFER_FORMAT_VERSION,
+                        },
+                    )
+                if version < 1:
+                    raise ValueError("invalid ring format version")
+                segment_ids = tuple(int(item) for item in value.get("segments", ()))
                 self._active_segment = int(
                     value.get("active_segment", segment_ids[-1] if segment_ids else 0)
                 )
-                for segment in segment_ids:
-                    self._load_segment(self._segment_path(segment), segment)
-                self._active_segment_bytes = (
-                    self._segment_path(self._active_segment).stat().st_size
-                    if self._segment_path(self._active_segment).is_file()
-                    else 0
-                )
-                return
+            except RingRecoveryError:
+                raise
             except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
-                self._records.clear()
-                self._record_segments.clear()
-                self._bytes_used = 0
-        legacy = self._records_path
-        if legacy is None or not legacy.is_file():
+                segment_ids = ()
+                self._active_segment = 0
+        if segments is not None:
+            discovered = {
+                int(path.stem.split("-")[-1])
+                for path in segments.glob("segment-*.jsonl")
+                if path.stem.split("-")[-1].isdigit()
+            }
+            # Metadata publication follows segment fsync.  A process death between those two
+            # renames can leave a durable segment absent from the previous metadata snapshot;
+            # loading the union preserves it without trusting an incomplete metadata file.
+            segment_ids = tuple(sorted(set(segment_ids) | discovered))
+        for segment in segment_ids:
+            self._load_segment(self._segment_path(segment), segment)
+        if self._records:
+            self._active_segment = max(
+                record.segment for record in self._records if record.segment is not None
+            )
+            active_path = self._segment_path(self._active_segment)
+            self._active_segment_bytes = active_path.stat().st_size if active_path.is_file() else 0
             return
-        self._load_segment(legacy, 0)
-        self._active_segment = 0
-        self._compact_persisted()
+        legacy = self._records_path
+        if legacy is not None and legacy.is_file():
+            self._legacy_loaded = True
+            self._load_segment(legacy, 0)
+            self._active_segment = 0
+            self._dirty_segments.add(0)
 
     def _load_segment(self, path: Path, segment: int) -> None:
         if not path.is_file():
             return
-        for line in path.read_bytes().splitlines():
+        offset = 0
+        for line in path.read_bytes().splitlines(keepends=True):
+            line_offset = offset
+            offset += len(line)
             try:
                 value = json.loads(line)
-                record = RingBufferRecord(
+                raw = base64.b64decode(value["raw"], validate=True)
+                metadata = value.get("metadata", {})
+                if not isinstance(metadata, Mapping):
+                    raise TypeError("ring metadata must be an object")
+                stored = _StoredRingRecord(
                     kind=str(value["kind"]),
-                    raw=base64.b64decode(value["raw"]),
-                    occurred_at=datetime.fromisoformat(value["occurred_at"]),
-                    recorded_at=datetime.fromisoformat(value["recorded_at"]),
+                    raw=None,
+                    occurred_at=datetime.fromisoformat(str(value["occurred_at"])),
+                    recorded_at=datetime.fromisoformat(str(value["recorded_at"])),
                     monotonic_ns=int(value["monotonic_ns"]),
-                    aggregate_id=value.get("aggregate_id"),
-                    metadata=dict(value.get("metadata", {})),
+                    aggregate_id=(
+                        str(value["aggregate_id"])
+                        if value.get("aggregate_id") is not None
+                        else None
+                    ),
+                    metadata=dict(cast(Mapping[str, Any], metadata)),
+                    size=len(raw),
+                    segment=segment,
+                    offset=line_offset,
+                    line_length=len(line),
+                    source_path=path,
                 )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                self._dirty_segments.add(segment)
                 continue
-            self._records.append(record)
-            self._record_segments.append(segment)
-            self._bytes_used += record.size
+            self._records.append(stored)
+            self._bytes_used += stored.size
 
-    def _append_persisted(self, record: RingBufferRecord) -> None:
+    def _append_persisted(self, stored: _StoredRingRecord, record: RingBufferRecord) -> None:
         segments = self._segments_path
         if segments is None:
             return
@@ -474,13 +567,18 @@ class RingBufferService:
             and self._active_segment_bytes + len(payload) > self._segment_target_bytes
         ):
             self._active_segment += 1
+            self._segment_rotations += 1
             self._active_segment_bytes = 0
-            self._record_segments[-1] = self._active_segment
         path = self._segment_path(self._active_segment)
+        offset = path.stat().st_size if path.is_file() else 0
         with path.open("ab") as handle:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+        stored.segment = self._active_segment
+        stored.offset = offset
+        stored.line_length = len(payload)
+        stored.source_path = None
         self._active_segment_bytes += len(payload)
         self._persisted_bytes += len(payload)
         self._write_metadata()
@@ -490,35 +588,95 @@ class RingBufferService:
         if segments is None:
             return
         segments.mkdir(parents=True, exist_ok=True)
-        grouped: dict[int, list[RingBufferRecord]] = {}
-        for record, segment in zip(self._records, self._record_segments, strict=True):
-            grouped.setdefault(segment, []).append(record)
-        existing: set[int] = {
+        grouped: dict[int, list[_StoredRingRecord]] = {}
+        for record in self._records:
+            if record.segment is not None:
+                grouped.setdefault(record.segment, []).append(record)
+        existing = {
             int(path.stem.split("-")[-1])
             for path in segments.glob("segment-*.jsonl")
             if path.stem.split("-")[-1].isdigit()
         }
         for segment in sorted(existing - set(grouped)):
             self._segment_path(segment).unlink(missing_ok=True)
-        for segment, records in grouped.items():
-            path = self._segment_path(segment)
-            current = path.read_bytes() if path.is_file() else b""
-            payload = b"".join(_ring_json(record) + b"\n" for record in records)
-            if current != payload:
-                temporary = path.with_name(f".{path.name}.tmp")
-                with temporary.open("wb") as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temporary, path)
-                self._compaction_bytes += len(payload)
+        for segment in sorted(self._dirty_segments & set(grouped)):
+            self._rewrite_segment(segment, grouped[segment])
+        self._dirty_segments.clear()
         if grouped:
             self._active_segment = max(grouped)
-            self._active_segment_bytes = self._segment_path(self._active_segment).stat().st_size
+            active_path = self._segment_path(self._active_segment)
+            self._active_segment_bytes = active_path.stat().st_size if active_path.is_file() else 0
         else:
             self._active_segment = 0
             self._active_segment_bytes = 0
         self._write_metadata()
+        if self._legacy_loaded:
+            legacy = self._records_path
+            if legacy is not None and legacy.exists():
+                legacy.unlink()
+            self._legacy_loaded = False
+
+    def _rewrite_segment(self, segment: int, records: list[_StoredRingRecord]) -> None:
+        path = self._segment_path(segment)
+        temporary = path.with_name(f".{path.name}.tmp")
+        offset = 0
+        with temporary.open("wb") as handle:
+            for stored in records:
+                payload = _ring_json(self._materialize(stored)) + b"\n"
+                handle.write(payload)
+                stored.offset = offset
+                stored.line_length = len(payload)
+                stored.source_path = None
+                offset += len(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        self._compaction_bytes += offset
+
+    def _materialize(self, stored: _StoredRingRecord) -> RingBufferRecord:
+        raw = stored.raw
+        if raw is None:
+            path = stored.source_path or self._segment_path(stored.segment or 0)
+            if stored.offset is None or stored.line_length is None:
+                raise RingRecoveryError(
+                    code="LUMORA-CAP-RING-002",
+                    message="Ring record reference has no durable byte range",
+                    remediation="Restore the ring buffer from a valid backup or remove the corrupt ring data.",
+                    context={"segment": stored.segment},
+                )
+            try:
+                with path.open("rb") as handle:
+                    handle.seek(stored.offset)
+                    line = handle.read(stored.line_length)
+                value = json.loads(line)
+                raw = base64.b64decode(value["raw"], validate=True)
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise RingRecoveryError(
+                    code="LUMORA-CAP-RING-003",
+                    message="Ring record bytes are unreadable",
+                    remediation="Restore the ring buffer from a valid backup or remove the corrupt ring data.",
+                    context={"segment": stored.segment},
+                ) from exc
+        return RingBufferRecord(
+            kind=stored.kind,
+            raw=raw,
+            occurred_at=stored.occurred_at,
+            recorded_at=stored.recorded_at,
+            monotonic_ns=stored.monotonic_ns,
+            aggregate_id=stored.aggregate_id,
+            metadata=dict(stored.metadata),
+        )
+
+    def _cleanup_temporary_files(self) -> None:
+        root = self.root
+        if root is None:
+            return
+        metadata_tmp = root / ".metadata.json.tmp"
+        metadata_tmp.unlink(missing_ok=True)
+        segments = self._segments_path
+        if segments is not None and segments.is_dir():
+            for path in segments.glob(".segment-*.jsonl.tmp"):
+                path.unlink(missing_ok=True)
 
     def _write_metadata(self) -> None:
         path = self._metadata_path
@@ -538,7 +696,7 @@ class RingBufferService:
             handle.write(
                 json.dumps(
                     {
-                        "format_version": 1,
+                        "format_version": RING_BUFFER_FORMAT_VERSION,
                         "active_segment": self._active_segment,
                         "segments": names,
                     },

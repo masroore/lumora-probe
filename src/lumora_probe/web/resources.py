@@ -75,6 +75,27 @@ class InMemoryResourceStore:
         total = len(records)
         return tuple(records[offset : offset + limit]), total
 
+    async def list_events_page(self, query: Any) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        """Serve the event-specific page contract without changing the test adapter shape."""
+        from .event_routes import filter_events
+
+        events = filter_events(tuple(await self.list("events")), query)
+        from .query import QueryPolicy, apply_query
+
+        policy = QueryPolicy.from_fields(
+            sort_fields=("sequence", "occurred_at", "event_name", "severity"),
+            filter_fields=("event_id", "event_name", "correlation_id", "aggregate_id", "origin"),
+        )
+        events = apply_query(
+            events,
+            policy=policy,
+            value_for=lambda item, field: item.get(field),
+            sort=query.sort,
+            filter=query.filter,
+        )
+        total = len(events)
+        return tuple(events[query.offset : query.offset + query.limit]), total
+
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
         value = self._resources.get(resource, {}).get(resource_id)
         return dict(value) if value is not None else None

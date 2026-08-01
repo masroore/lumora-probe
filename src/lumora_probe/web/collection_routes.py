@@ -7,8 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from .pagination import Page, PaginationParams, paginate
-from .query import QueryError, QueryPolicy, apply_query, parse_filter, parse_sort
+from .pagination import Page
+from .query import QueryError, QueryPolicy, parse_filter, parse_sort
 from .resources import InMemoryResourceStore, ResourceStore
 
 
@@ -42,18 +42,9 @@ def create_collection_router(
                 sort=sort,
                 filter=filter,
             )
-            return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
         except QueryError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        except (AttributeError, NotImplementedError):
-            records = apply_query(
-                await resource_store.list(resource),
-                policy=policy,
-                value_for=_mapping_value,
-                sort=sort,
-                filter=filter,
-            )
-        return paginate(records, PaginationParams(page=page, page_size=page_size)).as_dict()
+        return Page(items=tuple(items), page=page, page_size=page_size, total=total).as_dict()
 
     @router.get("/{resource_id}")
     async def get_resource(resource_id: str) -> Mapping[str, Any]:  # pyright: ignore[reportUnusedFunction]
@@ -63,10 +54,6 @@ def create_collection_router(
         return record
 
     return router
-
-
-def _mapping_value(item: Mapping[str, Any], field: str) -> Any:
-    return item.get(field)
 
 
 __all__: tuple[str, ...] = ()

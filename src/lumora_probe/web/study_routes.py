@@ -29,7 +29,7 @@ _PROJECTION_POLICIES = {
         filter_fields=("study_uid", "series_uid"),
     ),
     "instances": QueryPolicy.from_fields(
-        sort_fields=("study_uid", "series_uid", "sop_instance_uid", "created_at"),
+        sort_fields=("instance_id", "study_uid", "series_uid", "sop_instance_uid", "created_at"),
         filter_fields=("capture_id", "study_uid", "series_uid", "sop_instance_uid"),
     ),
 }
