@@ -79,13 +79,21 @@ jobs:
 
       - name: Audit dependencies
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        run: uv run pip-audit --strict -r audit-requirements.txt
+        run: uv run pip-audit --strict -r audit-requirements.txt --no-deps --disable-pip | tee pip-audit-report.txt
+
+      - name: Upload dependency audit
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: |
+            audit-requirements.txt
+            pip-audit-report.txt
 
   interop:
     name: Scheduled DICOM interoperability suite
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -106,7 +114,7 @@ jobs:
       - name: Start interoperability implementations
         run: docker compose -f tests/interop/docker-compose.yml --profile interop up -d --wait dcmtk dcm4che orthanc
 
-      - name: Run non-gating interoperability tests
+      - name: Run interoperability tests
         env:
           LUMORA_INTEROP: "1"
         run: uv run pytest -m interop -q
