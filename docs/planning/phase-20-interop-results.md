@@ -14,8 +14,8 @@ docker compose -f tests/interop/docker-compose.yml --profile interop down -v
 ```
 
 The default quality gate does not start these containers. Without `LUMORA_INTEROP=1`,
-the implementation-facing modules are skipped by design. The final hosted run used implementation
-SHA `05474d5d0bcdebeca559b7d0cc65ab7c977960ac`, CI run `30716410290`, job `91412594111`, and
+the implementation-facing modules are skipped by design. The final hosted run used release-evidence
+SHA `44edd6ecb78c67f7ddd8c6eb845ad712b1769590` (source implementation `c445bec`), CI run `30716744830`, job `91413482214`, and
 reported `15 passed, 556 deselected in 20.86s`.
 
 ## Pinned implementations

@@ -2,16 +2,16 @@
 
 **Status:** Release closure complete; implementation, reference timing, and final-SHA interoperability are evidenced
 **Prepared:** 2026-08-01  
-**Evidence tip:** implementation tip `05474d5`; final hosted CI run `30716410290`
+**Evidence tip:** source implementation tip `c445bec`; documentation tip `1b450d7`; final hosted CI run `30716744830` at release-evidence SHA `44edd6e`
 **Source audit:** `docs/other/lumora-probe-production-readiness-audit-and-implementation-plan.md`  
 **Audience:** execution agent with limited repository context  
 **Scope:** remaining release-closure work only
 
 ## 0. Closure evidence ledger — 2026-08-01
 
-This plan is now an evidence record, not an execution forecast. The implementation tip is
-`05474d5d0bcdebeca559b7d0cc65ab7c977960ac`; the final hosted CI run is
-[30716410290](https://github.com/masroore/lumora-probe/actions/runs/30716410290).
+This plan is now an evidence record, not an execution forecast. The source implementation tip is `c445bec`; documentation is current through `1b450d7`.
+The final hosted CI run is [30716744830](https://github.com/masroore/lumora-probe/actions/runs/30716744830)
+at release-evidence SHA `44edd6e`.
 
 | Requirement | Evidence | Disposition |
 |---|---|---|
@@ -22,15 +22,15 @@ This plan is now an evidence record, not an execution forecast. The implementati
 | Projection rebuild | One final projection rebuild is asserted structurally; no partial readiness is exposed | **PASS — structural** |
 | Ring expiry persistence | Segmented append/recovery/migration/torn-tail/oversized-record tests and bounded compaction assertions | **PASS — structural** |
 | Strict typing and warning policy | `uv run basedpyright`: 0 errors; `uv run pytest -q -W error`: 554 passed, 17 skipped | **PASS** |
-| Installed wheel/sdist matrix | CI run `30716410290`: installed wheel and sdist each passed on Ubuntu, macOS, and Windows; job IDs `91412594137`, `91412594142`, `91412594151`, `91412594153`, `91412594165`, `91412594211` | **PASS — hosted** |
+| Installed wheel/sdist matrix | CI run `30716744830`: installed wheel and sdist each passed on Ubuntu, macOS, and Windows; job IDs `91413482256`, `91413482251`, `91413482249`, `91413482241`, `91413482246`, `91413482258` | **PASS — hosted** |
 | Release documentation and asset gates | `npm run check:assets`, release/guides/audit updates, CI dependency-audit step | **PASS** |
 | Reference p95, 10k/100k/500k timing, N-vs-2N rebuild scaling | `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json` at benchmark commit `c445bec`; one warm-up plus five measured samples on the documented local host | **PASS — reference host only** |
-| Final-SHA external interoperability | Final implementation SHA `05474d5`; CI run `30716410290`, job `91412594111`: `15 passed, 556 deselected` | **PASS — hosted** |
+| Final-SHA external interoperability | Release-evidence SHA `44edd6e` (source implementation `c445bec`); CI run `30716744830`, job `91413482214`: `15 passed, 556 deselected` | **PASS — hosted** |
 
-Hosted final gate evidence at implementation SHA `05474d5`: CI run `30716410290` passed on all
+Hosted final gate evidence at release-evidence SHA `44edd6e` (source implementation `c445bec`): CI run `30716744830` passed on all
 three source-matrix jobs, all six installed-artifact jobs, and the scheduled interoperability job.
-Installed-artifact jobs: wheel Ubuntu `91412594153`, wheel macOS `91412594165`, wheel Windows
-`91412594142`; sdist Ubuntu `91412594137`, sdist macOS `91412594151`, sdist Windows `91412594211`.
+Installed-artifact jobs: wheel Ubuntu `91413482241`, wheel macOS `91413482246`, wheel Windows
+`91413482251`; sdist Ubuntu `91413482256`, sdist macOS `91413482249`, sdist Windows `91413482258`.
 The run retained `dependency-audit` and `coverage-ubuntu-latest-3.13` artifacts. The local reference
 benchmark is recorded separately and is explicitly not a universal latency claim.
 
@@ -1038,9 +1038,9 @@ the end.
 - [x] Ring segmentation, migration, torn-tail recovery, and bounded compaction pass structural tests.
 - [x] `uv run basedpyright` covers all `src/lumora_probe` with zero errors.
 - [x] Default test suite has zero unexpected warnings (`uv run pytest -q -W error`).
-- [x] Wheel and sdist production smoke pass on Linux, macOS, and Windows in CI run `30716410290` (jobs `91412594137`, `91412594142`, `91412594151`, `91412594153`, `91412594165`, `91412594211`).
+- [x] Wheel and sdist production smoke pass on Linux, macOS, and Windows in CI run `30716744830` (jobs `91413482256`, `91413482251`, `91413482249`, `91413482241`, `91413482246`, `91413482258`).
 - [x] Reference performance timings, p95 budgets, and N-vs-2N rebuild scaling pass on the documented local reference host; see `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json`.
-- [x] Final-SHA scheduled DCMTK/dcm4che/Orthanc interoperability passes in CI run `30716410290`, job `91412594111` (`15 passed, 556 deselected`).
+- [x] Final-SHA scheduled DCMTK/dcm4che/Orthanc interoperability passes in CI run `30716744830`, job `91413482214` (`15 passed, 556 deselected`) at release-evidence SHA `44edd6e`.
 - [x] Documentation claims match recorded evidence, including host-specific performance limits and opt-in interoperability.
 - [x] No production route advertises a required capability through an empty/null provider.
 - [x] No real or de-identified patient data was introduced.

@@ -19,11 +19,11 @@ artifacts remain promotion evidence.
 
 ## Evidence still environment-specific
 
-- Six installed-artifact OS combinations passed in hosted CI run `30716410290` (wheel and sdist on
-  Ubuntu, macOS, and Windows) at implementation SHA `05474d5`. The run is the release evidence;
+- Six installed-artifact OS combinations passed in hosted CI run `30716744830` (wheel and sdist on
+  Ubuntu, macOS, and Windows) at release-evidence SHA `44edd6e` (source implementation `c445bec`). The run is the release evidence;
   local execution does not replace it.
 - The final-SHA pinned-container interoperability artifact records 15 passed, 0 failed in hosted
-  CI run `30716410290` (job `91412594111`).
+  CI run `30716744830` (job `91413482214`).
 - Reference performance timing passed the ratified p95/rebuild/ring gates on the documented Phase 18
   local host; results remain host-specific and are not claims for network filesystems or every machine.
 - No authentication, RBAC, PCAP import, PS3.15 de-identification, or network-filesystem SQLite

@@ -29,7 +29,7 @@ PACS, RIS, EMR, diagnostic workstation, clinical archive, or de-identification s
 
 - External interoperability is an opt-in scheduled suite and is intentionally outside the
   default push/pull-request gate. The final pinned-container result is 15 passed, 0 failed in
-  hosted CI run `30716410290`, job `91412594111`, at implementation SHA `05474d5`. Results are
+  hosted CI run `30716744830`, job `91413482214`, at release-evidence SHA `44edd6e` (source implementation `c445bec`). Results are
   published in `docs/planning/phase-20-interop-results.md`.
 - Performance dimensions not ratified as release budgets remain measured evidence rather than
   newly invented gates; see `docs/planning/phase-18-performance-report.md`.
@@ -40,4 +40,4 @@ The checked-in structural performance suite proves bounded query and ring-persis
 it does not claim the ratified p95 budgets on every machine. Reference timing evidence is limited
 to the documented local macOS/SQLite-WAL host. Network filesystems remain outside the supported
 SQLite deployment. Installed wheel/sdist smoke passed in the six-job Linux/macOS/Windows CI matrix in hosted run
-`30716410290`.
+`30716744830`.

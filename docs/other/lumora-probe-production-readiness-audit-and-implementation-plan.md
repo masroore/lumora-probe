@@ -3,7 +3,7 @@
 **Status:** Production-readiness release closure verified on August 1, 2026; historical findings and intentional v1 limitations remain recorded below
 **Audit snapshot:** findings discovered at `b3f6b24`; source revalidated at `25351b4`; final docs-only HEAD `11dd9ee` (`master`)  
 **Audit date:** 2026-08-01  
-**Closure evidence:** implementation SHA `05474d5`; hosted CI run `30716410290`; benchmark `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json`
+**Closure evidence:** source implementation SHA `c445bec`; release-evidence SHA `44edd6e`; hosted CI run `30716744830`; benchmark `docs/planning/phase-18-release-closure-benchmark-2026-08-01.json`
 **Audience:** implementation agent with limited repository context  
 **Scope:** `src/lumora_probe/`, production composition, shared packaging/CI seams, and their tests/docs  
 **Out of scope for the original audit:** changing accepted product scope and replacing the existing
@@ -123,7 +123,7 @@ its selected workflow events.
 | Security | **Mixed** | Host/origin/path/SQL controls, plugin containment, and archive bounds are implemented. Non-loopback process acceptance remains pending. No auth is intentional. |
 | Resource management | **Improved, still needs adversarial evidence** | Archive bounds, bounded default executor, and lifecycle drain are implemented; forced deadline evidence at process boundary remains. |
 | Cross-provider compatibility | **Component-level only** | External DICOM matrix passes direct relay instances, not production composition. |
-| Production readiness | **Release closure verified** | Readiness and advertised DICOM/capture workflow are composed; reference gates pass on the documented local host, the six-artifact matrix passes in CI run `30716410290`, and final-SHA interoperability passes in job `91412594111`. |
+| Production readiness | **Release closure verified** | Readiness and advertised DICOM/capture workflow are composed; reference gates pass on the documented local host, the six-artifact matrix passes in CI run `30716744830`, and final-SHA interoperability passes in job `91413482214` at release-evidence SHA `44edd6e`. |
 
 ## 4. Findings register
 
@@ -952,17 +952,17 @@ Implementation is complete only when all boxes are true:
 - [x] Full pytest passes; remaining skips are justified/opt-in, and final release-required interoperability ran separately in hosted CI.
 - [x] Frontend assets match source (`npm run check:assets`); generated event/OpenAPI artifacts were not changed.
 - [x] Exported-lock dependency audit passes; CI retains the report artifact.
-- [x] Final-SHA pinned-container DICOM interoperability passes against DCMTK, dcm4che, and Orthanc (`15 passed, 0 failed`; CI run `30716410290`, job `91412594111`).
+- [x] Final-SHA pinned-container DICOM interoperability passes against DCMTK, dcm4che, and Orthanc (`15 passed, 0 failed`; CI run `30716744830`, job `91413482214`).
 - [x] README, known limitations, troubleshooting, upgrade, and release status match verified behavior (`docs/release-notes-0.1.0.md`).
 - [x] No real or de-identified patient data was introduced; release tests and fixtures use synthetic DICOM UIDs/data only.
 
 ### Release-closure evidence update — August 1, 2026
 
-The closure implementation at `05474d5` adds ADR-0036 and ADR-0037, a production runtime verification handle,
+The closure implementation at `c445bec` adds ADR-0036 and ADR-0037, a production runtime verification handle,
 bounded DICOM ingress and capture ownership, segmented ring persistence, SQL-backed pagination,
 canonical whole-package strict typing, installed wheel/sdist smoke, and adversarial shutdown/traffic
 tests. Local evidence is recorded in `docs/planning/phase-18-performance-report.md` and
-`docs/release-notes-0.1.0.md`. Hosted CI run `30716410290` passed source quality plus all six
+`docs/release-notes-0.1.0.md`. Hosted CI run `30716744830` passed source quality plus all six
 installed-artifact jobs, the dependency-audit step, and final-SHA interoperability. Reference
 performance gates pass on the documented local host; universal and network-filesystem performance
 claims remain intentionally out of scope.
