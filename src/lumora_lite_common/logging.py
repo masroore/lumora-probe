@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, ClassVar, TextIO
 
 
@@ -49,7 +50,12 @@ class EventLogger:
                 **fields,
             }
             print(
-                json.dumps(payload, ensure_ascii=False, default=str, separators=(",", ":")),
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    default=_json_default,
+                    separators=(",", ":"),
+                ),
                 file=self.stream,
                 flush=True,
             )
@@ -75,3 +81,9 @@ def _text_value(value: Any) -> str:
     if isinstance(value, (list, tuple, set, frozenset)):
         return ",".join(str(item) for item in value)
     return str(value).replace("\n", "\\n")
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, Path):
+        return value.as_posix()
+    return str(value)

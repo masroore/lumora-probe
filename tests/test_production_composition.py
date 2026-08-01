@@ -8,6 +8,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -84,8 +85,13 @@ def _start(
         environment["LUMORA_SHUTDOWN_GRACE_SECONDS"] = str(shutdown_grace_seconds)
     host = "0.0.0.0" if non_loopback else "127.0.0.1"
     trust = ["--trust-network"] if non_loopback else []
+    command = ["uv", "run", "lumora", "serve"]
+    if os.name == "nt":
+        # Avoid leaving the uv shim's child holding captured pipes after termination.
+        command = [sys.executable, "-m", "lumora_probe.cli", "serve"]
+    command.extend(["--host", host, "--port", str(http_port), *trust])
     return subprocess.Popen(
-        ["uv", "run", "lumora", "serve", "--host", host, "--port", str(http_port), *trust],
+        command,
         env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
