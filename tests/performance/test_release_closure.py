@@ -263,3 +263,35 @@ async def test_projection_pages_use_unique_ties_and_direct_point_lookups(tmp_pat
         ).fetchall()
     details = " ".join(str(row[3]) for row in plan)
     assert "idx_instances_created_id" in details or "INTEGER PRIMARY KEY" in details
+
+
+@pytest.mark.component
+@pytest.mark.asyncio
+async def test_ring_deferred_boundary_compaction_recovers_retained_window(tmp_path: Path) -> None:
+    clock = ControllableClock(datetime(2026, 8, 1, tzinfo=UTC))
+    root = tmp_path / "ring"
+    ring = RingBufferService(
+        config=RingBufferConfig(retention_seconds=3600, max_bytes=2_048),
+        clock=clock,
+        root=root,
+    )
+    ring._segment_target_bytes = 1_024  # type: ignore[attr-defined]
+    for index in range(100):
+        ring.record_event_raw(
+            (f'{{"index":{index},"padding":"{"x" * 32}"}}').encode(),
+            occurred_at=clock.now(),
+            monotonic_ns=index,
+        )
+
+    expected = tuple(record.monotonic_ns for record in ring.snapshot())
+    assert ring.persistence_stats["compaction_bytes"] == 0
+    await ring.stop()
+    assert ring.persistence_stats["compaction_bytes"] > 0
+
+    recovered = RingBufferService(
+        config=RingBufferConfig(retention_seconds=3600, max_bytes=2_048),
+        clock=clock,
+        root=root,
+    )
+    await recovered.start()
+    assert tuple(record.monotonic_ns for record in recovered.snapshot()) == expected
