@@ -228,9 +228,7 @@ class CaptureRepository:
                     else:
                         columns = tuple(dict.fromkeys(allowed_filter.values()))
                         clauses.append(
-                            " OR ".join(
-                                f"LOWER({column}) LIKE LOWER(?)" for column in columns
-                            )
+                            " OR ".join(f"LOWER({column}) LIKE LOWER(?)" for column in columns)
                         )
                         parameters.extend([f"%{filter}%"] * len(columns))
                 where = f" WHERE {' AND '.join(clauses)}" if clauses else ""

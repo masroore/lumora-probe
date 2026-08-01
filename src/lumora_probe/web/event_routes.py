@@ -114,7 +114,9 @@ def filter_events(
     """Apply non-collection event predicates for the in-memory test adapter."""
     filtered = events
     if query.correlation_id is not None:
-        filtered = tuple(item for item in filtered if item.get("correlation_id") == query.correlation_id)
+        filtered = tuple(
+            item for item in filtered if item.get("correlation_id") == query.correlation_id
+        )
     if query.sequence is not None:
         filtered = tuple(item for item in filtered if item.get("sequence") == query.sequence)
     if query.sequence_from is not None:

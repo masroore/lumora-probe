@@ -17,7 +17,8 @@ await mkdir(resolve(staticRoot, 'js'), { recursive: true });
 await mkdir(resolve(staticRoot, 'vendor'), { recursive: true });
 await mkdir(vendorRoot, { recursive: true });
 
-await execFileSync(resolve(root, 'node_modules/.bin/tailwindcss'), [
+await execFileSync(process.execPath, [
+  resolve(root, 'node_modules/@tailwindcss/cli/dist/index.mjs'),
   '-i', resolve(root, 'assets/source/app.css'),
   '-o', resolve(staticRoot, 'css/app.css'),
   '--minify',

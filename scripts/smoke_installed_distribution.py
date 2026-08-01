@@ -213,7 +213,13 @@ association.release()
             (log_root / "stdout.log").write_text(stdout, encoding="utf-8")
             (log_root / "stderr.log").write_text(stderr, encoding="utf-8")
             (log_root / "artifact.txt").write_text(str(artifact), encoding="utf-8")
-            if process.returncode not in (0, -15, 143):
+            acceptable_exit_codes = {0, -15, 143}
+            # Windows ``Popen.terminate()`` is a hard process termination and returns 1 for
+            # an otherwise cleanly-started Uvicorn child.  The smoke already proves readiness,
+            # DICOM, promotion, and captured stderr/stdout before this cleanup boundary.
+            if os.name == "nt":
+                acceptable_exit_codes.add(1)
+            if process.returncode not in acceptable_exit_codes:
                 raise RuntimeError(
                     f"installed process failed: {process.returncode}\n{stdout}\n{stderr}"
                 )

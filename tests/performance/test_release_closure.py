@@ -144,7 +144,7 @@ def test_oversized_ring_record_is_retained_as_single_record(tmp_path: Path) -> N
         clock=clock,
         root=tmp_path / "ring",
     )
-    raw = (b'{"padding":"' + b"x" * 240 + b'"}')
+    raw = b'{"padding":"' + b"x" * 240 + b'"}'
 
     ring.record_event_raw(raw, occurred_at=clock.now(), monotonic_ns=1)
 
@@ -189,27 +189,60 @@ async def test_projection_pages_use_unique_ties_and_direct_point_lookups(tmp_pat
     with storage.index.write_transaction() as connection:
         connection.execute(
             "INSERT INTO captures VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("capture-1", str(paths.captures / "capture-1"), str(paths.captures), 1, timestamp,
-             timestamp, "completed", "objects", 0, 0, None, "a" * 64, timestamp),
+            (
+                "capture-1",
+                str(paths.captures / "capture-1"),
+                str(paths.captures),
+                1,
+                timestamp,
+                timestamp,
+                "completed",
+                "objects",
+                0,
+                0,
+                None,
+                "a" * 64,
+                timestamp,
+            ),
         )
         connection.executemany(
             "INSERT INTO instances(capture_id, study_uid, series_uid, sop_instance_uid, "
             "object_digest, object_path, object_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (("capture-1", "study", "series", f"same-{index % 2}", f"digest-{index}",
-              f"objects/digest-{index}", index, timestamp) for index in range(6)),
+            (
+                (
+                    "capture-1",
+                    "study",
+                    "series",
+                    f"same-{index % 2}",
+                    f"digest-{index}",
+                    f"objects/digest-{index}",
+                    index,
+                    timestamp,
+                )
+                for index in range(6)
+            ),
         )
         connection.executemany(
             "INSERT INTO event_window(capture_id, sequence, event_id, event_name, event_version, "
             "observed_at, monotonic_ns, origin, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (("capture-1", index, f"event-{index}", "Observed", 1, timestamp, index,
-              "observed", f'{{"event_id":"event-{index}","sequence":{index}}}')
-             for index in range(6)),
+            (
+                (
+                    "capture-1",
+                    index,
+                    f"event-{index}",
+                    "Observed",
+                    1,
+                    timestamp,
+                    index,
+                    "observed",
+                    f'{{"event_id":"event-{index}","sequence":{index}}}',
+                )
+                for index in range(6)
+            ),
         )
 
     store = _SQLiteResourceStore(storage)
-    items, total = await store.list_page(
-        "instances", offset=2, limit=2, sort="sop_instance_uid"
-    )
+    items, total = await store.list_page("instances", offset=2, limit=2, sort="sop_instance_uid")
     assert total == 6
     assert len(items) == 2
     assert [(item["sop_instance_uid"], item["instance_id"]) for item in items] == sorted(

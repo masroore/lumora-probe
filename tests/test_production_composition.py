@@ -110,7 +110,7 @@ def _start_forced_deadline_process(
     data_dir: Path, http_port: int, dicom_port: int
 ) -> subprocess.Popen[str]:
     """Start the real composition with only the test-owned drain barrier wrapped."""
-    script = r'''
+    script = r"""
 import asyncio
 import uvicorn
 
@@ -149,7 +149,7 @@ async def main() -> None:
 
 
 asyncio.run(main())
-'''
+"""
     environment = os.environ.copy()
     environment.update(
         {
@@ -413,7 +413,7 @@ def test_forced_shutdown_marks_active_capture_interrupted_and_recovers(tmp_path:
                     transfer_syntax=str(ExplicitVRLittleEndian),
                     file_meta=dataset.file_meta,
                 )
-            except Exception:  # network closes are expected once shutdown starts
+            except (OSError, RuntimeError, ValueError):  # network closes are expected at shutdown
                 return
             if result.success:
                 successes.append(str(dataset.SOPInstanceUID))
@@ -456,6 +456,9 @@ def test_forced_shutdown_marks_active_capture_interrupted_and_recovers(tmp_path:
     restarted = _start(tmp_path, restarted_http, restarted_dicom, shutdown_grace_seconds=5)
     try:
         _wait_ready(f"http://127.0.0.1:{restarted_http}")
-        assert all(json.loads(path.read_text())["state"] not in {"created", "running", "stopping"} for path in manifests)
+        assert all(
+            json.loads(path.read_text())["state"] not in {"created", "running", "stopping"}
+            for path in manifests
+        )
     finally:
         _stop(restarted)

@@ -665,7 +665,9 @@ class _LiveEvidenceStore:
                 )
             )
         if resource == "associations":
-            return await self.list_associations_page(offset=offset, limit=limit, sort=sort, filter=filter)
+            return await self.list_associations_page(
+                offset=offset, limit=limit, sort=sort, filter=filter
+            )
         values = list(await self.list(resource))
         if sort:
             for raw in reversed(sort.split(",")):
@@ -719,8 +721,21 @@ class _LiveEvidenceStore:
                 clauses.append(f"LOWER(CAST({allowed[field]} AS TEXT)) = LOWER(?)")
                 parameters.append(expected)
             else:
-                searchable = tuple(allowed[name] for name in ("event_id", "event_name", "correlation_id", "aggregate_id", "origin"))
-                clauses.append(" OR ".join(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in searchable))
+                searchable = tuple(
+                    allowed[name]
+                    for name in (
+                        "event_id",
+                        "event_name",
+                        "correlation_id",
+                        "aggregate_id",
+                        "origin",
+                    )
+                )
+                clauses.append(
+                    " OR ".join(
+                        f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in searchable
+                    )
+                )
                 parameters.extend([f"%{query.filter}%"] * len(searchable))
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         order: list[str] = []
@@ -808,7 +823,12 @@ class _LiveEvidenceStore:
                 clauses.append(f"LOWER(CAST({allowed[field]} AS TEXT)) = LOWER(?)")
                 parameters.append(expected)
             else:
-                clauses.append(" OR ".join(f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)" for column in allowed.values()))
+                clauses.append(
+                    " OR ".join(
+                        f"LOWER(CAST({column} AS TEXT)) LIKE LOWER(?)"
+                        for column in allowed.values()
+                    )
+                )
                 parameters.extend([f"%{filter}%"] * len(allowed))
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         order: list[str] = []
@@ -816,7 +836,9 @@ class _LiveEvidenceStore:
             descending = raw.startswith("-")
             field = raw.lstrip("+-")
             order.append(f"{allowed[field]} {'DESC' if descending else 'ASC'}")
-        if "association_id" not in {raw.lstrip("+-") for raw in (sort or "association_id").split(",")}: 
+        if "association_id" not in {
+            raw.lstrip("+-") for raw in (sort or "association_id").split(",")
+        }:
             order.append("association_id ASC")
         count_rows = await self.storage.index.execute_read(
             f"{base} SELECT COUNT(*) AS total FROM grouped{where}", parameters
