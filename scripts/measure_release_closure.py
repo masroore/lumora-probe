@@ -394,15 +394,7 @@ async def _run(workload: Workload) -> dict[str, Any]:
         ring = await _measure_ring(root)
         return {
             "commit": _git_commit(),
-            "host": {
-                "platform": platform.platform(),
-                "system": platform.system(),
-                "processor": platform.processor(),
-                "python": platform.python_version(),
-                "sqlite": sqlite3.sqlite_version,
-                "filesystem": str(root),
-                "pid": os.getpid(),
-            },
+            "host": _host_identity(),
             "workload": asdict(workload),
             "projection_population_seconds": round(populate_seconds, 3),
             "pagination": pagination,
@@ -413,6 +405,25 @@ async def _run(workload: Workload) -> dict[str, Any]:
             },
             "ring": ring,
         }
+
+
+def _host_identity() -> dict[str, Any]:
+    memory_bytes: int | None = None
+    try:
+        memory_bytes = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (AttributeError, OSError, ValueError):
+        pass
+    return {
+        "platform": platform.platform(),
+        "system": platform.system(),
+        "processor": platform.processor(),
+        "python": platform.python_version(),
+        "sqlite": sqlite3.sqlite_version,
+        "hardware_model": platform.machine(),
+        "logical_cpus": os.cpu_count(),
+        "memory_bytes": memory_bytes,
+        "filesystem_type": "local filesystem (temporary directory)",
+    }
 
 
 def _git_commit() -> str:
