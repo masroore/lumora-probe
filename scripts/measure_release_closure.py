@@ -331,8 +331,9 @@ async def _measure_ring(root: Path) -> dict[str, Any]:
     raw = b'{"payload":"' + b"x" * (32 * 1024) + b'"}'
     samples: list[float] = []
     details: list[dict[str, Any]] = []
-    for sample in range(5):
-        sample_root = root / f"ring-{sample}"
+    for sample in range(6):
+        warmup = sample == 0
+        sample_root = root / ("ring-warmup" if warmup else f"ring-{sample - 1}")
         clock = BenchmarkClock()
         ring = RingBufferService(
             config=RingBufferConfig(max_bytes=target * 2, retention_seconds=3600),
@@ -344,18 +345,26 @@ async def _measure_ring(root: Path) -> dict[str, Any]:
         for index in range(count):
             ring.record_event_raw(raw, occurred_at=clock.now(), monotonic_ns=index)
         await ring.stop()
-        samples.append((time.perf_counter() - started) * 1000)
-        stats = dict(ring.persistence_stats)
-        details.append(
-            {
-                "records": count,
-                "accepted_bytes": count * len(raw),
-                "stats": stats,
-                "amplification": (stats["append_bytes"] + stats["compaction_bytes"])
-                / (count * len(raw)),
-            }
-        )
-    return {**_summary(samples), "segment_target_bytes": target, "samples": details}
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        if not warmup:
+            samples.append(elapsed_ms)
+            stats = dict(ring.persistence_stats)
+            details.append(
+                {
+                    "records": count,
+                    "accepted_bytes": count * len(raw),
+                    "stats": stats,
+                    "amplification": (stats["append_bytes"] + stats["compaction_bytes"])
+                    / (count * len(raw)),
+                }
+            )
+    return {
+        **_summary(samples),
+        "warmup_iterations": 1,
+        "measured_iterations": len(samples),
+        "segment_target_bytes": target,
+        "samples": details,
+    }
 
 
 def _validate(results: Mapping[str, Any]) -> None:

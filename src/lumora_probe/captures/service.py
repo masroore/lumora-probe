@@ -506,8 +506,9 @@ class RingBufferService:
                 heads = value.get("heads", {})
                 if not isinstance(heads, Mapping):
                     raise TypeError("ring segment heads must be an object")
+                typed_heads = cast(Mapping[str, int], heads)
                 self._segment_heads = {
-                    int(segment): int(offset) for segment, offset in heads.items()
+                    int(segment): int(offset) for segment, offset in typed_heads.items()
                 }
                 self._active_segment = int(
                     value.get("active_segment", segment_ids[-1] if segment_ids else 0)
