@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from fastapi import FastAPI
 
 from lumora_probe.associations.network import DICOMListener, DICOMListenerConfig
 from lumora_probe.captures.repository import CaptureRepository
-from lumora_probe.captures.service import CaptureEngine
+from lumora_probe.captures.service import CaptureEngine, RingBufferService
 from lumora_probe.core.alerts import AlertRegistry, AlertThresholds
 from lumora_probe.core.audit import AuditCategory, AuditLog
 from lumora_probe.core.bus import EventBus
@@ -20,15 +24,27 @@ from lumora_probe.core.health import HealthRegistry
 from lumora_probe.core.lifecycle import LifecycleManager, ServiceHealth
 from lumora_probe.core.logging import get_logger, log_operational
 from lumora_probe.core.metrics import MetricRegistry
+from lumora_probe.core.operations import InMemoryJobRegistry, SQLiteOperationRegistry
 from lumora_probe.core.paths import DataPaths
 from lumora_probe.core.storage import StorageDatabases
 from lumora_probe.plugins.contracts import PluginDiagnostic
 from lumora_probe.plugins.repository import PluginRepository
 from lumora_probe.plugins.service import PluginService
+from lumora_probe.reports.jobs import ReportJobService
+from lumora_probe.reports.service import CaptureSummaryService, ReportService
 from lumora_probe.settings.runtime import RuntimeSettingsStore
+from lumora_probe.shared.events import EventEnvelope
+from lumora_probe.studies.domain import DecodeError
+from lumora_probe.studies.repository import (
+    BookmarkRepository,
+    FileSystemInstanceSourceRepository,
+    StudyProjectionRepository,
+)
+from lumora_probe.studies.service import DecodeService, LRUFrameCache, MetadataInspectorService
 from lumora_probe.web.api import create_app
 from lumora_probe.web.live import LiveEventSource
 from lumora_probe.web.security import SecurityPolicy
+from lumora_probe.web.transfer_inspector import TransferInspectorService
 
 
 class PluginServiceAdapter:
@@ -78,12 +94,28 @@ class HealthRegistryAdapter:
 
 
 class AuditedSettingsProvider:
-    """Adapt the persistent runtime settings store to the HTTP provider contract."""
+    """Adapt persistent settings and apply supported changes to live services."""
 
-    def __init__(self, store: RuntimeSettingsStore, audit: AuditLog, clock: SystemClock) -> None:
+    def __init__(
+        self,
+        store: RuntimeSettingsStore,
+        audit: AuditLog,
+        clock: SystemClock,
+        *,
+        ring_buffer: RingBufferService,
+        decode_cache: LRUFrameCache,
+        dicom_listener: DICOMListener,
+        security_policy: SecurityPolicy,
+        base_read_only: bool = False,
+    ) -> None:
         self._store = store
         self._audit = audit
         self._clock = clock
+        self._ring_buffer = ring_buffer
+        self._decode_cache = decode_cache
+        self._dicom_listener = dicom_listener
+        self._security_policy = security_policy
+        self._base_read_only = base_read_only
 
     async def get(self) -> Mapping[str, Any]:
         return {
@@ -94,19 +126,71 @@ class AuditedSettingsProvider:
         }
 
     async def update(self, values: Mapping[str, Any]) -> Mapping[str, Any]:
-        changed = []
         for name, value in values.items():
-            snapshot = self._store.update(name, value)
-            changed.append(
-                {"name": snapshot.name, "value": snapshot.value, "source": snapshot.source}
-            )
+            self._store.validate_update(name, value)
+        previous = {name: self._store.snapshot(name).value for name in values}
+        applied: list[str] = []
+        try:
+            for name, value in values.items():
+                self._apply(name, value)
+                applied.append(name)
+            snapshots = self._store.update_many(values)
+        except Exception:
+            for name in reversed(applied):
+                try:
+                    self._apply(name, previous[name])
+                except (OSError, TypeError, ValueError, RuntimeError) as rollback_error:
+                    log_operational(
+                        get_logger("lumora.settings"),
+                        "runtime setting rollback failed",
+                        level="error",
+                        setting=name,
+                        error=type(rollback_error).__name__,
+                    )
+            raise
         await self._audit.append(
             AuditCategory.CONFIGURATION_CHANGE,
             entity_type="runtime-settings",
             occurred_at=self._clock.now(),
             payload={"keys": sorted(values)},
         )
-        return {"items": changed}
+        return {
+            "items": [
+                {"name": snapshot.name, "value": snapshot.value, "source": snapshot.source}
+                for snapshot in snapshots
+            ]
+        }
+
+    def _apply(self, name: str, value: Any) -> None:
+        if name == "ring_buffer_seconds":
+            self._ring_buffer.update_config(retention_seconds=float(value))
+        elif name == "ring_buffer_max_mb":
+            self._ring_buffer.update_config(max_bytes=int(value) * 1024 * 1024)
+        elif name == "ring_buffer_events_only":
+            self._ring_buffer.update_config(events_only=bool(value))
+        elif name == "decode_cache_max_mb":
+            self._decode_cache.resize_bytes(int(value) * 1024 * 1024)
+        elif name == "ae_allowlist":
+            self._dicom_listener.update_allowed_calling_aets(frozenset(value))
+        elif name == "ip_allowlist":
+            self._dicom_listener.update_allowed_source_ips(frozenset(value))
+        elif name == "read_only":
+            self._security_policy.update_read_only(self._base_read_only or bool(value))
+        elif name in {"theme", "rule_set_toggles"}:
+            return
+
+
+class _CaptureRetentionProvider:
+    """Expose ring-buffer status and engine-owned promotion to web routes."""
+
+    def __init__(self, engine: CaptureEngine) -> None:
+        self._engine = engine
+
+    def status(self) -> Any:
+        return self._engine.ring_buffer.status()
+
+    async def promote_window(self, **kwargs: Any) -> Any:
+        return await self._engine.promote_window(**kwargs)
 
 
 class _CaptureEngineAdapter:
@@ -140,6 +224,32 @@ class _CaptureEngineAdapter:
         return self._engine.health()
 
 
+class _DefaultExecutorAdapter:
+    name = "executor"
+
+    def __init__(self, workers: int) -> None:
+        self.workers = workers
+        self._executor: ThreadPoolExecutor | None = None
+
+    async def start(self) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.workers, thread_name_prefix="lumora-worker"
+        )
+        asyncio.get_running_loop().set_default_executor(self._executor)
+
+    async def stop(self) -> None:
+        executor = self._executor
+        self._executor = None
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=False)
+
+    def health(self) -> ServiceHealth:
+        alive = self._executor is not None
+        return ServiceHealth(
+            self.name, alive, alive, f"{self.workers} worker(s)" if alive else "stopped"
+        )
+
+
 class _IndexRecoveryAdapter:
     name = "index-recovery"
 
@@ -157,6 +267,10 @@ class _IndexRecoveryAdapter:
             await self.repository.rebuild(
                 self.paths.captures, additional_roots=self.paths.additional_capture_roots
             )
+            if self.repository.rebuild_errors:
+                self.error = (
+                    f"skipped {len(self.repository.rebuild_errors)} invalid capture package(s)"
+                )
         except Exception as exc:
             self.error = f"{type(exc).__name__}: {exc}"
             raise
@@ -169,42 +283,116 @@ class _IndexRecoveryAdapter:
         return ServiceHealth(
             self.name,
             self.recovered,
-            self.error is None,
+            True,
             self.error or (None if self.recovered else "recovery pending"),
         )
 
 
-class _CaptureResourceStore:
-    def __init__(self, repository: CaptureRepository) -> None:
+class _SQLiteResourceStore:
+    """Async read adapter for rebuildable index projections."""
+
+    _queries: ClassVar[dict[str, tuple[str, str]]] = {
+        "studies": ("SELECT * FROM studies ORDER BY study_uid", "study_uid"),
+        "series": ("SELECT * FROM series ORDER BY study_uid, series_uid", "series_uid"),
+        "instances": ("SELECT * FROM instances ORDER BY instance_id", "sop_instance_uid"),
+        "events": ("SELECT * FROM event_window ORDER BY capture_id, sequence", "event_id"),
+    }
+
+    def __init__(self, storage: StorageDatabases) -> None:
+        self.storage = storage
+
+    async def list(self, resource: str) -> tuple[Mapping[str, Any], ...]:
+        query = self._queries.get(resource)
+        if query is None:
+            return ()
+        rows = await self.storage.index.execute_read(query[0])
+        return tuple(_row_mapping(resource, row) for row in rows)
+
+    async def list_page(
+        self, resource: str = "captures", *, offset: int, limit: int
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        query = self._queries.get(resource)
+        if query is None or offset < 0 or limit < 1:
+            return (), 0
+        table = resource if resource != "events" else "event_window"
+        rows = await self.storage.index.execute_read(f"SELECT COUNT(*) AS total FROM {table}")
+        total = int(rows[0]["total"]) if rows else 0
+        page_rows = await self.storage.index.execute_read(
+            f"{query[0].split(' ORDER BY ', 1)[0]} ORDER BY {query[0].split(' ORDER BY ', 1)[1]} LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        return tuple(_row_mapping(resource, row) for row in page_rows), total
+
+    async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
+        records = await self.list(resource)
+        key = self._queries.get(resource, ("", ""))[1]
+        return next((row for row in records if str(row.get(key)) == resource_id), None)
+
+    async def delete(self, resource: str, resource_id: str) -> bool:
+        return False
+
+
+class _CaptureResourceStore(_SQLiteResourceStore):
+    def __init__(self, repository: CaptureRepository, paths: DataPaths) -> None:
+        super().__init__(repository.databases)
         self.repository = repository
+        self.paths = paths
 
     async def list(self, resource: str) -> tuple[Mapping[str, Any], ...]:
         if resource != "captures":
-            return ()
+            return await super().list(resource)
         records = await self.repository.list_captures()
         return tuple(_capture_mapping(record) for record in records)
 
+    async def list_page(
+        self, resource: str = "captures", *, offset: int, limit: int
+    ) -> tuple[tuple[Mapping[str, Any], ...], int]:
+        if resource != "captures":
+            return await super().list_page(resource, offset=offset, limit=limit)
+        records, total = await self.repository.list_captures_page(offset=offset, limit=limit)
+        return tuple(_capture_mapping(record) for record in records), total
+
     async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
-        for record in await self.list(resource):
-            if record.get("capture_id") == resource_id:
-                return record
-        return None
+        if resource == "captures":
+            for record in await self.list(resource):
+                if record.get("capture_id") == resource_id:
+                    return record
+            return None
+        return await super().get(resource, resource_id)
 
     async def delete(self, resource: str, resource_id: str) -> bool:
         record = await self.get(resource, resource_id)
-        if record is None:
+        if record is None or resource != "captures":
             return False
         path = Path(str(record["path"])).resolve()
-        allowed = tuple(
-            self.repository.databases.index.path.parent / "captures",
-        )
-        if not any(path.parent == root.resolve() for root in allowed):
-            raise ValueError("capture is outside the primary capture root")
+        roots = tuple(root.resolve() for root in self.paths.allowed_capture_roots())
+        if not any(path.parent == root for root in roots):
+            raise ValueError("capture is outside a configured capture root")
         import shutil
 
         shutil.rmtree(path)
         await self.repository.remove_index_entry(resource_id)
         return True
+
+
+def _json_value(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    if isinstance(value, Mapping):
+        values: dict[Any, Any] = dict(cast(Mapping[Any, Any], value))
+        return {key: _json_value(item) for key, item in values.items()}
+    if isinstance(value, (tuple, list)):
+        items: tuple[Any, ...] = tuple(cast(Sequence[Any], value))
+        return [_json_value(item) for item in items]
+    isoformat = getattr(value, "isoformat", None)
+    return isoformat() if callable(isoformat) else value
+
+
+def _row_mapping(resource: str, row: Any) -> Mapping[str, Any]:
+    values = dict(row)
+    if resource == "events":
+        values["occurred_at"] = values.pop("observed_at", None)
+    return values
 
 
 def _capture_mapping(record: Any) -> Mapping[str, Any]:
@@ -237,6 +425,205 @@ def _capture_mapping(record: Any) -> Mapping[str, Any]:
     }
 
 
+class _AuditProvider:
+    def __init__(self, audit: AuditLog) -> None:
+        self.audit = audit
+
+    async def list(self, *, category: str | None = None, limit: int = 100) -> tuple[Any, ...]:
+        return await self.audit.list(category=category, limit=limit)
+
+
+class _BookmarkProvider:
+    def __init__(self, repository: BookmarkRepository) -> None:
+        self.repository = repository
+
+    async def add_bookmark(
+        self,
+        name: str,
+        study_uid: str,
+        series_uid: str | None = None,
+        capture_id: str | None = None,
+        sop_instance_uid: str | None = None,
+    ) -> Any:
+        return await self.repository.add_bookmark(
+            name, study_uid, series_uid, capture_id, sop_instance_uid
+        )
+
+    async def list_bookmarks(self, capture_id: str | None = None) -> Any:
+        return await self.repository.list_bookmarks(capture_id)
+
+    async def remove_bookmark(self, bookmark_id: str) -> bool:
+        return await self.repository.remove_bookmark(bookmark_id)
+
+
+class _StudyBrowserProvider:
+    def __init__(self, repository: StudyProjectionRepository) -> None:
+        self.repository = repository
+
+    async def get_study_browser(self, study_uid: str) -> Mapping[str, Any] | None:
+        studies = tuple(
+            item for item in await self.repository.list_studies() if item.study_uid == study_uid
+        )
+        if not studies:
+            return None
+        series = await self.repository.list_series(study_uid)
+        instances = await self.repository.list_instances(study_uid=study_uid)
+        return {
+            "study": _json_value(studies[0]),
+            "series": [_json_value(item) for item in series],
+            "instances": [_json_value(item) for item in instances],
+        }
+
+
+class _LiveEvidenceStore:
+    """Expose indexed and rolling observed events through web read contracts."""
+
+    def __init__(self, storage: StorageDatabases, ring_buffer: Any) -> None:
+        self.storage = storage
+        self.ring_buffer = ring_buffer
+
+    async def list(self, resource: str) -> tuple[Mapping[str, Any], ...]:
+        if resource == "events":
+            indexed = await self.storage.index.execute_read(
+                "SELECT raw_json FROM event_window ORDER BY capture_id, sequence"
+            )
+            values = [_event_mapping(json.loads(row["raw_json"])) for row in indexed]
+            seen = {str(item.get("event_id")) for item in values}
+            for record in self.ring_buffer.snapshot():
+                if record.kind != "event":
+                    continue
+                try:
+                    event = json.loads(record.raw)
+                except (TypeError, ValueError):
+                    continue
+                event_id = str(event.get("event_id", ""))
+                if event_id and event_id not in seen:
+                    values.append(_event_mapping(event))
+                    seen.add(event_id)
+            values.sort(
+                key=lambda item: (int(item.get("sequence") or 0), str(item.get("event_id")))
+            )
+            return tuple(values)
+        if resource == "associations":
+            events = await self.list("events")
+            by_id: dict[str, dict[str, Any]] = {}
+            for event in events:
+                if event.get("aggregate_type") != "Association":
+                    continue
+                association_id = str(event.get("aggregate_id", ""))
+                if not association_id:
+                    continue
+                row = by_id.setdefault(
+                    association_id,
+                    {
+                        "association_id": association_id,
+                        "status": "unknown",
+                        "started_at": event.get("occurred_at"),
+                        "completed_at": None,
+                        "calling_ae": event.get("payload", {}).get("calling_ae"),
+                        "called_ae": event.get("payload", {}).get("called_ae"),
+                    },
+                )
+                phase = str(event.get("event_name", ""))
+                row["status"] = phase.removeprefix("Association").lower() or row["status"]
+                if phase in {"AssociationReleased", "AssociationAborted", "AssociationRejected"}:
+                    row["completed_at"] = event.get("occurred_at")
+            return tuple(by_id.values())
+        return ()
+
+    async def get(self, resource: str, resource_id: str) -> Mapping[str, Any] | None:
+        records = await self.list(resource)
+        key = "event_id" if resource == "events" else "association_id"
+        return next((record for record in records if str(record.get(key)) == resource_id), None)
+
+    async def delete(self, resource: str, resource_id: str) -> bool:
+        return False
+
+    async def query_events(
+        self, *, correlation_id: str | None = None, aggregate_id: str | None = None
+    ) -> tuple[EventEnvelope, ...]:
+        result: list[EventEnvelope] = []
+        for value in await self.list("events"):
+            if correlation_id is not None and value.get("correlation_id") != correlation_id:
+                continue
+            if aggregate_id is not None and value.get("aggregate_id") != aggregate_id:
+                continue
+            try:
+                result.append(EventEnvelope.model_validate(value))
+            except ValueError:
+                continue
+        return tuple(result)
+
+    async def list_legs(self, association_id: str) -> tuple[Mapping[str, Any], ...]:
+        events = await self.query_events(correlation_id=association_id)
+        return tuple(
+            {
+                "leg_id": association_id,
+                "association_id": association_id,
+                "status": "observed",
+            }
+            for _ in ({"association_id": association_id},)
+            if events
+        )
+
+
+class _FrameProvider:
+    def __init__(self, sources: FileSystemInstanceSourceRepository, decoder: DecodeService) -> None:
+        self.sources = sources
+        self.decoder = decoder
+
+    async def get_frame(self, instance_id: str, frame_number: int) -> Any:
+        source = await self.sources.get_instance_source(instance_id)
+        if source is None:
+            return None
+        try:
+            return await self.decoder.decode(source, frame_number=frame_number)
+        except DecodeError as error:
+            return error.failure
+
+
+class _MetadataProvider:
+    def __init__(
+        self, sources: FileSystemInstanceSourceRepository, inspector: MetadataInspectorService
+    ) -> None:
+        self.sources = sources
+        self.inspector = inspector
+
+    async def get_metadata(
+        self, instance_id: str, *, include_private: bool = False, query: str | None = None
+    ) -> Any:
+        source = await self.sources.get_instance_source(instance_id)
+        if source is None:
+            return None
+        return await self.inspector.inspect(source, include_private=include_private, query=query)
+
+
+class _JobLifecycle:
+    name = "operation-jobs"
+
+    def __init__(self, jobs: InMemoryJobRegistry) -> None:
+        self.jobs = jobs
+
+    async def start(self) -> None:
+        await self.jobs.startup_sweep(reason="process startup recovery")
+
+    async def stop_accepting(self) -> None:
+        return None
+
+    async def drain(self) -> None:
+        await self.jobs.shutdown(reason="lifecycle shutdown")
+
+    async def stop(self) -> None:
+        return None
+
+    def health(self) -> ServiceHealth:
+        return ServiceHealth(self.name, True, True, None)
+
+
+def _event_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
+    return dict(value)
+
+
 class _EventBusAdapter:
     name = "event-bus"
 
@@ -260,12 +647,13 @@ def _not_started_alive(health: ServiceHealth) -> ServiceHealth:
 
 
 def _listener_health(listener: DICOMListener) -> ServiceHealth:
-    return ServiceHealth(
-        listener.name,
-        listener.started,
-        listener.started,
-        None if listener.started else "listener stopped",
+    detail = (
+        f"{listener.config.bind_host}:{listener.config.port}; "
+        f"accepted={listener.accepted_associations}; ingress_failures={listener.ingress_failures}"
+        if listener.started
+        else "listener stopped"
     )
+    return ServiceHealth(listener.name, listener.started, listener.started, detail)
 
 
 def _default_allowed_hosts(config: StartupConfig) -> tuple[str, ...]:
@@ -297,13 +685,15 @@ def build_production_app(config: StartupConfig) -> FastAPI:
         id_generator=bus.id_generator,
     )
     lifecycle.register(_EventBusAdapter(bus))
+    executor = _DefaultExecutorAdapter(config.executor_workers)
+    lifecycle.register(executor)
     lifecycle.register(recovery)
     lifecycle.register(_CaptureEngineAdapter(capture_engine, event_bus=bus))
     dicom_listener = DICOMListener(
         DICOMListenerConfig(bind_host=config.dicom_bind_host, port=config.dicom_port),
         event_ingress=bus,
         c_store_sink=capture_engine.store_c_store,
-        pdu_trace_sink=capture_engine,
+        pdu_trace_sink=cast(Any, capture_engine),
         clock=clock,
         id_generator=bus.id_generator,
     )
@@ -312,6 +702,58 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     alerts = AlertRegistry(metrics, _thresholds(config))
     health = HealthRegistry()
     plugin_repo = PluginRepository(paths.plugins)
+    study_repository = StudyProjectionRepository(
+        storage, capture_roots=paths.allowed_capture_roots(), clock=clock
+    )
+    bookmark_repository = BookmarkRepository(storage, clock=clock, id_generator=bus.id_generator)
+    operation_registry = SQLiteOperationRegistry(storage)
+    settings_store = RuntimeSettingsStore(
+        paths.settings_file, event_publisher=bus, clock=clock, id_generator=bus.id_generator
+    )
+    settings_store.load()
+    dicom_listener.update_allowed_calling_aets(frozenset(settings_store.settings.ae_allowlist))
+    dicom_listener.update_allowed_source_ips(frozenset(settings_store.settings.ip_allowlist))
+    capture_engine.ring_buffer.update_config(
+        retention_seconds=float(settings_store.settings.ring_buffer_seconds),
+        max_bytes=settings_store.settings.ring_buffer_max_mb * 1024 * 1024,
+        events_only=settings_store.settings.ring_buffer_events_only,
+    )
+    security_policy = SecurityPolicy(
+        read_only=config.read_only or settings_store.settings.read_only,
+        allowed_hosts=config.allowed_hosts or _default_allowed_hosts(config),
+        allowed_origins=config.allowed_origins,
+        trusted_proxies=config.trusted_proxies,
+    )
+    source_repository = FileSystemInstanceSourceRepository(
+        paths.captures, storage, capture_roots=paths.allowed_capture_roots()
+    )
+    decode_cache = LRUFrameCache(
+        max_bytes=settings_store.settings.decode_cache_max_mb * 1024 * 1024
+    )
+    decode_service = DecodeService(clock=clock, cache=decode_cache)
+    metadata_inspector = MetadataInspectorService()
+    frame_provider = _FrameProvider(source_repository, decode_service)
+    metadata_provider = _MetadataProvider(source_repository, metadata_inspector)
+    live_evidence = _LiveEvidenceStore(storage, capture_engine.ring_buffer)
+    transfer_inspector = TransferInspectorService(live_evidence, live_evidence)
+    job_registry = InMemoryJobRegistry(
+        clock=clock,
+        id_generator=bus.id_generator,
+        durable=operation_registry,
+        progress_publisher=bus,
+    )
+    job_lifecycle = _JobLifecycle(job_registry)
+    lifecycle.register(job_lifecycle)
+    report_service = ReportService(paths.captures)
+    report_jobs = ReportJobService(
+        report_service,
+        cast(Any, job_registry),
+        paths.reports,
+        publisher=cast(Any, bus),
+        clock=clock,
+        id_generator=bus.id_generator,
+    )
+    summary_service = CaptureSummaryService(paths.captures)
 
     def diagnostic_sink(diagnostic: PluginDiagnostic) -> None:
         metrics.observe_plugin_diagnostic(diagnostic)
@@ -343,12 +785,22 @@ def build_production_app(config: StartupConfig) -> FastAPI:
         "event-bus",
         lambda: ServiceHealth("event-bus", bus.started, True, None if bus.started else "stopped"),
     )
+    health.register("executor", lambda: _not_started_alive(executor.health()))
     health.register("index-recovery", recovery.health)
-    health.register("index-db", lambda: _database_health("index-db", storage.index.path))
+    health.register(
+        "index-db",
+        lambda: _database_health(
+            "index-db", storage.index, ("schema_metadata", "captures", "event_window")
+        ),
+    )
     health.register("capture-engine", lambda: _not_started_alive(capture_engine.health()))
     health.register("dicom-listener", lambda: _not_started_alive(_listener_health(dicom_listener)))
-    health.register("app-db", lambda: _database_health("app-db", storage.app.path))
+    health.register(
+        "app-db",
+        lambda: _database_health("app-db", storage.app, ("schema_metadata", "jobs", "audit_log")),
+    )
     health.register("plugin-host", lambda: _plugin_health(plugin_service))
+    health.register("operation-jobs", job_lifecycle.health)
 
     async def security_audit_sink(code: str, payload: Mapping[str, object]) -> None:
         await audit.append(
@@ -362,29 +814,40 @@ def build_production_app(config: StartupConfig) -> FastAPI:
         clock=clock,
         event_clock=clock,
         event_bus=cast(LiveEventSource, bus),
+        event_publisher=cast(Any, bus),
         capture_engine=capture_engine,
-        capture_store=_CaptureResourceStore(capture_repository),
+        retention_provider=_CaptureRetentionProvider(capture_engine),
+        capture_store=_CaptureResourceStore(capture_repository, paths),
+        projection_store=_SQLiteResourceStore(storage),
+        association_store=live_evidence,
+        event_store=live_evidence,
+        operation_registry=operation_registry,
+        audit_provider=_AuditProvider(audit),
+        bookmark_provider=_BookmarkProvider(bookmark_repository),
+        study_browser_provider=_StudyBrowserProvider(study_repository),
+        frame_provider=frame_provider,
+        metadata_provider=metadata_provider,
+        reports_provider=summary_service,
+        report_job_provider=report_jobs,
+        transfer_inspector=transfer_inspector,
         lifecycle_manager=lifecycle,
         event_id_generator=bus.id_generator,
         health_provider=HealthRegistryAdapter(health),
         metrics_provider=metrics,
         alert_provider=alerts,
-        audit_provider=audit,
         security_audit_sink=security_audit_sink,
         settings_provider=AuditedSettingsProvider(
-            RuntimeSettingsStore(
-                paths.settings_file, event_publisher=bus, clock=clock, id_generator=bus.id_generator
-            ),
+            settings_store,
             audit,
             clock,
+            ring_buffer=capture_engine.ring_buffer,
+            decode_cache=decode_cache,
+            dicom_listener=dicom_listener,
+            security_policy=security_policy,
+            base_read_only=config.read_only,
         ),
         plugin_provider=plugin_provider,
-        security_policy=SecurityPolicy(
-            read_only=config.read_only,
-            allowed_hosts=config.allowed_hosts or _default_allowed_hosts(config),
-            allowed_origins=config.allowed_origins,
-            trusted_proxies=config.trusted_proxies,
-        ),
+        security_policy=security_policy,
     )
     application.state.config = config
     application.state.paths = paths
@@ -398,13 +861,36 @@ def build_production_app(config: StartupConfig) -> FastAPI:
     application.state.plugin_service = plugin_service
     application.state.plugin_provider = plugin_provider
     application.state.dicom_listener = dicom_listener
+    application.state.job_registry = job_registry
+    application.state.report_service = report_service
+    application.state.report_job_service = report_jobs
+    application.state.decode_service = decode_service
+    application.state.settings_store = settings_store
     application.state.executor_workers = config.executor_workers
     return application
 
 
-def _database_health(name: str, path: Any) -> ServiceHealth:
-    ready = path.is_file()
-    return ServiceHealth(name, ready, True, None if ready else f"missing database: {path}")
+def _database_health(name: str, database: Any, required_tables: tuple[str, ...]) -> ServiceHealth:
+    path = database.path
+    if not path.is_file():
+        return ServiceHealth(name, False, True, f"missing database: {path}")
+    try:
+        with database.connection(read_only=True) as connection:
+            rows = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ("
+                + ",".join("?" for _ in required_tables)
+                + ")",
+                required_tables,
+            ).fetchall()
+        found = {str(row[0]) for row in rows}
+    except Exception as exc:  # noqa: BLE001 - health must report, not crash
+        return ServiceHealth(
+            name, False, True, f"database probe failed: {type(exc).__name__}: {exc}"
+        )
+    missing = tuple(table for table in required_tables if table not in found)
+    if missing:
+        return ServiceHealth(name, False, True, f"missing tables: {', '.join(missing)}")
+    return ServiceHealth(name, True, True, None)
 
 
 def _plugin_health(service: PluginService) -> ServiceHealth:
