@@ -326,7 +326,7 @@ def resolve_config(
             candidate = cwd / candidate
         input_path = candidate
     elif not namespace.echo:
-        input_path = DEFAULT_INPUT
+        input_path = cwd / DEFAULT_INPUT
 
     config = Config(
         input=input_path,

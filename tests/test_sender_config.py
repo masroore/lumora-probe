@@ -172,8 +172,9 @@ def test_default_input_used_when_no_input_provided(tmp_path: Path) -> None:
     """When no --input or TOML input is given, DEFAULT_INPUT is used."""
     from sender_lite.config import DEFAULT_INPUT
 
+    (tmp_path / DEFAULT_INPUT).mkdir(parents=True)
     config = parse_args(["--host", "127.0.0.1"], cwd=tmp_path)
-    assert config.input == DEFAULT_INPUT
+    assert config.input == tmp_path / DEFAULT_INPUT
 
 
 def test_help_bypasses_validation() -> None:

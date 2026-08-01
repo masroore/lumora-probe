@@ -335,8 +335,10 @@ class CoalescingGovernor:
     def _flush_json(self, client: LiveClient, events: list[EventEnvelope]) -> None:
         subscription = client.subscription
         assert isinstance(subscription, StreamSubscription)
+        topics = _normalise_topics(subscription.topics)
+        category_cache: dict[tuple[str, int], str | None] = {}
         matching = [
-            event for event in events if _matches_topics(event, subscription.topics, self.bus)
+            event for event in events if _matches_topic_set(event, topics, self.bus, category_cache)
         ]
         if not matching:
             return
@@ -362,10 +364,12 @@ class CoalescingGovernor:
     ) -> None:
         subscription = client.subscription
         assert isinstance(subscription, UiSubscription)
+        topics = _normalise_topics(subscription.topics)
+        category_cache: dict[tuple[str, int], str | None] = {}
         matching = [
             event
             for event in events
-            if subscription.panels and _matches_topics(event, subscription.topics, self.bus)
+            if subscription.panels and _matches_topic_set(event, topics, self.bus, category_cache)
         ]
         if not matching:
             return
@@ -675,12 +679,27 @@ def _string_values(value: Any) -> tuple[str, ...]:
 
 def _matches_topics(event: EventEnvelope, topics: Iterable[str], bus: LiveEventSource) -> bool:
     normalised = _normalise_topics(topics)
+    return _matches_topic_set(event, normalised, bus)
+
+
+def _matches_topic_set(
+    event: EventEnvelope,
+    normalised: TopicSubscription,
+    bus: LiveEventSource,
+    category_cache: dict[tuple[str, int], str | None] | None = None,
+) -> bool:
     if not normalised or "*" in normalised:
         return True
-    category = bus.registry.category_for(event.event_name, event.event_version)
+    cache_key = (event.event_name, event.event_version)
+    if category_cache is not None and cache_key in category_cache:
+        category_name = category_cache[cache_key]
+    else:
+        category = bus.registry.category_for(event.event_name, event.event_version)
+        category_name = category.value.casefold() if category is not None else None
+        if category_cache is not None:
+            category_cache[cache_key] = category_name
     values = {event.event_name.casefold(), event.aggregate_type.casefold()}
-    if category is not None:
-        category_name = category.value.casefold()
+    if category_name is not None:
         values.update({category_name, f"{category_name}s"})
     return bool(values & normalised)
 
@@ -693,6 +712,7 @@ def _update_client_panel_state(
     client: LiveClient, events: Iterable[EventEnvelope], timeline_cap: int, bus: LiveEventSource
 ) -> dict[str, dict[str, Any]]:
     event_list = events if isinstance(events, list) else list(events)
+    category_cache: dict[tuple[str, int], str | None] = {}
     previous_sequence = client.timeline_state[-1]["sequence"] if client.timeline_state else None
     ordered = previous_sequence is not None or not client.timeline_state
     for event in event_list:
@@ -703,8 +723,11 @@ def _update_client_panel_state(
             previous_sequence = sequence
 
     for event in event_list:
-        category = bus.registry.category_for(event.event_name, event.event_version)
-        category_name = category.value if category is not None else event.aggregate_type
+        cache_key = (event.event_name, event.event_version)
+        if cache_key not in category_cache:
+            category = bus.registry.category_for(event.event_name, event.event_version)
+            category_cache[cache_key] = category.value if category is not None else None
+        category_name = category_cache[cache_key] or event.aggregate_type
         client.counter_state[f"category:{category_name}"] += 1
         client.counter_state[f"severity:{event.severity.value}"] += 1
         client.status_state[event.aggregate_id] = {
