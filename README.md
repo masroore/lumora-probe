@@ -60,6 +60,9 @@ explicit (`0xA700`); malformed data is `0xC210`; unexpected processing failure i
 Inspect listener ingress counters through health diagnostics. SQLite databases require local
 storage; the persisted ring uses segmented files under `ringbuffer/segments/`.
 
+For a walkthrough with capture, Lite-utility, and container steps, see the
+[quick-start guide](docs/guides/quick-start.md).
+
 Release evidence and environment-specific limits: [0.1.0 release notes](docs/release-notes-0.1.0.md),
 [performance report](docs/planning/phase-18-performance-report.md), and [known limitations](docs/guides/known-limitations.md).
 

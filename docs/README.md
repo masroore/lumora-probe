@@ -7,6 +7,8 @@ historical planning evidence.
 
 - [Repository README](../README.md) — installation, quick starts, development gates, and
   product boundaries.
+- [Quick start](guides/quick-start.md) — install, start a server, capture DICOM traffic, and
+  try the Lite utilities in about ten minutes.
 - [Operator guide](guides/operator-guide.md) — startup, configuration, data roots, health,
   shutdown, and backup.
 - [Deployment topologies](guides/deployment-topologies.md) — standalone, reverse-proxy, and
@@ -50,6 +52,7 @@ Important indexes:
 
 | Guide | Use it for |
 | --- | --- |
+| [Quick start](guides/quick-start.md) | Get a server running and capture first traffic |
 | [Docker](guides/docker.md) | Build and run the non-root runtime image |
 | [Operator guide](guides/operator-guide.md) | Configure and operate a server |
 | [Deployment topologies](guides/deployment-topologies.md) | Choose a trusted network boundary |
