@@ -1,0 +1,30 @@
+<div class="operational-view audit-view">
+  <header class="view-header">
+    <p class="eyebrow">Immutable evidence</p>
+    <h2 id="audit-title">Audit</h2>
+    <p>Read-only administrative and security records. Filters and pagination are bounded.</p>
+  </header>
+  <form class="audit-filters" method="get" action="/audit" aria-label="Audit filters">
+    <label>Category <input name="category" value="{{ request.query_params.get('category', '') }}" autocomplete="off"></label>
+    <label>Entity type <input name="entity_type" value="{{ request.query_params.get('entity_type', '') }}" autocomplete="off"></label>
+    <button class="button button-secondary" type="submit">Apply filters</button>
+    <a href="/audit">Clear</a>
+  </form>
+  <section class="operational-card" aria-labelledby="audit-records-heading">
+    <div class="card-heading"><h3 id="audit-records-heading">Records</h3><span class="summary-meta">{{ operational.audit|length }} shown · newest first</span></div>
+    <div class="audit-table-wrap">
+      <table class="audit-table">
+        <caption class="sr-only">Immutable audit records</caption>
+        <thead><tr><th scope="col">ID</th><th scope="col">Occurred</th><th scope="col">Event</th><th scope="col">Entity</th><th scope="col">Correlation</th></tr></thead>
+        <tbody>
+        {% for record in operational.audit %}
+        <tr id="audit-{{ record.audit_id }}"><th scope="row">{{ record.audit_id }}</th><td><time datetime="{{ record.occurred_at }}">{{ record.occurred_at }}</time></td><td>{{ record.event_type }}</td><td>{% if record.entity_id %}<a href="/search?q={{ record.entity_id }}">{{ record.entity_type }} · {{ record.entity_id }}</a>{% else %}{{ record.entity_type }}{% endif %}</td><td>{{ record.payload.get('correlation_id', '—') }}</td></tr>
+        {% else %}<tr><td colspan="5" class="empty-state">No audit records match these filters.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if operational.audit_next_cursor is not none %}
+    <nav class="audit-pagination" aria-label="Audit pagination"><a href="/audit?{% if request.query_params.get('category') %}category={{ request.query_params.get('category') }}&amp;{% endif %}{% if request.query_params.get('entity_type') %}entity_type={{ request.query_params.get('entity_type') }}&amp;{% endif %}cursor={{ operational.audit_next_cursor }}">Older records</a></nav>
+    {% endif %}
+  </section>
+</div>

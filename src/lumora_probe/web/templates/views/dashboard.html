@@ -1,0 +1,83 @@
+<div class="operational-view" data-operational-state="{{ operational.readiness|lower }}">
+  <header class="view-header">
+    <p class="eyebrow">Operations</p>
+    <h2 id="dashboard-title">Operational Dashboard</h2>
+    <p>Evidence-backed health, listener state, event-derived metrics, and recent work.</p>
+  </header>
+
+  <section class="operational-grid" aria-labelledby="dashboard-status-heading">
+    <h3 id="dashboard-status-heading" class="sr-only">System status</h3>
+    <article class="status-card status-card-{{ operational.readiness|lower }}" data-status-card="readiness">
+      <span class="eyebrow">Readiness</span>
+      <strong>{{ operational.readiness }}</strong>
+      <span>{{ 'Application is accepting work.' if operational.health.ready else 'Application is not ready.' }}</span>
+      <a href="/api/v1/health/ready">Inspect readiness</a>
+    </article>
+    <article class="status-card" data-status-card="liveness">
+      <span class="eyebrow">Liveness</span>
+      <strong>{{ 'Alive' if operational.health.alive else 'Unavailable' }}</strong>
+      <span>Runtime health is reported by the service registry.</span>
+      <a href="/api/v1/health/live">Inspect liveness</a>
+    </article>
+    <article class="status-card" data-status-card="events">
+      <span class="eyebrow">Event evidence</span>
+      <strong>{{ operational.events_dropped }}</strong>
+      <span>UI events dropped by bounded channels.</span>
+      <a href="/live">Open Live Monitor</a>
+    </article>
+  </section>
+
+  <div class="operational-columns">
+    <section class="operational-card" aria-labelledby="listener-health-heading">
+      <div class="card-heading"><h3 id="listener-health-heading">Services and listener</h3><span class="summary-meta">current snapshot</span></div>
+      <ul class="operational-list">
+        {% for service in operational.services %}
+        <li><span class="state-dot state-dot-{{ 'ready' if service.ready else 'unavailable' }}" aria-hidden="true"></span><strong>{{ service.name }}</strong><span>{{ service.detail or ('ready' if service.ready else 'unavailable') }}</span></li>
+        {% else %}
+        <li class="empty-state"><strong>No service probes configured</strong><span>Configure the runtime health registry to expose listener and dependency state.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="operational-card" aria-labelledby="alerts-heading">
+      <div class="card-heading"><h3 id="alerts-heading">Alerts</h3><span class="summary-meta">{{ operational.alerts|length }} current</span></div>
+      <ul class="operational-list">
+        {% for alert in operational.alerts %}
+        <li><strong>{{ alert.name }}</strong><span class="alert-state alert-state-{{ alert.state|lower }}">{{ alert.state }}</span><span>{{ alert.value }} / {{ alert.threshold }}</span></li>
+        {% else %}
+        <li class="empty-state"><strong>No active alerts</strong><span>Alert state is derived from observed event metrics.</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <section class="operational-card" aria-labelledby="metrics-heading">
+    <div class="card-heading"><h3 id="metrics-heading">Event-derived metrics</h3><a href="/api/v1/metrics">JSON contract</a></div>
+    <div class="metric-grid">
+      {% for metric in operational.metrics %}
+      <article class="metric-card"><span>{{ metric.name }}</span><strong>{{ metric.value }}</strong><small>{{ metric.kind }}{% if metric.labels %} · {{ metric.labels }}{% endif %}</small></article>
+      {% else %}
+      <p class="empty-state">No observed events have produced metrics yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="operational-columns">
+    <section class="operational-card" aria-labelledby="recent-captures-heading">
+      <div class="card-heading"><h3 id="recent-captures-heading">Recent captures</h3><a href="/captures">View captures</a></div>
+      <ul class="operational-list">
+        {% for capture in operational.captures %}
+        <li><a href="/captures/{{ capture.capture_id }}">{{ capture.capture_id }}</a><span>{{ capture.state or capture.status or 'observed' }}</span></li>
+        {% else %}<li class="empty-state">No captures recorded.</li>{% endfor %}
+      </ul>
+    </section>
+    <section class="operational-card" aria-labelledby="recent-operations-heading">
+      <div class="card-heading"><h3 id="recent-operations-heading">Recent operations</h3><a href="/replay">View workflows</a></div>
+      <ul class="operational-list">
+        {% for operation in operational.operations %}
+        <li><a href="/api/v1/operations/{{ operation.operation_id }}">{{ operation.job_type or operation.operation_id }}</a><span>{{ operation.state }}</span></li>
+        {% else %}<li class="empty-state">No background operations recorded.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>

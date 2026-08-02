@@ -192,3 +192,48 @@ h3 { font-size: .88rem; }
 .context-tabs [role="tabpanel"] { min-height: 4rem; }
 .status-group a { color: inherit; text-decoration: none; }
 .status-group a:hover, .status-group a:focus-visible { color: var(--color-lumora-accent); text-decoration: underline; }
+
+.operational-view { display: grid; gap: 1rem; padding: 1rem; overflow: auto; }
+.operational-view .view-header { border-bottom: 1px solid var(--color-lumora-line); padding-bottom: .8rem; }
+.operational-view .view-header h2 { margin: .15rem 0 .3rem; }
+.operational-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
+.operational-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+.status-card, .operational-card { min-width: 0; border: 1px solid var(--color-lumora-line); border-radius: .45rem; background: var(--color-lumora-surface); padding: .8rem; }
+.status-card { display: grid; gap: .3rem; }
+.status-card strong { font-size: 1.25rem; }
+.status-card > span:not(.eyebrow), .operational-list span, .metric-card small { color: var(--color-lumora-muted); font-size: .74rem; }
+.status-card a, .card-heading a, .operational-list a { color: var(--color-lumora-accent); font-size: .74rem; }
+.status-card-degraded { border-color: var(--color-lumora-warning); }
+.status-card-unavailable { border-color: var(--color-lumora-danger); }
+.card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; margin-bottom: .6rem; }
+.card-heading h3 { margin: 0; font-size: .9rem; }
+.operational-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.operational-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .45rem; align-items: baseline; border-bottom: 1px solid color-mix(in srgb, var(--color-lumora-line) 65%, transparent); padding: .4rem 0; }
+.operational-list li:last-child { border-bottom: 0; }
+.operational-list .empty-state { display: block; border: 0; }
+.state-dot { width: .48rem; height: .48rem; margin-top: .2rem; border-radius: 50%; background: var(--color-lumora-success); }
+.state-dot-unavailable { background: var(--color-lumora-danger); }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem; }
+.metric-card { display: grid; gap: .2rem; border: 1px solid var(--color-lumora-line); border-radius: .35rem; padding: .55rem; }
+.metric-card span { overflow: hidden; color: var(--color-lumora-muted); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.metric-card strong { font-size: 1.05rem; }
+.counter-list { display: grid; gap: .45rem; margin: 0; }
+.counter-list div { display: flex; justify-content: space-between; gap: .5rem; border-bottom: 1px solid var(--color-lumora-line); padding: .35rem 0; }
+.counter-list dt { color: var(--color-lumora-muted); font-size: .74rem; }
+.counter-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.alert-state { font-weight: 700; text-transform: uppercase; }
+.alert-state-warning { color: var(--color-lumora-warning); }
+.alert-state-critical, .alert-state-error { color: var(--color-lumora-danger); }
+.live-connection-state { color: var(--color-lumora-muted); font-size: .74rem; }
+.live-monitor-view[data-live-state="connected"] .live-connection-state { color: var(--color-lumora-success); }
+.live-monitor-view[data-live-state="stale"] .live-connection-state, .live-monitor-view[data-live-state="error"] .live-connection-state { color: var(--color-lumora-warning); }
+.evidence-note { color: var(--color-lumora-muted); font-size: .72rem; }
+.audit-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
+.audit-filters label { display: grid; gap: .25rem; color: var(--color-lumora-muted); font-size: .72rem; }
+.audit-filters input { min-width: 12rem; padding: .45rem; border: 1px solid var(--color-lumora-line); border-radius: .3rem; background: transparent; color: inherit; }
+.audit-table-wrap { overflow: auto; }
+.audit-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+.audit-table th, .audit-table td { border-bottom: 1px solid var(--color-lumora-line); padding: .5rem; text-align: left; vertical-align: top; }
+.audit-table th { color: var(--color-lumora-muted); }
+.audit-pagination { margin-top: .7rem; font-size: .78rem; }
+@media (max-width: 800px) { .operational-grid, .operational-columns { grid-template-columns: 1fr; } }

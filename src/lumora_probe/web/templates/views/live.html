@@ -1,0 +1,52 @@
+<div class="operational-view live-monitor-view" data-live-view data-live-page="live-monitor" data-live-state="first-paint">
+  <header class="view-header">
+    <p class="eyebrow">Observed activity</p>
+    <h2 id="live-monitor-title">Live Monitor</h2>
+    <p>Current associations, event-derived counters, ordered timeline evidence, and bounded drop reporting.</p>
+    <p class="live-connection-state" data-live-connection-state role="status">Connecting to live updates…</p>
+  </header>
+
+  <section class="operational-grid" aria-labelledby="live-summary-heading">
+    <h3 id="live-summary-heading" class="sr-only">Live summary</h3>
+    <article class="status-card" data-live-summary="associations"><span class="eyebrow">Active associations</span><strong>{{ operational.associations|length }}</strong><span>Current association records.</span></article>
+    <article class="status-card" data-live-summary="drops"><span class="eyebrow">Events dropped</span><strong data-live-events-dropped>{{ operational.events_dropped }}</strong><span>Bounded UI channel evidence.</span></article>
+    <article class="status-card" data-live-summary="alerts"><span class="eyebrow">Alerts</span><strong>{{ operational.alerts|length }}</strong><span>Current metric threshold states.</span></article>
+  </section>
+
+  <div class="operational-columns">
+    <section id="panel-status" class="operational-card live-panel" data-live-panel="status" aria-labelledby="active-associations-heading">
+      <div class="card-heading"><h3 id="active-associations-heading">Active associations</h3><span class="summary-meta">first paint</span></div>
+      <ul class="operational-list" data-live-status-list>
+        {% for association in operational.associations %}
+        <li><a href="/associations/{{ association.association_id }}">{{ association.association_id }}</a><span>{{ association.state or association.status or 'observed' }}</span><span>{{ association.called_ae_title or association.remote_ae_title or 'DICOM peer' }}</span></li>
+        {% else %}<li class="empty-state">No active associations.</li>{% endfor %}
+      </ul>
+    </section>
+    <section id="panel-counters" class="operational-card live-panel" data-live-panel="counters" aria-labelledby="live-counters-heading">
+      <div class="card-heading"><h3 id="live-counters-heading">Counters</h3><a href="/api/v1/metrics">Metrics API</a></div>
+      <dl class="counter-list" data-live-counter-list>
+        <div><dt>Events dropped</dt><dd data-live-events-dropped>{{ operational.events_dropped }}</dd></div>
+        <div><dt>Observed metrics</dt><dd>{{ operational.metrics|length }}</dd></div>
+        <div><dt>Observed alerts</dt><dd>{{ operational.alerts|length }}</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <section id="panel-timeline" class="operational-card live-panel" data-live-panel="timeline" aria-labelledby="live-timeline-heading">
+    <div class="card-heading"><h3 id="live-timeline-heading">Timeline</h3><span class="summary-meta">ordered by sequence</span></div>
+    <ol class="event-list" data-live-timeline>
+      {% for event in operational.timeline %}
+      <li{% if event.sequence is defined and event.sequence is not none %} id="event-sequence-{{ event.sequence }}" data-event-sequence="{{ event.sequence }}"{% endif %}><span class="event-sequence">{{ event.sequence }}</span><span>{{ event.label or event.event_name }}</span><span class="event-meta">{{ event.detail or event.severity or 'observed' }}</span></li>
+      {% else %}<li class="empty-state">No observed events in the current context.</li>{% endfor %}
+    </ol>
+    <p class="evidence-note" data-live-drop-evidence role="status">Drop counts are transport evidence; no causal explanation is inferred.</p>
+  </section>
+
+  <section class="operational-card" aria-labelledby="live-alerts-heading">
+    <div class="card-heading"><h3 id="live-alerts-heading">Alerts</h3><span class="summary-meta">event-derived</span></div>
+    <ul class="operational-list" data-live-alert-list>
+      {% for alert in operational.alerts %}<li><strong>{{ alert.name }}</strong><span class="alert-state alert-state-{{ alert.state|lower }}">{{ alert.state }}</span><span>{{ alert.value }} / {{ alert.threshold }}</span></li>
+      {% else %}<li class="empty-state">No active alerts.</li>{% endfor %}
+    </ul>
+  </section>
+</div>

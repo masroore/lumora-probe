@@ -1,7 +1,13 @@
 <main id="workspace-view" class="viewer-panel" tabindex="-1" data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}">
   <nav aria-label="Breadcrumb"><a href="/dashboard">Workspace</a><span aria-hidden="true"> / </span><span aria-current="page">{{ ui.title }}</span></nav>
   <header class="view-header"><p class="eyebrow">{{ ui.route.group.value }}</p><h1>{{ ui.title }}</h1><p>{{ ui.route.description }}</p></header>
-  {% if ui.route.tabs %}<div data-tabs data-default-tab="{{ ui.active_tab }}">
+  {% if ui.route.name == 'dashboard' %}
+  {% include "views/dashboard.html" %}
+  {% elif ui.route.name == 'live' %}
+  {% include "views/live.html" %}
+  {% elif ui.route.name == 'audit' %}
+  {% include "views/audit.html" %}
+  {% elif ui.route.tabs %}<div data-tabs data-default-tab="{{ ui.active_tab }}">
     <div role="tablist" aria-label="{{ ui.route.label }} sections">{% for tab in ui.route.tabs %}<a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}" aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}" tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">{{ tab|replace('-', ' ')|title }}</a>{% endfor %}</div>
     {% for tab in ui.route.tabs %}<section id="panel-{{ tab }}" role="tabpanel" aria-labelledby="tab-{{ tab }}"{% if tab != ui.active_tab %} hidden{% endif %}><h2>{{ tab|replace('-', ' ')|title }}</h2><p>Content loads through the canonical {{ ui.route.label }} application provider.</p></section>{% endfor %}
   </div>{% else %}<section class="empty-state" role="status"><h2>Workspace ready</h2><p>This canonical route is established. Workflow data is unavailable until its application provider is configured.</p><p><strong>Remediation:</strong> configure the corresponding provider or continue through available navigation.</p></section>{% endif %}
