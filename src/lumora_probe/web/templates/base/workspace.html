@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Lumora Probe engineering investigation workspace">
-    <title>{{ workspace.title }} · Lumora Probe</title>
+    <title>{{ ui.title }} · Lumora Probe</title>
     <link rel="stylesheet" href="/static/css/app.css">
     <link rel="stylesheet" href="/static/vendor/tabulator.min.css">
   </head>
@@ -19,12 +19,12 @@
         </div>
       </div>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a href="/dashboard" hx-get="/dashboard" hx-target="#workspace-view" hx-push-url="true" data-route-name="dashboard" aria-current="page">Dashboard</a>
-        <a href="/live" hx-get="/live" hx-target="#workspace-view" hx-push-url="true" data-route-name="live">Live Monitor</a>
-        <a href="/captures" hx-get="/captures" hx-target="#workspace-view" hx-push-url="true" data-route-name="captures">Captures</a>
-        <a href="/studies" hx-get="/studies" hx-target="#workspace-view" hx-push-url="true" data-route-name="studies">Studies</a>
-        <a href="/search" hx-get="/search" hx-target="#workspace-view" hx-push-url="true" data-route-name="search">Search</a>
-        <a href="/replay" hx-get="/replay" hx-target="#workspace-view" hx-push-url="true" data-route-name="replay">Replay</a>
+        <a href="/dashboard" hx-get="/dashboard" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="dashboard" aria-current="page">Dashboard</a>
+        <a href="/live" hx-get="/live" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="live">Live Monitor</a>
+        <a href="/captures" hx-get="/captures" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="captures">Captures</a>
+        <a href="/studies" hx-get="/studies" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="studies">Studies</a>
+        <a href="/search" hx-get="/search" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="search">Search</a>
+        <a href="/replay" hx-get="/replay" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="replay">Replay</a>
       </nav>
       <div class="toolbar-actions">
         <button class="button button-secondary" type="button" data-command-palette>
@@ -58,18 +58,12 @@
           <div id="explorer-body" class="panel-body" data-panel-body>
             <label class="search-field" for="explorer-search">
               <span class="sr-only">Filter explorer</span>
-              <input id="explorer-search" type="search" placeholder="Filter workspace" autocomplete="off">
+              <input id="explorer-search" type="search" name="workspace_filter" placeholder="Filter workspace" autocomplete="off">
             </label>
             <nav aria-label="Workspace views">
               <ul class="explorer-list">
-                {% for item in workspace.explorer_items %}
-                <li>
-                  <a class="explorer-item{% if item.active %} is-active{% endif %}" href="#{{ item.label|lower|replace(' ', '-') }}"
-                     {% if item.active %}aria-current="page"{% endif %}>
-                    <span class="explorer-item-label">{{ item.label }}</span>
-                    <span class="explorer-item-detail">{{ item.detail }}</span>
-                  </a>
-                </li>
+                {% for item in ui.primary_routes %}
+                <li><a class="explorer-item{% if item.name == ui.route.name %} is-active{% endif %}" href="{{ item.path }}" hx-get="{{ item.path }}" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="{{ item.name }}"{% if item.name == ui.route.name %} aria-current="page"{% endif %}><span class="explorer-item-label">{{ item.label }}</span><span class="explorer-item-detail">{{ item.description }}</span></a></li>
                 {% endfor %}
               </ul>
             </nav>
@@ -121,21 +115,23 @@
           </div>
         </aside>
 
-        <section id="viewer-panel" class="workspace-panel viewer-panel" aria-labelledby="viewer-heading">
+        <section id="workspace-view" class="workspace-panel viewer-panel" tabindex="-1"
+                 data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}"
+                 aria-labelledby="viewer-heading">
           <div class="panel-heading viewer-heading">
             <div>
               <p class="eyebrow">Render surface</p>
               <h2 id="viewer-heading">Viewer</h2>
             </div>
             <div class="viewer-tools" aria-label="Viewer tools">
-              <button class="tool-button" type="button" aria-label="Zoom in">+</button>
-              <button class="tool-button" type="button" aria-label="Zoom out">−</button>
-              <button class="tool-button" type="button">Pan</button>
-              <button class="tool-button" type="button">Window / level</button>
-              <button type="button" id="cine-toggle" class="tool-button"
+              <button class="tool-button" type="button" aria-label="Zoom in" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">+</button>
+              <button class="tool-button" type="button" aria-label="Zoom out" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">−</button>
+              <button class="tool-button" type="button" disabled aria-disabled="true" title="Select a supported image instance to enable pan">Pan</button>
+              <button class="tool-button" type="button" disabled aria-disabled="true" title="Select a supported image instance to enable window and level">Window / level</button>
+              <button type="button" id="cine-toggle" class="tool-button" disabled aria-disabled="true" title="Select a multi-frame image to enable cine"
                       aria-pressed="false" aria-label="Toggle cine playback"
                       title="Play/Pause cine (frames)">▶ Cine</button>
-              <button type="button" id="fullscreen-toggle" class="tool-button"
+              <button type="button" id="fullscreen-toggle" class="tool-button" disabled aria-disabled="true" title="Select a supported image instance to enable fullscreen"
                       aria-pressed="false" aria-label="Toggle fullscreen viewer"
                       title="Fullscreen (f)">⛶ Fullscreen</button>
             </div>
@@ -332,6 +328,11 @@
 
     <footer class="status-bar" role="contentinfo">
       <div class="status-group"><span class="status-dot" aria-hidden="true"></span><strong>{{ workspace.connection_state }}</strong><span>Local application</span></div>
+      <nav class="status-group" aria-label="Utility navigation">
+        {% for item in ui.utility_routes %}
+        <a href="{{ item.path }}" hx-get="{{ item.path }}" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="{{ item.name }}">{{ item.label }}</a>
+        {% endfor %}
+      </nav>
       <div class="status-group"><span>Events dropped</span><strong>{{ workspace.events_dropped }}</strong><span class="status-divider" aria-hidden="true">·</span><span>Keyboard ready</span></div>
     </footer>
 

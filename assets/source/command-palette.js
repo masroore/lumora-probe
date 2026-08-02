@@ -12,7 +12,17 @@ function initialise() {
       item.dataset.command = action.name;
       item.textContent = action.label;
       if (action.href) item.href = action.href;
-      else item.type = 'button';
+      else {
+        item.type = 'button';
+        item.addEventListener('click', () => {
+          const targets = {
+            'toggle-explorer': '[data-panel-toggle="explorer"]',
+            'toggle-inspector': '[data-panel-toggle="inspector"]',
+          };
+          const target = document.querySelector(targets[action.name]);
+          if (target) target.click();
+        });
+      }
       if (action.unavailable_reason) { item.setAttribute('aria-disabled', 'true'); item.title = action.unavailable_reason; }
       return item;
     }));

@@ -1,7 +1,16 @@
 const PREFERENCE_KEY = 'lumora.ui.preferences.v1';
 const SAFE_PREFERENCES = new Set(['explorerCollapsed', 'inspectorCollapsed', 'dockExpanded']);
 
-function readPreferences(storage = window.localStorage) {
+function browserStorage() {
+  try {
+    return window.localStorage;
+  } catch (_) {
+    return null;
+  }
+}
+
+function readPreferences(storage = browserStorage()) {
+  if (!storage) return {};
   try {
     const parsed = JSON.parse(storage.getItem(PREFERENCE_KEY) || '{}');
     if (parsed.version !== 1 || typeof parsed.values !== 'object' || !parsed.values) return {};
@@ -9,8 +18,9 @@ function readPreferences(storage = window.localStorage) {
   } catch (_) { return {}; }
 }
 
-function writePreference(key, value, storage = window.localStorage) {
+function writePreference(key, value, storage = browserStorage()) {
   if (!SAFE_PREFERENCES.has(key) || typeof value !== 'boolean') return false;
+  if (!storage) return false;
   try {
     const values = readPreferences(storage);
     values[key] = value;
@@ -28,13 +38,19 @@ function activateRoute(root = document) {
     else link.removeAttribute('aria-current');
   });
   document.title = `${view.dataset.pageTitle} · Lumora Probe`;
-  root.querySelector('#route-announcer').textContent = `${view.dataset.pageTitle} loaded`;
+  root.querySelector('#route-announcer')?.replaceChildren(`${view.dataset.pageTitle} loaded`);
+}
+
+function focusWorkspace() {
+  const view = document.querySelector('#workspace-view');
+  view?.focus({preventScroll: true});
 }
 
 function initialise() {
   if (document.documentElement.dataset.workspaceController === 'ready') return;
   document.documentElement.dataset.workspaceController = 'ready';
   const frame = document.querySelector('[data-workspace-frame]');
+  if (!frame) return;
   const preferences = readPreferences();
   for (const [key, value] of Object.entries(preferences)) frame.dataset[key] = String(value);
   document.addEventListener('click', (event) => {
@@ -48,10 +64,10 @@ function initialise() {
     writePreference(key, collapsed);
   });
   document.body.addEventListener('htmx:afterSwap', (event) => {
-    if (event.detail.target.id !== 'workspace-view') return;
     activateRoute();
-    event.detail.target.focus({preventScroll: true});
+    if (event.detail.target.id === 'workspace-view') focusWorkspace();
   });
+  document.body.addEventListener('htmx:afterSettle', focusWorkspace);
   window.addEventListener('popstate', () => activateRoute());
   activateRoute();
 }

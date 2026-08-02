@@ -184,3 +184,11 @@ h3 { font-size: .88rem; }
 .search-table .tabulator{border:1px solid var(--color-lumora-line);background:var(--color-lumora-panel);color:var(--color-lumora-ink);font-size:.74rem}
 .search-table .tabulator-header,.search-table .tabulator-row{background:var(--color-lumora-panel);color:inherit;border-color:var(--color-lumora-line)}
 :root[data-theme="high-contrast"] button:focus-visible,:root[data-theme="high-contrast"] a:focus-visible,:root[data-theme="high-contrast"] input:focus-visible,:root[data-theme="high-contrast"] select:focus-visible,:root[data-theme="high-contrast"] summary:focus-visible{outline:3px solid #000;outline-offset:3px}
+
+.context-tabs { display: grid; gap: .6rem; padding: .7rem .9rem; border-block: 1px solid var(--color-lumora-line); background: var(--color-lumora-panel); }
+.context-tabs [role="tablist"] { display: flex; flex-wrap: wrap; gap: .35rem; }
+.context-tabs [role="tab"] { color: var(--color-lumora-muted); border-bottom: 2px solid transparent; padding: .35rem .55rem; text-decoration: none; }
+.context-tabs [role="tab"][aria-selected="true"] { color: var(--color-lumora-ink); border-bottom-color: var(--color-lumora-accent); }
+.context-tabs [role="tabpanel"] { min-height: 4rem; }
+.status-group a { color: inherit; text-decoration: none; }
+.status-group a:hover, .status-group a:focus-visible { color: var(--color-lumora-accent); text-decoration: underline; }

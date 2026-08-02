@@ -87,3 +87,26 @@ async def test_contextual_route_owns_valid_tab_state() -> None:
         'id="tab-overview" role="tab" href="?tab=overview" aria-controls="panel-overview" aria-selected="true"'
         in invalid.text
     )
+
+
+@pytest.mark.asyncio
+async def test_workspace_interaction_inventory_passes() -> None:
+    from lumora_probe.web.ui_actions import UI_ACTIONS
+    from tests.ui_inventory import validate_interactions
+
+    transport = httpx.ASGITransport(app=create_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        response = await client.get("/captures/capture-1?tab=events")
+
+    validate_interactions(response.text, {action.name for action in UI_ACTIONS})
+
+
+def test_interaction_inventory_rejects_inert_and_invalid_controls() -> None:
+    from tests.ui_inventory import InventoryError, validate_interactions
+
+    with pytest.raises(InventoryError, match="duplicate IDs"):
+        validate_interactions('<div id="same"></div><div id="same"></div>', set())
+    with pytest.raises(InventoryError, match="missing ARIA targets"):
+        validate_interactions('<button aria-controls="missing" disabled>Open</button>', set())
+    with pytest.raises(InventoryError, match="unowned visible controls"):
+        validate_interactions('<button type="button">Does nothing</button>', set())
