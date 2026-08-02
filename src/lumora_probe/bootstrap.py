@@ -50,6 +50,7 @@ from lumora_probe.studies.service import DecodeService, LRUFrameCache, MetadataI
 from lumora_probe.web.api import create_app
 from lumora_probe.web.event_routes import EventPageQuery
 from lumora_probe.web.live import LiveEventSource
+from lumora_probe.web.operation_routes import CompositeOperationRegistry
 from lumora_probe.web.security import SecurityPolicy
 from lumora_probe.web.transfer_inspector import TransferInspectorService
 
@@ -544,8 +545,22 @@ class _AuditProvider:
     def __init__(self, audit: AuditLog) -> None:
         self.audit = audit
 
-    async def list(self, *, category: str | None = None, limit: int = 100) -> tuple[Any, ...]:
-        return await self.audit.list(category=category, limit=limit)
+    async def list(
+        self,
+        *,
+        category: str | None = None,
+        limit: int = 100,
+        cursor: int | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+    ) -> tuple[Any, ...]:
+        return await self.audit.list(
+            category=category,
+            limit=limit,
+            cursor=cursor,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
 
 
 class _BookmarkProvider:
@@ -1146,6 +1161,15 @@ def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
             payload={"code": code, **dict(payload)},
         )
 
+    async def operation_audit_sink(payload: Mapping[str, object]) -> None:
+        await audit.append(
+            AuditCategory.ADMINISTRATIVE_ACTION,
+            entity_type="operation",
+            entity_id=str(payload.get("operation_id", "")) or None,
+            occurred_at=clock.now(),
+            payload=dict(payload),
+        )
+
     application = create_app(
         clock=clock,
         event_clock=clock,
@@ -1157,8 +1181,9 @@ def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
         projection_store=_SQLiteResourceStore(storage),
         association_store=live_evidence,
         event_store=live_evidence,
-        operation_registry=operation_registry,
+        operation_registry=CompositeOperationRegistry(job_registry, operation_registry),
         audit_provider=_AuditProvider(audit),
+        operation_audit_sink=operation_audit_sink,
         bookmark_provider=_BookmarkProvider(bookmark_repository),
         study_browser_provider=_StudyBrowserProvider(study_repository),
         frame_provider=frame_provider,

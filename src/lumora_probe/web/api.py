@@ -43,6 +43,7 @@ from .client_event_routes import (
     create_client_event_router,
 )
 from .contracts import ErrorResponse
+from .dashboard_routes import RuntimeOperationalProvider
 from .event_routes import create_event_router
 from .frame_routes import FrameProvider, create_frame_router
 from .health_routes import HealthProvider, create_health_router
@@ -217,6 +218,7 @@ def create_app(
     metrics_provider: MetricsProvider | None = None,
     alert_provider: AlertProvider | None = None,
     audit_provider: AuditProvider | None = None,
+    operation_audit_sink: Any | None = None,
     security_audit_sink: Any | None = None,
     log_search_provider: LogSearchProvider | None = None,
     lifecycle_manager: LifecycleManager | None = None,
@@ -297,7 +299,20 @@ def create_app(
         application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     application.include_router(api_v1_router)
     application.include_router(create_workspace_router(data=workspace_data))
-    application.include_router(create_ui_router(data=workspace_data))
+    operational_provider = RuntimeOperationalProvider(
+        health_provider=health_provider,
+        metrics_provider=metrics_provider,
+        alert_provider=alert_provider,
+        capture_store=capture_store,
+        association_store=association_store,
+        operation_registry=operation_registry,
+        plugin_provider=plugin_provider,
+        audit_provider=audit_provider,
+        workspace_data=workspace_data,
+    )
+    application.include_router(
+        create_ui_router(data=workspace_data, operational_provider=operational_provider)
+    )
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)
     application.include_router(
@@ -330,7 +345,10 @@ def create_app(
     )
     application.include_router(create_association_router(association_store), prefix=API_PREFIX)
     application.include_router(create_event_router(event_store), prefix=API_PREFIX)
-    application.include_router(create_operation_router(operation_registry), prefix=API_PREFIX)
+    application.include_router(
+        create_operation_router(operation_registry, audit_sink=operation_audit_sink),
+        prefix=API_PREFIX,
+    )
     application.include_router(create_settings_router(settings_provider), prefix=API_PREFIX)
     application.include_router(create_health_router(health_provider), prefix=API_PREFIX)
     application.include_router(

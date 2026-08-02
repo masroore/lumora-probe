@@ -97,33 +97,48 @@ class AuditLog:
             )
 
     async def list(
-        self, *, category: AuditCategory | str | None = None, limit: int = 100
+        self,
+        *,
+        category: AuditCategory | str | None = None,
+        limit: int = 100,
+        cursor: int | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
     ) -> tuple[AuditRecord, ...]:
-        if limit < 1:
-            raise ValueError("limit must be positive")
-        if category is None:
-            rows = await self.database.execute_read(
-                "SELECT audit_id, event_type, entity_type, entity_id, occurred_at, payload_json "
-                "FROM audit_log ORDER BY audit_id DESC LIMIT ?",
-                (limit,),
-            )
-        elif str(category) == AuditCategory.ADMINISTRATIVE_ACTION.value:
-            rows = await self.database.execute_read(
-                "SELECT audit_id, event_type, entity_type, entity_id, occurred_at, payload_json "
-                "FROM audit_log WHERE event_type IN (?, ?, ?) ORDER BY audit_id DESC LIMIT ?",
-                (
-                    AuditCategory.ADMINISTRATIVE_ACTION.value,
-                    "CaptureDeleted",
-                    "ProtocolReplayAudit",
-                    limit,
-                ),
-            )
-        else:
-            rows = await self.database.execute_read(
-                "SELECT audit_id, event_type, entity_type, entity_id, occurred_at, payload_json "
-                "FROM audit_log WHERE event_type = ? ORDER BY audit_id DESC LIMIT ?",
-                (str(category), limit),
-            )
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("audit page limit must be between 1 and 100")
+        if cursor is not None and (type(cursor) is not int or cursor < 0):
+            raise ValueError("audit page cursor must be a non-negative integer")
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        if category is not None:
+            if str(category) == AuditCategory.ADMINISTRATIVE_ACTION.value:
+                clauses.append("event_type IN (?, ?, ?)")
+                parameters.extend(
+                    [
+                        AuditCategory.ADMINISTRATIVE_ACTION.value,
+                        "CaptureDeleted",
+                        "ProtocolReplayAudit",
+                    ]
+                )
+            else:
+                clauses.append("event_type = ?")
+                parameters.append(str(category))
+        if entity_type is not None:
+            clauses.append("entity_type = ?")
+            parameters.append(entity_type)
+        if entity_id is not None:
+            clauses.append("entity_id = ?")
+            parameters.append(entity_id)
+        if cursor is not None:
+            clauses.append("audit_id < ?")
+            parameters.append(cursor)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = await self.database.execute_read(
+            "SELECT audit_id, event_type, entity_type, entity_id, occurred_at, payload_json "
+            f"FROM audit_log {where} ORDER BY audit_id DESC LIMIT ?",
+            (*parameters, limit),
+        )
         return tuple(
             AuditRecord(
                 int(row["audit_id"]),

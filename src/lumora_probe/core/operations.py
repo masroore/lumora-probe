@@ -162,6 +162,39 @@ class InMemoryJobRegistry:
         record = self._records.get(operation_id)
         return self._snapshot(record) if record is not None else None
 
+    async def list(
+        self,
+        *,
+        limit: int = 100,
+        cursor: int | None = None,
+        state: str | None = None,
+        job_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Return a bounded, stable page of in-memory operation snapshots."""
+        _validate_operation_page(limit=limit, cursor=cursor)
+        snapshots = [
+            snapshot
+            for record in self._records.values()
+            if (snapshot := self._snapshot(record)) is not None
+            and (state is None or str(snapshot.state) == state)
+            and (job_type is None or snapshot.job_type == job_type)
+        ]
+        items = [
+            _operation_snapshot(item, cancellable=item.state is JobState.RUNNING)
+            for item in snapshots
+        ]
+        items.sort(
+            key=lambda item: (str(item["started_at"]), str(item["operation_id"])),
+            reverse=True,
+        )
+        offset = cursor or 0
+        page = items[offset : offset + limit]
+        next_cursor = offset + len(page) if offset + len(page) < len(items) else None
+        return {
+            "items": page,
+            "next_cursor": str(next_cursor) if next_cursor is not None else None,
+        }
+
     async def cancel(self, operation_id: str) -> bool:
         """Request cooperative cancellation for a running job."""
         record = self._records.get(operation_id)
@@ -300,6 +333,58 @@ class SQLiteOperationRegistry:
             "interruption_reason": row["interruption_reason"],
         }
 
+    async def list(
+        self,
+        *,
+        limit: int = 100,
+        cursor: int | None = None,
+        state: str | None = None,
+        job_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Return a bounded, stable page of durable operation records."""
+        _validate_operation_page(limit=limit, cursor=cursor)
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        if state is not None:
+            clauses.append("state = ?")
+            parameters.append(state)
+        if job_type is not None:
+            clauses.append("job_type = ?")
+            parameters.append(job_type)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        offset = cursor or 0
+        rows = await self.databases.app.execute_read(
+            "SELECT operation_id, job_type, parameters_json, state, started_at, completed_at, "
+            "outcome, progress_json, interruption_reason FROM jobs "
+            f"{where} ORDER BY started_at DESC, operation_id DESC LIMIT ? OFFSET ?",
+            (*parameters, limit, offset),
+        )
+        items = [
+            {
+                "operation_id": row["operation_id"],
+                "job_type": row["job_type"],
+                "parameters": json.loads(row["parameters_json"]),
+                "state": row["state"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "outcome": row["outcome"],
+                "progress": json.loads(row["progress_json"]),
+                "interruption_reason": row["interruption_reason"],
+                "cancellable": False,
+            }
+            for row in rows
+        ]
+        next_cursor = offset + len(items) if len(items) == limit else None
+        return {
+            "items": items,
+            "next_cursor": str(next_cursor) if next_cursor is not None else None,
+        }
+
+    async def cancel(self, operation_id: str) -> bool:
+        """Durable history cannot cancel work; the in-memory owner must do that."""
+        del operation_id
+        return False
+
     async def start(
         self,
         *,
@@ -371,6 +456,28 @@ class SQLiteOperationRegistry:
                 json.dumps(payload, sort_keys=True, default=str),
             ),
         )
+
+
+def _validate_operation_page(*, limit: int, cursor: int | None) -> None:
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ValueError("operation page limit must be between 1 and 100")
+    if cursor is not None and (type(cursor) is not int or cursor < 0):
+        raise ValueError("operation page cursor must be a non-negative integer")
+
+
+def _operation_snapshot(record: JobRecord, *, cancellable: bool) -> dict[str, Any]:
+    return {
+        "operation_id": record.operation_id,
+        "job_type": record.job_type,
+        "parameters": dict(record.parameters),
+        "state": str(record.state),
+        "started_at": record.started_at.isoformat(),
+        "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        "outcome": record.outcome,
+        "progress": dict(record.progress),
+        "interruption_reason": record.interruption_reason,
+        "cancellable": cancellable,
+    }
 
 
 __all__: tuple[str, ...] = ()
