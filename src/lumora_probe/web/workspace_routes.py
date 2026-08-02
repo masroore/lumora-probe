@@ -12,9 +12,8 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from fastapi import APIRouter
+from fastapi.responses import RedirectResponse
 
 WorkspaceData = Mapping[str, Any]
 TEMPLATE_ROOT = Path(__file__).with_name("templates")
@@ -134,16 +133,12 @@ def create_workspace_router(
 ) -> APIRouter:
     """Create the root HTML route without reaching into stores or services."""
 
-    environment = Environment(
-        loader=FileSystemLoader(str(template_root or TEMPLATE_ROOT)),
-        autoescape=select_autoescape(("html", "xml")),
-    )
+    del data, template_root
     router = APIRouter(tags=["workspace"])
 
-    @router.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def workspace(request: Request) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        template = environment.get_template("workspace.html")
-        return HTMLResponse(template.render(request=request, **_workspace_context(data)))
+    @router.get("/", include_in_schema=False)
+    def workspace() -> RedirectResponse:  # pyright: ignore[reportUnusedFunction]
+        return RedirectResponse("/dashboard")
 
     return router
 
