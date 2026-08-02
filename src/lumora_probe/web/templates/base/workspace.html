@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en" data-theme="system" data-preference-version="1">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Lumora Probe engineering investigation workspace">
+    <title>{{ workspace.title }} · Lumora Probe</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/vendor/tabulator.min.css">
+  </head>
+  <body class="workspace-shell" data-route-name="{{ ui.route.name }}">
+    <a class="skip-link" href="#workspace-main">Skip to workspace</a>
+    <header class="workspace-toolbar" role="banner">
+      <div class="brand-lockup">
+        <a class="brand-mark" href="/" aria-label="Lumora Probe home">L</a>
+        <div>
+          <p class="eyebrow">Lumora Probe</p>
+          <h1>{{ workspace.title }}</h1>
+        </div>
+      </div>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/dashboard" hx-get="/dashboard" hx-target="#workspace-view" hx-push-url="true" data-route-name="dashboard" aria-current="page">Dashboard</a>
+        <a href="/live" hx-get="/live" hx-target="#workspace-view" hx-push-url="true" data-route-name="live">Live Monitor</a>
+        <a href="/captures" hx-get="/captures" hx-target="#workspace-view" hx-push-url="true" data-route-name="captures">Captures</a>
+        <a href="/studies" hx-get="/studies" hx-target="#workspace-view" hx-push-url="true" data-route-name="studies">Studies</a>
+        <a href="/search" hx-get="/search" hx-target="#workspace-view" hx-push-url="true" data-route-name="search">Search</a>
+        <a href="/replay" hx-get="/replay" hx-target="#workspace-view" hx-push-url="true" data-route-name="replay">Replay</a>
+      </nav>
+      <div class="toolbar-actions">
+        <button class="button button-secondary" type="button" data-command-palette>
+          <span aria-hidden="true">⌘K</span> Commands
+        </button>
+        <label class="theme-control" for="theme-select">
+          <span class="sr-only">Color theme</span>
+          <select id="theme-select" data-theme-select aria-label="Color theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="high-contrast">High contrast</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <main id="workspace-main" data-workspace-frame class="workspace-frame" data-explorer-collapsed="false" data-inspector-collapsed="false">
+      <div class="workspace-panels">
+        <aside id="explorer-panel" class="workspace-panel explorer-panel" aria-labelledby="explorer-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Navigate</p>
+              <h2 id="explorer-heading">Explorer</h2>
+            </div>
+            <button class="icon-button panel-toggle" type="button" data-panel-toggle="explorer"
+                    aria-controls="explorer-body" aria-expanded="true" aria-label="Collapse explorer">
+              <span aria-hidden="true">‹</span>
+            </button>
+          </div>
+          <div id="explorer-body" class="panel-body" data-panel-body>
+            <label class="search-field" for="explorer-search">
+              <span class="sr-only">Filter explorer</span>
+              <input id="explorer-search" type="search" placeholder="Filter workspace" autocomplete="off">
+            </label>
+            <nav aria-label="Workspace views">
+              <ul class="explorer-list">
+                {% for item in workspace.explorer_items %}
+                <li>
+                  <a class="explorer-item{% if item.active %} is-active{% endif %}" href="#{{ item.label|lower|replace(' ', '-') }}"
+                     {% if item.active %}aria-current="page"{% endif %}>
+                    <span class="explorer-item-label">{{ item.label }}</span>
+                    <span class="explorer-item-detail">{{ item.detail }}</span>
+                  </a>
+                </li>
+                {% endfor %}
+              </ul>
+            </nav>
+            <div class="panel-note" role="note">
+              <strong>Context</strong>
+              <span>{{ workspace.active_context }}</span>
+            </div>
+            <section class="panel-note" aria-labelledby="plugin-trust-heading">
+              <strong id="plugin-trust-heading">Plugin trust</strong>
+              <span data-plugin-trust-notice>
+                Enabled plugins are trusted in-process code and can do anything the Lumora process can.
+                Manifest capabilities are disclosure only; capability enforcement is not provided.
+              </span>
+            </section>
+            {% if workspace.study_instances %}
+            <section class="retention-panel" aria-labelledby="retention-heading">
+              <div class="retention-heading">
+                <h3 id="retention-heading">Study objects</h3>
+                <span class="summary-meta">capture-scoped</span>
+              </div>
+              <ul class="retention-list">
+                {% for instance in workspace.study_instances %}
+                <li class="retention-item" data-study-instance>
+                  <div class="retention-item-heading">
+                    <strong>{{ instance.sop_instance_uid }}</strong>
+                    <span class="retention-state retention-state-{{ instance.retention.state }}">
+                      {{ instance.retention.state }}
+                    </span>
+                  </div>
+                  <span class="retention-detail">
+                    Present in {{ instance.present_in_capture_count }} capture{% if instance.present_in_capture_count != 1 %}s{% endif %}
+                    {% if instance.retention.expires_at %}· expires {{ instance.retention.expires_at }}{% endif %}
+                  </span>
+                  {% if instance.retention.promotable %}
+                  <button class="button button-secondary retention-promote" type="button"
+                          data-promote-instance
+                          data-promotion-start="{{ instance.retention.promotion_start }}"
+                          data-promotion-end="{{ instance.retention.promotion_end }}"
+                          {% if instance.retention.aggregate_id %}data-promotion-aggregate="{{ instance.retention.aggregate_id }}"{% endif %}>
+                    Promote to capture
+                  </button>
+                  <span class="retention-action-status" data-promotion-status role="status" aria-live="polite"></span>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            </section>
+            {% endif %}
+          </div>
+        </aside>
+
+        <section id="viewer-panel" class="workspace-panel viewer-panel" aria-labelledby="viewer-heading">
+          <div class="panel-heading viewer-heading">
+            <div>
+              <p class="eyebrow">Render surface</p>
+              <h2 id="viewer-heading">Viewer</h2>
+            </div>
+            <div class="viewer-tools" aria-label="Viewer tools">
+              <button class="tool-button" type="button" aria-label="Zoom in">+</button>
+              <button class="tool-button" type="button" aria-label="Zoom out">−</button>
+              <button class="tool-button" type="button">Pan</button>
+              <button class="tool-button" type="button">Window / level</button>
+              <button type="button" id="cine-toggle" class="tool-button"
+                      aria-pressed="false" aria-label="Toggle cine playback"
+                      title="Play/Pause cine (frames)">▶ Cine</button>
+              <button type="button" id="fullscreen-toggle" class="tool-button"
+                      aria-pressed="false" aria-label="Toggle fullscreen viewer"
+                      title="Fullscreen (f)">⛶ Fullscreen</button>
+            </div>
+          </div>
+          <div class="viewer-canvas" role="img" aria-label="Empty viewer canvas">
+            <div class="empty-state">
+              <span class="empty-state-icon" aria-hidden="true">◇</span>
+              <h3>Select an instance to inspect</h3>
+              <p>This engineering render surface is ready for a capture-backed selection.</p>
+            </div>
+          </div>
+          <div class="viewer-footer" aria-label="Viewer context">
+            <span>{{ workspace.active_context }}</span>
+            <span>Renderer idle</span>
+          </div>
+        </section>
+
+        <aside id="inspector-panel" class="workspace-panel inspector-panel" aria-labelledby="inspector-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Context</p>
+              <h2 id="inspector-heading">Inspector</h2>
+            </div>
+            <button class="icon-button panel-toggle" type="button" data-panel-toggle="inspector"
+                    aria-controls="inspector-body" aria-expanded="true" aria-label="Collapse inspector">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <div id="inspector-body" class="panel-body" data-panel-body>
+            <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
+              <button type="button" role="tab" aria-selected="true" tabindex="0">Metadata</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Properties</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Transfer</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Analysis</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1">Events</button>
+            </div>
+            <div class="metadata-inspector" role="tabpanel" aria-label="Metadata inspector">
+              <div class="metadata-actions">
+                <label class="search-field" for="metadata-search">
+                  <span class="sr-only">Search metadata tags</span>
+                  <input id="metadata-search" type="search" placeholder="Search tags or values" autocomplete="off" data-metadata-search>
+                </label>
+                <label class="metadata-private-toggle">
+                  <input type="checkbox" data-metadata-private>
+                  <span>Show private tags</span>
+                </label>
+                <div class="metadata-copy-actions" aria-label="Metadata export actions">
+                  <button class="button button-secondary" type="button" data-copy-metadata-json>Copy JSON</button>
+                  <button class="button button-secondary" type="button" data-copy-metadata-raw>Copy raw</button>
+                </div>
+              </div>
+              {% if workspace.metadata and workspace.metadata.tags %}
+              <div class="metadata-table-wrap">
+                <table class="metadata-table">
+                  <caption class="sr-only">DICOM metadata tags</caption>
+                  <thead><tr><th scope="col">Tag</th><th scope="col">Keyword</th><th scope="col">VR</th><th scope="col">Value</th><th scope="col"><span class="sr-only">Copy</span></th></tr></thead>
+                  <tbody data-metadata-rows>
+                    {% for tag in workspace.metadata.tags %}
+                    <tr data-metadata-row data-private="{{ 'true' if tag.private else 'false' }}" data-search-text="{{ tag.tag }} {{ tag.keyword }} {{ tag.vr }} {{ tag.value }}">
+                      <td><button class="metadata-copy" type="button" data-copy-text="{{ tag.tag }}">{{ tag.tag }}</button></td>
+                      <td>{{ tag.keyword or '—' }}</td>
+                      <td>{{ tag.vr }}</td>
+                      <td class="metadata-value">{{ tag.value }}</td>
+                      <td><button class="metadata-copy" type="button" data-copy-text="{{ tag.value }}">Copy</button></td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <details class="metadata-raw">
+                <summary>Raw dump</summary>
+                <pre data-metadata-raw>{{ workspace.metadata.raw_dump }}</pre>
+              </details>
+              {% else %}
+              <div class="inspector-empty">
+                <h3>No metadata selected</h3>
+                <p>Choose a capture-backed object to inspect its observed tags and values.</p>
+              </div>
+              {% endif %}
+              <span class="metadata-action-status" data-metadata-status role="status" aria-live="polite"></span>
+            </div>
+            <div class="analysis-inspector" role="tabpanel" aria-label="Analysis inspector">
+              {% if workspace.findings %}
+              <ol class="analysis-findings">
+                {% for finding in workspace.findings %}
+                <li class="analysis-finding">
+                  <div class="analysis-finding-heading">
+                    <strong>{{ finding.rule_id }}</strong>
+                    <span>{{ finding.confidence }}</span>
+                  </div>
+                  <p>{{ finding.explanation }}</p>
+                  <p class="analysis-evidence-label">Evidence</p>
+                  <ul class="analysis-evidence-links">
+                    {% for evidence in finding.evidence_links %}
+                    <li>
+                      <a href="{{ evidence.href }}" data-event-sequence="{{ evidence.sequence }}">
+                        Sequence {{ evidence.sequence }} · {{ evidence.event_name }}
+                      </a>
+                    </li>
+                    {% endfor %}
+                    {% for sequence in finding.unresolved_sequences %}
+                    <li><span role="status">Sequence {{ sequence }} unavailable</span></li>
+                    {% endfor %}
+                  </ul>
+                  <p class="analysis-next-steps"><strong>Next:</strong> {{ finding.next_steps | join('; ') }}</p>
+                </li>
+                {% endfor %}
+              </ol>
+              {% else %}
+              <div class="inspector-empty">
+                <h3>No findings available</h3>
+                <p>Run analysis against a capture to inspect evidence-linked findings.</p>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="bottom-dock" aria-label="Event and operational dock">
+        <details open id="search">
+          <summary><span>Search</span><span class="summary-meta" data-search-status>incremental results</span></summary>
+          <div class="dock-panel search-panel" id="search-panel" role="search" aria-label="Workspace search">
+            <div class="search-controls">
+              <label class="search-field" for="workspace-search">
+                <span class="sr-only">Search studies, series, instances, events, and logs</span>
+                <input id="workspace-search" type="search" placeholder="Search studies, series, instances, events, logs"
+                       autocomplete="off" data-search-input>
+              </label>
+              <fieldset class="search-kinds" data-search-kinds>
+                <legend class="sr-only">Result kinds</legend>
+                <label><input type="checkbox" value="studies" checked> Studies</label>
+                <label><input type="checkbox" value="series" checked> Series</label>
+                <label><input type="checkbox" value="instances" checked> Instances</label>
+                <label><input type="checkbox" value="events" checked> Events</label>
+                <label><input type="checkbox" value="logs" checked> Logs</label>
+              </fieldset>
+            </div>
+            <div data-search-table class="search-table" aria-live="polite"></div>
+          </div>
+        </details>
+        <details open>
+          <summary><span>Timeline</span><span class="summary-meta">ordered by sequence</span></summary>
+          <div class="dock-panel timeline-panel" id="timeline-panel" role="log" aria-live="polite">
+            {% if workspace.timeline %}
+            <ol class="event-list">
+              {% for event in workspace.timeline %}
+              <li{% if event.sequence is defined and event.sequence is not none %} id="event-sequence-{{ event.sequence }}" data-event-sequence="{{ event.sequence }}"{% endif %}>
+                <span class="event-sequence">{{ event.sequence }}</span><span>{{ event.label or event.event_name }}</span><span class="event-meta">{{ event.detail or event.severity }}</span>
+              </li>
+              {% endfor %}
+            </ol>
+            {% else %}
+            <p class="muted">No observed events in the current context.</p>
+            {% endif %}
+          </div>
+        </details>
+        <details open>
+          <summary><span>Logs</span><span class="summary-meta">operational output</span></summary>
+          <div class="dock-panel log-panel" id="logs-panel">
+            {% if workspace.logs %}
+            <ul class="log-list">
+              {% for log in workspace.logs %}
+              <li><time>{{ log.time }}</time><span class="log-level">{{ log.level }}</span><span>{{ log.message }}</span></li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <p class="muted">Operational logs will appear here.</p>
+            {% endif %}
+          </div>
+        </details>
+        <details>
+          <summary><span>Live Monitor</span><span class="summary-meta">associations and drop counters</span></summary>
+          <div class="dock-panel monitor-panel" id="monitor-panel" role="region" aria-label="Live monitor">
+            <div id="panel-status" data-page="workspace" hx-swap-oob="outerHTML"></div>
+            <div id="panel-counters" data-page="workspace" hx-swap-oob="outerHTML"></div>
+          </div>
+        </details>
+        <details>
+          <summary><span>Transfer Inspector</span><span class="summary-meta">per-leg evidence</span></summary>
+          <div class="dock-panel inspector-panel" id="transfer-inspector-panel" role="region" aria-label="Transfer inspector">
+            <p class="panel-note">Select an association to inspect transfer legs.</p>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    {% if ui.route.tabs %}
+    <section class="context-tabs" data-tabs data-default-tab="{{ ui.active_tab }}" aria-label="{{ ui.route.label }} context">
+      <div role="tablist" aria-label="{{ ui.route.label }} sections">{% for tab in ui.route.tabs %}<a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}" aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}" tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">{{ tab|replace('-', ' ')|title }}</a>{% endfor %}</div>
+      {% for tab in ui.route.tabs %}<section id="panel-{{ tab }}" role="tabpanel" aria-labelledby="tab-{{ tab }}"{% if tab != ui.active_tab %} hidden{% endif %}><h2>{{ tab|replace('-', ' ')|title }}</h2><p>Context follows the canonical resource URL.</p></section>{% endfor %}
+    </section>
+    {% endif %}
+
+    <footer class="status-bar" role="contentinfo">
+      <div class="status-group"><span class="status-dot" aria-hidden="true"></span><strong>{{ workspace.connection_state }}</strong><span>Local application</span></div>
+      <div class="status-group"><span>Events dropped</span><strong>{{ workspace.events_dropped }}</strong><span class="status-divider" aria-hidden="true">·</span><span>Keyboard ready</span></div>
+    </footer>
+
+    <div id="command-palette" data-palette-overlay hidden role="dialog" aria-modal="true" aria-label="Command palette" class="palette-overlay">
+      <div class="palette-dialog">
+        <input data-palette-input type="text" placeholder="Type a command…" aria-label="Command search" role="combobox" aria-expanded="false" aria-controls="palette-listbox" />
+        <div data-palette-list id="palette-listbox" role="listbox" aria-label="Available commands" data-actions='{{ actions_json }}'></div>
+      </div>
+    </div>
+
+    <script src="/static/vendor/htmx.min.js" defer></script>
+    <script src="/static/vendor/alpine.min.js" defer></script>
+    <script src="/static/vendor/tabulator.min.js" defer></script>
+    <script src="/static/js/viewer.js" defer></script>
+    <script src="/static/js/command-palette.js" defer></script>
+    <script src="/static/js/search-panel.js" defer></script>
+    <script src="/static/js/workspace-controller.js" defer></script>
+    <script src="/static/js/tabs-controller.js" defer></script>
+    <script src="/static/js/dialog-controller.js" defer></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const frame = document.querySelector('.workspace-frame');
+        const themeSelect = document.querySelector('[data-theme-select]');
+        const root = document.documentElement;
+        const themeOrder = ['system', 'light', 'dark', 'high-contrast'];
+        const applyTheme = (value) => {
+          const theme = themeOrder.includes(value) ? value : 'system';
+          root.dataset.theme = theme;
+          if (themeSelect) themeSelect.value = theme;
+        };
+        applyTheme(root.dataset.theme || 'system');
+        themeSelect?.addEventListener('change', () => {
+          applyTheme(themeSelect.value);
+          fetch('/api/v1/settings', {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({theme: themeSelect.value}),
+          }).catch(() => {});
+        });
+        if (window.LumoraCommandPalette) {
+          const palette = window.LumoraCommandPalette.createCommandPalette({
+            root: document.body,
+            onNavigate: (target) => {
+              if (target === 'theme') {
+                const current = themeSelect?.value || root.dataset.theme || 'system';
+                const next = themeOrder[(themeOrder.indexOf(current) + 1) % themeOrder.length];
+                applyTheme(next);
+                themeSelect?.focus();
+                return;
+              }
+              if (target === 'search') {
+                document.querySelector('#search')?.setAttribute('open', '');
+                document.querySelector('[data-search-input]')?.focus();
+                return;
+              }
+              if (target === 'timeline') {
+                document.querySelector('#timeline-panel')?.focus();
+                const first = document.querySelector('#timeline-panel [data-event-sequence], #timeline-panel .event-list li');
+                first?.focus?.();
+                first?.scrollIntoView({block: 'nearest'});
+                return;
+              }
+              const anchor = document.querySelector(`[href="#${target}"]`);
+              if (anchor) anchor.click();
+            },
+          });
+          document.querySelector('[data-command-palette]')?.addEventListener('click', () => {
+            palette.open();
+          });
+        }
+        if (window.LumoraSearchPanel) {
+          window.LumoraSearchPanel.createSearchPanel({
+            root: document.body,
+            fetchResults: async (url) => {
+              const response = await fetch(url);
+              if (!response.ok) throw new Error('Search request failed');
+              return response.json();
+            },
+          });
+        }
+        document.querySelectorAll('[data-panel-toggle]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const panel = button.dataset.panelToggle;
+            const collapsed = frame.dataset[`${panel}Collapsed`] === 'true';
+            frame.dataset[`${panel}Collapsed`] = String(!collapsed);
+            button.setAttribute('aria-expanded', String(collapsed));
+            button.setAttribute('aria-label', `${collapsed ? 'Collapse' : 'Expand'} ${panel}`);
+            button.closest('.workspace-panel').classList.toggle('is-collapsed', !collapsed);
+            button.closest('.workspace-panel').querySelector('[data-panel-body]').hidden = !collapsed;
+          });
+        });
+        const metadataSearch = document.querySelector('[data-metadata-search]');
+        const metadataPrivate = document.querySelector('[data-metadata-private]');
+        const metadataRows = document.querySelectorAll('[data-metadata-row]');
+        const updateMetadataRows = () => {
+          const query = (metadataSearch?.value || '').toLowerCase().trim();
+          const includePrivate = metadataPrivate?.checked || false;
+          metadataRows.forEach((row) => {
+            const matchesQuery = row.dataset.searchText.toLowerCase().includes(query);
+            const matchesPrivate = includePrivate || row.dataset.private !== 'true';
+            row.hidden = !(matchesQuery && matchesPrivate);
+          });
+        };
+        metadataSearch?.addEventListener('input', updateMetadataRows);
+        metadataPrivate?.addEventListener('change', updateMetadataRows);
+        document.querySelectorAll('[data-copy-text]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const status = document.querySelector('[data-metadata-status]');
+            try {
+              await navigator.clipboard.writeText(button.dataset.copyText || '');
+              status.textContent = 'Copied';
+            } catch (_) {
+              status.textContent = 'Clipboard unavailable';
+            }
+          });
+        });
+        document.querySelector('[data-copy-metadata-json]')?.addEventListener('click', async () => {
+          const status = document.querySelector('[data-metadata-status]');
+          const rows = [...metadataRows].map((row) => [...row.cells].slice(0, 4).map((cell) => cell.textContent.trim()));
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(rows));
+            status.textContent = 'Metadata JSON copied';
+          } catch (_) {
+            status.textContent = 'Clipboard unavailable';
+          }
+        });
+        document.querySelector('[data-copy-metadata-raw]')?.addEventListener('click', async () => {
+          const status = document.querySelector('[data-metadata-status]');
+          const raw = document.querySelector('[data-metadata-raw]')?.textContent || '';
+          try {
+            await navigator.clipboard.writeText(raw);
+            status.textContent = 'Raw metadata copied';
+          } catch (_) {
+            status.textContent = 'Clipboard unavailable';
+          }
+        });
+        document.querySelectorAll('[data-promote-instance]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const status = button.parentElement.querySelector('[data-promotion-status]');
+            button.disabled = true;
+            status.textContent = 'Promoting…';
+            try {
+              const payload = {
+                start: button.dataset.promotionStart,
+                end: button.dataset.promotionEnd,
+              };
+              if (button.dataset.promotionAggregate) {
+                payload.aggregate_id = button.dataset.promotionAggregate;
+              }
+              const response = await fetch('/api/v1/captures/ring-buffer/promote', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload),
+              });
+              const result = await response.json();
+              if (!response.ok) {
+                throw new Error(result.detail || 'Promotion failed');
+              }
+              status.textContent = `Promoted as ${result.capture_id || 'a capture'}`;
+              button.textContent = 'Promoted';
+            } catch (error) {
+              button.disabled = false;
+              status.textContent = error instanceof Error ? error.message : 'Promotion failed';
+            }
+          });
+        });
+      });
+    </script>
+    <div id="route-announcer" class="sr-only" role="status" aria-live="polite"></div>
+  </body>
+</html>

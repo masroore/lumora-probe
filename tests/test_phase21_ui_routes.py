@@ -42,3 +42,48 @@ async def test_root_redirects_to_canonical_dashboard() -> None:
 
     assert response.status_code == 307
     assert response.headers["location"] == "/dashboard"
+
+
+@pytest.mark.asyncio
+async def test_every_registered_route_renders_full_page_and_htmx_fragment() -> None:
+    application = create_app()
+    transport = httpx.ASGITransport(app=application)
+    values = {
+        "capture_id": "capture-1",
+        "study_uid": "1.2.826.0.1.3680043.10.543.1",
+        "instance_id": "instance-1",
+        "operation_id": "operation-1",
+        "plugin_id": "demo.plugin",
+    }
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        for route in UI_ROUTES:
+            path = route.path
+            for name in route.parameter_names:
+                path = path.replace(f"{{{name}}}", values[name])
+            full = await client.get(path)
+            fragment = await client.get(path, headers={"HX-Request": "true"})
+            assert full.status_code == 200, path
+            assert "<!doctype html>" in full.text.lower(), path
+            assert f'data-route-name="{route.name}"' in full.text, path
+            assert fragment.status_code == 200, path
+            assert "<!doctype html>" not in fragment.text.lower(), path
+            assert 'id="workspace-view"' in fragment.text, path
+            assert 'hx-swap-oob="true"' in fragment.text, path
+
+
+@pytest.mark.asyncio
+async def test_contextual_route_owns_valid_tab_state() -> None:
+    transport = httpx.ASGITransport(app=create_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        valid = await client.get("/captures/capture-1?tab=events")
+        invalid = await client.get("/captures/capture-1?tab=unknown")
+
+    assert 'id="tab-events" role="tab"' in valid.text
+    assert (
+        'id="tab-events" role="tab" href="?tab=events" aria-controls="panel-events" aria-selected="true"'
+        in valid.text
+    )
+    assert (
+        'id="tab-overview" role="tab" href="?tab=overview" aria-controls="panel-overview" aria-selected="true"'
+        in invalid.text
+    )

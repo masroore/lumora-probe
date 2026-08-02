@@ -116,7 +116,7 @@ def _finding_views(
     return tuple(views)
 
 
-def _workspace_context(data: WorkspaceData | None) -> dict[str, Any]:
+def workspace_context(data: WorkspaceData | None) -> dict[str, Any]:
     """Build a stable, optional-data-only view model for the shell."""
 
     workspace = dict(_DEFAULT_WORKSPACE)
@@ -143,4 +143,4 @@ def create_workspace_router(
     return router
 
 
-__all__ = ["STATIC_ROOT", "WorkspaceData", "create_workspace_router"]
+__all__ = ["STATIC_ROOT", "WorkspaceData", "create_workspace_router", "workspace_context"]

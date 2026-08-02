@@ -19,7 +19,7 @@ async def test_workspace_root_renders_accessible_shell_and_static_asset() -> Non
     application = create_app()
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
         static_response = await client.get("/static/css/app.css")
         api_response = await client.get(API_PREFIX)
 
@@ -49,7 +49,7 @@ async def test_workspace_data_is_optional_and_escaped() -> None:
     )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert "Capture &lt;A&gt;" in response.text
@@ -81,7 +81,7 @@ async def test_workspace_renders_inline_ring_buffer_promotion_control() -> None:
     )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert "1.2.3" in response.text
@@ -111,7 +111,7 @@ async def test_workspace_renders_metadata_inspector_actions_and_private_toggle()
     )
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert "Search tags or values" in response.text
@@ -127,7 +127,7 @@ async def test_workspace_renders_cine_and_fullscreen_controls() -> None:
     application = create_app()
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert 'id="cine-toggle"' in response.text
@@ -142,7 +142,7 @@ async def test_workspace_renders_command_palette_markup() -> None:
     application = create_app()
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert "data-palette-overlay" in response.text

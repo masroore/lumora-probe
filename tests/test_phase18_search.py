@@ -93,7 +93,7 @@ async def test_workspace_includes_search_panel_and_theme_control() -> None:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=application), base_url="http://localhost"
     ) as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert 'id="search"' in response.text

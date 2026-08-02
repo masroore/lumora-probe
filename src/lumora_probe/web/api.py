@@ -43,7 +43,6 @@ from .client_event_routes import (
     create_client_event_router,
 )
 from .contracts import ErrorResponse
-from .dashboard_routes import create_dashboard_router
 from .event_routes import create_event_router
 from .frame_routes import FrameProvider, create_frame_router
 from .health_routes import HealthProvider, create_health_router
@@ -71,6 +70,7 @@ from .study_routes import (
     create_study_browser_router,
 )
 from .transfer_inspector import TransferInspectorService, create_transfer_inspector_router
+from .ui_routes import create_ui_router
 from .workspace_routes import STATIC_ROOT, WorkspaceData, create_workspace_router
 
 API_PREFIX = "/api/v1"
@@ -297,7 +297,7 @@ def create_app(
         application.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
     application.include_router(api_v1_router)
     application.include_router(create_workspace_router(data=workspace_data))
-    application.include_router(create_dashboard_router(metrics_provider, alert_provider))
+    application.include_router(create_ui_router(data=workspace_data))
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)
     application.include_router(

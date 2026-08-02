@@ -21,7 +21,7 @@ async def test_workspace_page_load_has_no_external_asset_requests() -> None:
     application = create_app()
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
         css = await client.get("/static/css/app.css")
         renderer = await client.get("/static/js/cornerstone-renderer.js")
 

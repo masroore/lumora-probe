@@ -471,7 +471,7 @@ async def test_workspace_renders_finding_links_to_timeline_event_anchors() -> No
     async with AsyncClient(
         transport=ASGITransport(app=application), base_url="http://localhost"
     ) as client:
-        response = await client.get("/")
+        response = await client.get("/dashboard")
 
     assert response.status_code == 200
     assert 'href="#event-sequence-4"' in response.text
