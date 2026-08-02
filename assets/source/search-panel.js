@@ -7,6 +7,8 @@ export function createSearchPanel({ root, fetchResults }) {
   const tableHost = root.querySelector("[data-search-table]");
   let table = null;
   let debounceTimer = null;
+  let requestInFlight = false;
+  let reloadQueued = false;
 
   function selectedKinds() {
     if (!kinds) return "studies,series,instances,events,logs";
@@ -45,9 +47,24 @@ export function createSearchPanel({ root, fetchResults }) {
       index: "id",
       ajaxURL: "/api/v1/search",
       ajaxRequestFunc: async (_url, _config, params) => {
-        const page = params.page || 1;
-        const size = params.size || 50;
-        return loadPage(page, size);
+        requestInFlight = true;
+        try {
+          const page = params.page || 1;
+          const size = params.size || 50;
+          return await loadPage(page, size);
+        } finally {
+          requestInFlight = false;
+          if (reloadQueued) {
+            reloadQueued = false;
+            window.setTimeout(() => {
+              if (requestInFlight) {
+                reloadQueued = true;
+              } else {
+                table?.setPage(1);
+              }
+            }, 0);
+          }
+        }
       },
       ajaxResponse: (_url, _params, response) => response,
       pagination: true,
@@ -78,14 +95,18 @@ export function createSearchPanel({ root, fetchResults }) {
     window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => {
       const active = ensureTable();
-      if (active) active.setPage(1);
+      if (!active) return;
+      if (requestInFlight) {
+        reloadQueued = true;
+        return;
+      }
+      active.setPage(1);
     }, 120);
   }
 
   input?.addEventListener("input", scheduleReload);
   kinds?.addEventListener("change", scheduleReload);
   ensureTable();
-  scheduleReload();
 
   return {
     focus() {
@@ -93,7 +114,11 @@ export function createSearchPanel({ root, fetchResults }) {
     },
     destroy() {
       window.clearTimeout(debounceTimer);
-      if (table) table.destroy();
+      reloadQueued = false;
+      if (table) {
+        table.destroy();
+        table = null;
+      }
     },
   };
 }
