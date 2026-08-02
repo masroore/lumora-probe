@@ -159,7 +159,7 @@ class LiveClient:
 class CoalescingGovernor:
     """One fixed-interval coalescing layer shared by both live endpoints."""
 
-    KNOWN_PANELS = frozenset({"counters", "status", "timeline"})
+    KNOWN_PANELS = frozenset({"counters", "operations", "status", "timeline"})
 
     def __init__(
         self,
@@ -290,6 +290,15 @@ class CoalescingGovernor:
         unknown = active_panels - self.KNOWN_PANELS
         if unknown:
             raise ValueError(f"unknown UI panels: {', '.join(sorted(unknown))}")
+        previous = cast(UiSubscription, client.subscription)
+        if (
+            previous.page != page.strip()
+            or previous.panels != active_panels
+            or previous.topics != _normalise_topics(topics)
+        ):
+            client.counter_state.clear()
+            client.status_state.clear()
+            client.timeline_state.clear()
         client.subscription = UiSubscription(page.strip(), active_panels, _normalise_topics(topics))
 
     def enqueue_replay(self, client: LiveClient, *, since_sequence: int | None) -> None:
@@ -565,15 +574,24 @@ async def _serve_websocket(
                     await websocket.send_json(_protocol_error("command must be an object"))
                     continue
                 command_map = cast(Mapping[str, Any], command)
+                version = command_map.get("version", STREAM_VERSION)
+                if version != STREAM_VERSION:
+                    await websocket.send_json(_protocol_error("unsupported protocol version"))
+                    continue
                 command_type = str(command_map.get("type", "")).casefold()
                 if command_type in {"ping", "pong"}:
                     await websocket.send_json({"type": "pong", "version": STREAM_VERSION})
                 elif (
                     command_type in {"subscribe", "resume"}
+                    and kind == "json"
                     or command_type == "mount"
                     and kind == "ui"
                 ):
-                    _apply_subscription_command(client, governor, command_map, kind)
+                    try:
+                        _apply_subscription_command(client, governor, command_map, kind)
+                    except (TypeError, ValueError) as error:
+                        await websocket.send_json(_protocol_error(str(error)))
+                        continue
                     await websocket.send_json(_subscription_ack(client))
                 else:
                     await websocket.send_json(_protocol_error("unsupported command"))
@@ -738,6 +756,7 @@ def _update_client_panel_state(
         client.counter_state[f"severity:{event.severity.value}"] += 1
         client.status_state[event.aggregate_id] = {
             "aggregate_id": event.aggregate_id,
+            "aggregate_type": event.aggregate_type,
             "event_name": event.event_name,
             "severity": event.severity.value,
             "sequence": event.sequence,
@@ -772,6 +791,13 @@ def _update_client_panel_state(
         "timeline": {
             "events": tuple(client.timeline_state),
             "events_dropped": client.counter_state["events_dropped"],
+        },
+        "operations": {
+            "rows": tuple(
+                value
+                for value in client.status_state.values()
+                if value.get("aggregate_type") == "Operation"
+            )
         },
     }
 

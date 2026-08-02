@@ -1,0 +1,13 @@
+<div id="panel-operations" data-page="{{ page }}" hx-swap-oob="outerHTML">
+  <ul class="operational-list">
+  {% for row in rows %}
+    <li>
+      <a href="/api/v1/operations/{{ row.aggregate_id }}">{{ row.aggregate_id }}</a>
+      <span>{{ row.event_name }}</span>
+      <span>{{ row.severity }} · {{ row.sequence if row.sequence is not none else "-" }}</span>
+    </li>
+  {% else %}
+    <li class="empty-state">No live operation events.</li>
+  {% endfor %}
+  </ul>
+</div>
