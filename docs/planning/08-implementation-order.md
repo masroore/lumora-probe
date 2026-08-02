@@ -37,7 +37,7 @@ complexity, priority, module and acceptance.
 
 # 3. Execution stages
 
-Twelve stages across twenty phases. A stage is a unit of "you can stop here and the system
+Fifteen stages across twenty-five phases. A stage is a unit of "you can stop here and the system
 is in a coherent state".
 
 ## Stage 1 — Decide (Phase 01)
@@ -228,11 +228,67 @@ first contact with implementations we do not control; failures get triaged, not 
 **Gate** M13, M14. Seed rules on the public SDK. Metric and event counts agree. Clean-machine
 no-Node install. Interop published.
 
+## Stage 13 — Establish the UI platform (Phase 21)
+
+**Tasks** T-21-01-01 … T-21-03-04
+
+Build canonical routes and the shared interaction seam before implementing page workflows.
+Real URLs, full-page fallback, HTMX fragments, URL/history ownership, contextual tabs,
+focus, dialogs, command registry and the interaction inventory belong together. Page teams
+must not each invent navigation or lifecycle handling.
+
+The interaction inventory is P0 and lands before operational/investigation workflows. The
+current failure class exists because visible controls had no executable acceptance seam;
+adding more pages before that seam would reproduce the same defect at larger scale.
+
+**Gate.** Every registered route direct-loads and HTMX-navigates. Navigation, tabs,
+history, focus and commands pass in a browser. The inventory rejects an inert visible
+control.
+
+## Stage 14 — Complete operational and investigation workflows (Phases 22–24)
+
+**Tasks** T-22-01-01 … T-24-04-07
+
+Three tracks proceed after Phase 21:
+
+1. Phase 22 completes Dashboard, `/live`, the `/ws/ui` browser adapter, Operations, Audit
+   and the shared dock.
+2. Phase 23 completes Captures, Studies, Search, contextual Inspector and Viewer.
+3. Phase 24 adds missing Replay/Report contracts and completes Settings/Plugins/mutations.
+
+Phase 22's live transport is order-critical for operation, replay and report progress.
+Phase 23's canonical Capture/Instance routes are order-critical for contextual reports and
+bookmarks. Within those constraints, Dashboard versus live-client work, Capture versus
+Study/Search work, and Replay contracts versus Settings/Plugins work can proceed in
+parallel.
+
+**Gate.** Every primary and utility workflow is real, deep-linkable, keyboard-operable and
+backed by one application policy. One live socket survives navigation. Unsupported inputs
+are refused with cause/remediation. No plugin-install, auth/RBAC, diagnostic-viewer or
+client-DICOM scope leaks in.
+
+## Stage 15 — Qualify the UI (Phase 25)
+
+**Tasks** T-25-01-01 … T-25-04-05
+
+Qualification is deliberately separate from feature implementation. Run the complete
+interaction inventory, three browser engines, accessibility checks, responsive/history
+matrix, live/adversarial tests, performance/security review, installed wheel/Docker smoke,
+contract/asset drift checks and documentation acceptance.
+
+Do not waive a browser because the default Python suite is green. Do not call a control
+complete because its handler exists; execute the user workflow. Any environment gap is
+reported as unverified, not silently passed.
+
+**Gate.** No exposed inert control. WCAG 2.2 AA evidence published. Cross-browser,
+resilience, performance, security, no-outbound and installed-artifact gates pass or have an
+explicit accepted triage. Phase 21–25 completion reports and release decision published.
+
 ---
 
 # 4. Order-critical decisions
 
-Five places where the order matters more than it appears, collected because each is easy to
+Nine places where the order matters more than it appears, collected because each is easy to
 undo by accident.
 
 | # | Decision | Undone by | Consequence |
@@ -242,6 +298,10 @@ undo by accident.
 | 3 | Envelope + catalog before consumers | Letting slices infer the shape | Eight divergent interpretations of a wire contract |
 | 4 | API/WS before DICOM | Building the edge first because it seems fundamental | Debugging relay blind, then re-establishing confidence |
 | 5 | Read-only mode as one seam | Per-route checks | A future auth ADR must move every check; one gets missed |
+| 6 | Real routes before HTMX enhancement | Hash-only or script-only navigation | Refresh, direct links, new tabs and browser history fail |
+| 7 | Interaction inventory before page expansion | Testing only isolated handlers | Visible inert controls ship again |
+| 8 | One live client before live workflows | Per-component sockets/pollers | Duplicate connections, divergent state and unbounded fan-out |
+| 9 | Qualification after workflow integration | Declaring each page done independently | Cross-route focus, history, live and operation failures remain invisible |
 
 ---
 
@@ -259,14 +319,22 @@ undo by accident.
    guarantees are assertions.
 8. **Report what was not verified.** A silent gap in verification is the same failure class
    as a silent gap in an event stream.
+9. **No inert exposed UI.** A visible control works or is intentionally disabled with a
+   reason and remediation.
+10. **The URL owns investigation state.** Do not hide resource, filter, page or tab state in
+    a browser/server UI session.
+11. **One application policy.** HTML, HTMX, REST and WebSocket adapters do not duplicate
+    business rules or bypass read-only/network gates.
 
 ---
 
 # 6. Entry point
 
-Phase 12 (Replay Engine) is complete. The implementation has progressed through the approved
-Phase 12 task set; see `docs/planning/phase-12-completion-report.md` and its task reports.
-Do not start Phase 13 until the Phase 12 acceptance report is reviewed and accepted.
+Phase 20 and the historical v0.1.0 GA sign-off are complete. The next approved work is
+Phase 21, UI Platform, governed by
+`docs/other/ui-completion-implementation-plan-2026-08-02.md`. Do not start Phase 22–24
+workflow implementation until Phase 21's canonical route, controller and interaction
+inventory gates pass.
 
 ---
 
@@ -275,3 +343,5 @@ Do not start Phase 13 until the Phase 12 acceptance report is reviewed and accep
 `00-architecture-review-findings.md` · `01-work-breakdown-structure.md` ·
 `02-phase-plan.md` · `03-dependency-graph.md` · `04-milestones.md` ·
 `05-risk-register.md` · `06-deliverables.md` · `07-definition-of-done.md`.
+Post-GA UI detail:
+`../other/ui-completion-implementation-plan-2026-08-02.md`.

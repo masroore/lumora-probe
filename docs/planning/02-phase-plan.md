@@ -117,6 +117,11 @@ No ADR is rewritten; `17` §12 forbids that. This mapping is the record.
 | 18 | Production Hardening | Performance, security, docs, glossary | — |
 | 19 | Packaging | Wheel, sdist, Docker, install paths | — |
 | 20 | Release | Interop matrix, acceptance, GA | M14 Production Ready |
+| 21 | UI Platform | Canonical routes, shared shell, controllers, interaction test seam | — |
+| 22 | Operational UI | Dashboard, Live Monitor client, Operations, Audit | — |
+| 23 | Investigation UI | Captures, Studies, Search, Inspector, Viewer | — |
+| 24 | Controlled Workflows | Replay, Reports, Settings, Plugins, mutations | — |
+| 25 | UI Qualification | Cross-browser, WCAG, resilience, performance, acceptance | — |
 
 ---
 
@@ -628,6 +633,141 @@ authentication, no PS3.15 conformance, plugin trust model.
 - Limitations documented plainly rather than omitted.
 
 **Discharges.** ADR-0022 §4 (scheduled interop).
+
+## Phase 21 — UI Platform
+
+**Objective.** Replace the inert workspace shell with canonical server-rendered routes and
+one testable interaction platform.
+
+**Entry.** Phase 20 remains historically complete. The post-GA UI completion plan in
+`../other/ui-completion-implementation-plan-2026-08-02.md` is accepted.
+
+**Work.** `/` redirect to `/dashboard` · canonical Dashboard, Live Monitor, Captures,
+Studies, Search, Replay, Settings, Plugins and Audit HTML routes · shared workspace shell
+with full-page and HTMX-fragment rendering · one route/action registry for navigation,
+Explorer and command palette · URL/history state · contextual ARIA tabs · local preference
+schema · accessible dialogs, feedback and focus management · locally loaded HTMX/Alpine
+through the committed-assets pipeline · automated interaction inventory.
+
+**Exit.**
+- Every registered route loads directly, refreshes, opens in a new tab and participates in
+  browser back/forward.
+- Full requests and HTMX requests execute the same application policy and render the
+  expected shell/fragment.
+- Navigation, tabs, command palette, dialogs and panel state have deterministic browser
+  tests.
+- The interaction inventory fails on an inert visible control, missing target, duplicate ID
+  or invalid tab relationship.
+- No SPA framework, loopback HTTP composition or repository cross-import is introduced.
+
+**Discharges.** ADR-0012 (web composition), ADR-0019 (server-rendered interaction model),
+ADR-0025 (committed assets), ADR-0031 (browser test seam).
+
+## Phase 22 — Operational UI
+
+**Objective.** Deliver a live, evidence-aware operational surface.
+
+**Entry.** Phase 21 exit.
+
+**Work.** Dashboard first paint · dedicated `/live` page · one browser-tab `/ws/ui`
+connection · mount/resubscribe protocol · allowlisted out-of-band fragment application ·
+heartbeat, reconnect, stale and disconnected states · active associations · counters,
+timeline, logs, alerts and dropped-event evidence · shared Operations tray · bounded
+Operations list/cancel contracts · bounded Audit filters and pagination.
+
+**Exit.**
+- Dashboard and Live Monitor render meaningful data before the socket connects.
+- One socket survives HTMX navigation without duplicate listeners or connections.
+- Reconnect, stale data, queue drops, rapid resubscription and concurrent-tab tests pass.
+- Unknown message versions, panel names and target IDs are refused visibly.
+- Timeline, Logs and Operations synchronize with the current route/resource context.
+- Operations and Audit remain bounded, stable and linkable.
+
+**Discharges.** ADR-0002 (bounded UI channel), ADR-0010 (WebSocket exposure gate),
+ADR-0014 (event/metric honesty), ADR-0017 (sequence ordering), ADR-0019 (mounted-view HTML
+stream).
+
+## Phase 23 — Investigation UI
+
+**Objective.** Complete capture-backed investigation, projection browsing and image
+inspection.
+
+**Entry.** Phase 21 exit. Phase 22 live transport is required for live-progress acceptance,
+but non-live Capture/Study/Viewer work may proceed in parallel.
+
+**Work.** Capture list/detail and ring-buffer promotion · retention, bookmarks, deletion and
+report entry points · Study/Series/Instance projections with capture provenance · URL-owned
+global Search · contextual Inspector registry and panels · metadata, properties, transfer,
+analysis and event evidence · complete engineering Viewer with frame navigation, prefetch,
+zoom, pan, window/level, invert, cine and fullscreen.
+
+**Exit.**
+- Capture, Study and Instance deep links restore the same investigation state.
+- Study/Instance views expose source-capture provenance and retention without PACS/archive
+  claims.
+- Every rendered Inspector tab has a real panel and keyboard/URL behavior.
+- Large result sets remain bounded and virtualized.
+- Every approved Viewer control works; unsupported frame/decode/render inputs are refused
+  with cause and remediation.
+- Client-asserted display events remain quarantined from analysis.
+
+**Discharges.** ADR-0008 (retention visibility), ADR-0013 (Studies as projections),
+ADR-0015 (server decode/client render), ADR-0016 (client-asserted events), ADR-0033
+(observed transfer evidence vs inferred analysis).
+
+## Phase 24 — Controlled Workflows
+
+**Objective.** Complete browser workflows that mutate state, start background work or
+change trust/runtime policy.
+
+**Entry.** Phase 21 exit. Phase 22 Operations/live progress contracts are complete. Phase 23
+canonical Capture/Instance routes are complete for report and bookmark context.
+
+**Work.** Replay preflight/list/create/detail/cancel REST contracts · event and protocol
+Replay UI · dry-run default and explicit target/allowlist confirmation · durable operation
+and audit linkage · report artifact status/preview/download routes · Settings provenance,
+locks and supported runtime edits · Plugin list/detail/enable/disable with trust disclosure
+· shared accessible confirmations and duplicate-submit prevention.
+
+**Exit.**
+- Event/protocol replays can be preflighted, started, observed, cancelled where supported
+  and audited through one application path.
+- Non-dry-run protocol replay cannot start without explicit target confirmation.
+- Reports can be generated, tracked, previewed and downloaded with provenance.
+- Settings never edit startup or externally pinned values and cannot bypass network
+  exposure policy.
+- Plugins expose no installation/sandbox/capability-enforcement claim.
+- Every mutation respects read-only mode and returns structured cause/remediation.
+
+**Discharges.** ADR-0005 (replay fidelity), ADR-0010 (network exposure), ADR-0020
+(configuration tiers), ADR-0021 (plugin trust/no API install), ADR-0023 (background
+operations).
+
+## Phase 25 — UI Qualification
+
+**Objective.** Prove the completed UI across browser, accessibility, performance, security,
+resilience, packaging and documentation gates.
+
+**Entry.** Phases 21–24 exit.
+
+**Work.** Full interaction inventory · Chromium, Firefox and WebKit Playwright suites ·
+desktop/tablet/narrow monitoring layouts · WCAG 2.2 AA automated and manual checks ·
+keyboard and screen-reader workflows · HTMX/WS resilience and concurrent-client tests ·
+large-table/viewer/live-update performance measurements · no-outbound and asset-drift
+verification · installed-wheel and Docker browser smoke tests · route/user/operator
+documentation · acceptance matrix and completion reports.
+
+**Exit.**
+- No exposed control is inert or falsely enabled.
+- Cross-browser, keyboard, history, deep-link, reconnect and responsive suites pass.
+- WCAG 2.2 AA evidence is published; any remaining limitation is explicit and accepted.
+- Performance, resilience and security evidence passes or is triaged and accepted.
+- Clean installed wheel and Docker image serve the complete UI without Node, CDN or
+  outbound traffic.
+- Phase 25 acceptance and completion reports state what was executed and what was not.
+
+**Discharges.** ADR-0009 (no outbound), ADR-0010 (exposure checks), ADR-0022 (test
+weighting), ADR-0025 (asset/install contract), ADR-0031 (browser e2e).
 
 ---
 

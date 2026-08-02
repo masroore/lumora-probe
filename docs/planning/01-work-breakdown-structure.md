@@ -100,6 +100,7 @@ starting.
 | E-5 | Investigation | 12–15 | C-12 … C-15 |
 | E-6 | Extensibility and Operations | 16–17 | C-16, C-17 |
 | E-7 | Release Readiness | 18–20 | C-18 … C-20 |
+| E-8 | Post-GA UI Completion | 21–25 | C-21 … C-25 |
 
 One capability per phase, so `C-nn` and phase `nn` correspond throughout.
 
@@ -850,9 +851,223 @@ One counting path, so `14` §6's metrics cannot disagree with `14` §4's events.
 
 ---
 
-# 11. Coverage and traceability
+# 11. Epic E-8 — Post-GA UI Completion
 
-## 11.1 Task counts by phase
+Detailed rationale, route map, controller boundaries and cross-phase acceptance live in
+`../other/ui-completion-implementation-plan-2026-08-02.md`.
+
+## C-21 — UI Platform (Phase 21)
+
+### WP-21-01 — Canonical routes and shared shell
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-21-01-01 | Canonical HTML route registry | T-20-02-05 | M | P0 | web | N | `/` redirects to `/dashboard`; every primary/utility route has one canonical real URL |
+| T-21-01-02 | Shared workspace base template | T-21-01-01 | L | P0 | web | N | Full routes share toolbar, navigation, Explorer, Inspector, dock and status bar without copied shells |
+| T-21-01-03 | Full-page/HTMX response composition | T-21-01-02 | L | P0 | web | N | Same route returns a complete document or bounded view/OOB fragments from the same provider policy |
+| T-21-01-04 | Navigation and action registry | T-21-01-01 | M | P0 | web | Y | Primary nav, utility nav, Explorer, breadcrumbs and commands derive from one route/action definition |
+| T-21-01-05 | Production provider failure surface | T-21-01-03 | M | P0 | web | N | Missing providers, 404s and structured failures render honest full-page and HTMX states; no silent empty production fallback |
+
+### WP-21-02 — Browser interaction platform
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-21-02-01 | HTMX and Alpine runtime loading | T-21-01-02, T-04-05-04 | M | P0 | assets | N | Local vendored assets load once; installed package needs no Node/network; asset drift gate passes |
+| T-21-02-02 | Workspace navigation controller | T-21-01-03, T-21-02-01 | L | P0 | web | N | Active state, title, focus, route announcement, back/forward and swap lifecycle work without duplicate listeners |
+| T-21-02-03 | Contextual ARIA tab controller | T-21-01-03 | L | P0 | web | Y | URL-owned valid tabs, roving tabindex, keyboard controls, lazy panels and focus restoration |
+| T-21-02-04 | Versioned browser preference store | T-21-02-02 | M | P1 | web | Y | Layout preferences fail safely; investigation identifiers never enter browser storage |
+| T-21-02-05 | Shared command palette registry | T-21-01-04, T-21-02-02 | M | P1 | web | Every visible command resolves through the canonical action path; context-disabled commands name a reason |
+| T-21-02-06 | Dialog and feedback controllers | T-21-02-02 | L | P0 | web | Accessible confirmation, loading, empty, stale, disabled, success and persistent cause/remediation states |
+
+### WP-21-03 — Platform verification
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-21-03-01 | UI interaction inventory | T-21-01-04 | L | P0 | tests | N | Fails on inert visible controls, missing targets, duplicate IDs, bad ARIA relations and unresolved commands |
+| T-21-03-02 | HTML/HTMX route component tests | T-21-01-05 | L | P0 | tests | Every route covers full page, fragment, redirect, direct link, failure and read-only-relevant state |
+| T-21-03-03 | Navigation/tab/history Playwright suite | T-21-02-03, T-21-02-05 | L | P0 | tests | Mouse and keyboard navigation, deep links, refresh, back/forward, focus and commands pass |
+| T-21-03-04 | Platform asset/security verification | T-21-02-01, T-21-03-03 | M | P0 | tests | No outbound requests; only committed local assets; unknown fragments/actions cannot target arbitrary DOM |
+
+## C-22 — Operational UI (Phase 22)
+
+### WP-22-01 — Dashboard and operational first paint
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-22-01-01 | Dashboard view composition | T-21-01-03, T-17-01-03 | L | P0 | web | N | Health, readiness, listener, metrics, alerts, recent captures/replays/reports and plugin health render from public contracts |
+| T-22-01-02 | Operational status components | T-22-01-01 | M | P0 | web | Normal, degraded, unavailable and empty states have canonical links and remediation |
+| T-22-01-03 | Live Monitor first paint | T-21-01-03, T-13-03-07 | L | P0 | web | `/live` renders current associations, counters, timeline, drops and alerts before WebSocket connection |
+| T-22-01-04 | Dashboard/live route tests | T-22-01-02, T-22-01-03 | M | P0 | tests | Full/HTMX first paint, unavailable providers and stable links are covered |
+
+### WP-22-02 — Browser live transport
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-22-02-01 | Live-client protocol adapter | T-21-02-02, T-09-01-07 | L | P0 | web | One `/ws/ui` connection validates ready/mounted/fragments/ping/error by version and type |
+| T-22-02-02 | Mounted-view subscription controller | T-22-02-01 | L | P0 | web | Route, Inspector and dock changes resubscribe with current page/panels/topics |
+| T-22-02-03 | Allowlisted fragment application | T-22-02-01, T-22-01-03 | L | P0 | web | Known server-rendered targets swap through HTMX; unknown panels/targets are refused visibly |
+| T-22-02-04 | Reconnect and stale-state machine | T-22-02-01 | L | P0 | web | Bounded exponential backoff+jitter, manual retry, stale marking and stable-reset behavior |
+| T-22-02-05 | Sequence/drop evidence presentation | T-22-02-03, T-09-02-03 | M | P0 | web | Sequence gaps and server drops are visible without invented causal claims |
+| T-22-02-06 | Live lifecycle cleanup | T-22-02-02 | M | P0 | web | Repeated HTMX navigation creates no duplicate sockets, timers or global listeners |
+| T-22-02-07 | Live browser/adversarial suite | T-22-02-04, T-22-02-05, T-22-02-06 | XL | P0 | tests | Restart, offline/online, malformed message, unknown target, saturation, rapid navigation and concurrent tabs pass |
+
+### WP-22-03 — Shared dock, Operations and Audit
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-22-03-01 | Shared Timeline/Logs/Operations dock | T-21-02-02, T-22-02-03 | L | P0 | web | Context-aware panels mount/unmount and synchronize without a duplicate Live Monitor |
+| T-22-03-02 | Bounded Operations list contract | T-12-04-02 | M | P0 | core | Stable pagination and state/type filters over durable operations |
+| T-22-03-03 | Supported operation cancellation contract | T-22-03-02 | L | P0 | core | Cancellation is exposed only for cooperative cancellable operations and is audited |
+| T-22-03-04 | Global operation tray | T-22-03-01, T-22-03-02 | L | P0 | web | Progress, completion, failure, result links and cancellation remain visible across routes |
+| T-22-03-05 | Bounded Audit query contract and page | T-17-02-06, T-21-01-03 | L | P0 | web | Stable pagination/filtering and correlation/resource links; immutable and read-only |
+| T-22-03-06 | Operational integration tests | T-22-03-03, T-22-03-04, T-22-03-05 | L | P0 | tests | Operation completion during navigation, cancellation races, audit filters and dock synchronization pass |
+
+## C-23 — Investigation UI (Phase 23)
+
+### WP-23-01 — Capture investigation
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-23-01-01 | Capture list route and table | T-21-01-03, T-18-01-07 | L | P0 | web | Bounded filtering, sorting, pagination, virtualization and direct links |
+| T-23-01-02 | Capture detail composition | T-23-01-01 | L | P0 | web | Manifest, provenance, retention, events, transfer evidence, findings and report state |
+| T-23-01-03 | Ring-buffer inventory and promotion UI | T-23-01-02, T-11-02-02, T-21-02-06 | L | P0 | web | Explicit window/partial impact, confirmation, progress and result |
+| T-23-01-04 | Capture bookmark UI | T-23-01-02, T-15-01-05 | M | P1 | web | Add/list/remove evidence markers with canonical event/resource links |
+| T-23-01-05 | Capture deletion UI | T-23-01-02, T-21-02-06 | M | P0 | web | Identity/impact confirmation, read-only gate, cascade outcome and structured failure |
+| T-23-01-06 | Capture contextual actions | T-23-01-02 | M | P1 | web | Study/Instance viewer, Search, Report and Audit actions resolve through shared registry |
+| T-23-01-07 | Capture workflow tests | T-23-01-03, T-23-01-04, T-23-01-05 | L | P0 | tests | Deep link, expiry/deletion race, promotion, bookmarks, read-only and failures pass |
+
+### WP-23-02 — Studies and Search
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-23-02-01 | Study list route | T-21-01-03, T-13-03-01 | L | P0 | web | Bounded Study projection browsing with partial/retention indicators |
+| T-23-02-02 | Study hierarchy route | T-23-02-01 | L | P0 | web | Study→Series→Instance hierarchy with every contributing Capture and provenance |
+| T-23-02-03 | Canonical Instance route | T-23-02-02 | M | P0 | web | Stable direct link selects Viewer and contextual Inspector without archive claims |
+| T-23-02-04 | URL-owned global Search | T-21-01-03, T-18-01-07 | L | P0 | web | Query/kinds/filters/sort/page in URL; debounce, cancellation, virtualization and keyboard selection |
+| T-23-02-05 | Search provider expansion | T-23-02-04, T-22-03-02 | L | P1 | web | Adds only provider-backed captures, operations, reports, plugins and audit references; no unbounded fan-in |
+| T-23-02-06 | Study/Search browser tests | T-23-02-03, T-23-02-05 | L | P0 | tests | Large/partial studies, provenance, history, stale selection and canonical result navigation pass |
+
+### WP-23-03 — Contextual Inspector
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-23-03-01 | Inspector tab registry | T-21-02-03 | M | P0 | web | Capture, Study, Instance, Replay and Plugin contexts expose only meaningful tabs |
+| T-23-03-02 | Metadata and Properties panels | T-23-02-03, T-13-04-02 | L | P0 | web | Search/filter/copy actions operate on observed data with loading/error/empty states |
+| T-23-03-03 | Transfer panel | T-23-01-02, T-13-04-05 | L | P0 | web | Per-leg evidence, negotiation, timing and decode facts preserve observation boundaries |
+| T-23-03-04 | Analysis panel | T-23-01-02, T-14-03-07 | L | P0 | web | Findings, confidence, explanation and sequence citations resolve to evidence |
+| T-23-03-05 | Events panel and timeline synchronization | T-23-03-01, T-22-03-01 | L | P0 | web | Sequence is the ordering/link authority; selection synchronizes route, Inspector and timeline |
+| T-23-03-06 | Inspector accessibility/browser tests | T-23-03-02, T-23-03-03, T-23-03-04, T-23-03-05 | L | P0 | tests | Valid tabs, keyboard, URL, lazy load, focus, unavailable data and evidence links pass |
+
+### WP-23-04 — Engineering Viewer
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-23-04-01 | Viewer mount and frame selection | T-23-02-03, T-13-02-02 | L | P0 | web | Canonical Instance route mounts one renderer and loads selected frame |
+| T-23-04-02 | Frame navigation and bounded prefetch | T-23-04-01 | L | P0 | web | Previous/next/direct frame and current ±2 prefetch cancel superseded requests |
+| T-23-04-03 | Zoom/pan/reset controls | T-23-04-01 | M | P0 | web | Pointer, button and keyboard controls visibly update renderer state |
+| T-23-04-04 | Window/level and invert controls | T-23-04-01 | L | P0 | web | Client-local interaction preserves normalized 16-bit data and exposes current values |
+| T-23-04-05 | Cine and fullscreen controls | T-23-04-02 | M | P0 | web | Frame rate, play/pause, stepping, reduced motion and fullscreen lifecycle work |
+| T-23-04-06 | Viewer failure taxonomy UI | T-23-04-01, T-13-01-06 | L | P0 | web | Unsupported syntax, invalid pixels, frame range, decode and renderer limits preserve cause/remediation |
+| T-23-04-07 | Client-asserted display events | T-23-04-01, T-13-02-06 | M | P0 | web | Display events post only after successful render and remain client-asserted/quarantined |
+| T-23-04-08 | Viewer browser/performance suite | T-23-04-02, T-23-04-03, T-23-04-04, T-23-04-05, T-23-04-06, T-23-04-07 | XL | P0 | tests | All approved controls, failures, cancellation, memory and frame-transition smoke budgets pass |
+
+## C-24 — Controlled Workflows (Phase 24)
+
+### WP-24-01 — Replay application and REST contracts
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-24-01-01 | Replay boundary request/response models | T-12-03-04 | L | P0 | replay | N | Discriminated event/protocol model preserves mode, fidelity, timing, dry-run and target invariants |
+| T-24-01-02 | Replay list/detail read contracts | T-24-01-01, T-22-03-02 | M | P0 | replay | Bounded durable history keyed to operation identity |
+| T-24-01-03 | Replay preflight service/route | T-24-01-01, T-12-03-03 | L | P0 | replay | Eligibility, fidelity, target/allowlist and exclusivity failures return structured remediation without starting work |
+| T-24-01-04 | Replay creation route | T-24-01-03, T-12-04-01 | L | P0 | web | Dry-run default; event/protocol work starts through existing runtime/job/audit path |
+| T-24-01-05 | Replay cancellation route | T-24-01-04, T-22-03-03 | M | P0 | web | Cooperative cancellation only; terminal/race outcomes are explicit |
+| T-24-01-06 | Replay OpenAPI/audit updates | T-24-01-04, T-24-01-05 | M | P0 | docs | Generated contract and audit coverage match routes |
+| T-24-01-07 | Replay contract/adversarial tests | T-24-01-06 | XL | P0 | tests | Target refusal, dry-run, exclusivity, cancellation race, restart interruption and read-only pass |
+
+### WP-24-02 — Replay browser workflow
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-24-02-01 | Replay list/detail routes | T-21-01-03, T-24-01-02 | L | P0 | web | History, active state, configuration, progress, events and result are canonical/deep-linkable |
+| T-24-02-02 | Mode-specific replay form | T-24-01-03, T-21-02-06 | L | P0 | web | Event/protocol fields expose only valid combinations and inline validation |
+| T-24-02-03 | Replay preflight presentation | T-24-02-02 | M | P0 | web | Fidelity/target/allowlist/refusal facts appear before submit |
+| T-24-02-04 | Non-dry-run confirmation | T-24-02-03 | M | P0 | web | Explicit destination, write impact and irreversibility acknowledgment |
+| T-24-02-05 | Live progress/result integration | T-24-02-01, T-22-03-04 | L | P0 | web | Operation tray and detail stay synchronized through navigation/reconnect |
+| T-24-02-06 | Replay Playwright workflows | T-24-02-04, T-24-02-05 | L | P0 | tests | Preflight, refusal, dry-run, live write confirmation, progress, cancel and interruption pass |
+
+### WP-24-03 — Reports and artifact delivery
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-24-03-01 | Report status contract | T-15-01-04, T-22-03-02 | M | P0 | reports | Operation-linked state includes format, capture, rule-set version and artifact availability |
+| T-24-03-02 | Report artifact endpoint | T-24-03-01 | L | P0 | web | Safe filename/media type/content disposition; failed/missing/expired states explicit |
+| T-24-03-03 | Report generation UI | T-23-01-02, T-21-02-06 | M | P0 | web | HTML/Markdown/JSON selection, confirmation where applicable and operation tracking |
+| T-24-03-04 | Report preview/download route | T-24-03-02, T-24-03-03 | L | P0 | web | Safe HTML preview, Markdown/JSON display, download and provenance |
+| T-24-03-05 | Bookmark/report evidence integration | T-23-01-04, T-24-03-04 | M | P1 | web | Bookmarks and citations link to canonical capture/event evidence |
+| T-24-03-06 | Report artifact tests | T-24-03-04, T-24-03-05 | L | P0 | tests | Success, failure, expiry, unsafe filename, provenance and navigation pass |
+
+### WP-24-04 — Settings and Plugins
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-24-04-01 | Settings view model and route | T-21-01-03, T-04-01-06 | L | P0 | web | Grouped effective values show source, lock and restart requirement |
+| T-24-04-02 | Runtime settings forms | T-24-04-01, T-21-02-06 | L | P0 | web | Only supported runtime values edit; validation and audit feedback are explicit |
+| T-24-04-03 | Settings policy tests | T-24-04-02 | L | P0 | tests | Startup/env/file locks, network gate, read-only and live application pass |
+| T-24-04-04 | Plugin list/detail routes | T-21-01-03, T-16-02-07 | L | P0 | web | Manifest, compatibility, capabilities, status, health, metrics, failures and audit |
+| T-24-04-05 | Plugin enable/disable workflow | T-24-04-04, T-21-02-06 | M | P0 | web | Trust/restart impact confirmation; structured failure and audit |
+| T-24-04-06 | Plugin trust/no-install verification | T-24-04-05 | M | P0 | tests | No upload/install/uninstall surface; disclosure says capabilities are not enforcement |
+| T-24-04-07 | Settings/Plugins browser workflows | T-24-04-03, T-24-04-06 | L | P0 | tests | Keyboard, confirmation, validation, read-only, trust and deep-link cases pass |
+
+## C-25 — UI Qualification (Phase 25)
+
+### WP-25-01 — Interaction and cross-browser acceptance
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-25-01-01 | Complete interaction inventory gate | T-21-03-01, T-22-03-06, T-23-04-08, T-24-04-07 | L | P0 | tests | Every exposed control works or is intentionally disabled with a reason |
+| T-25-01-02 | Chromium workflow matrix | T-25-01-01 | L | P0 | tests | All primary/utility/context workflows pass |
+| T-25-01-03 | Firefox workflow matrix | T-25-01-01 | L | P0 | tests | Same supported workflows pass |
+| T-25-01-04 | WebKit workflow matrix | T-25-01-01 | L | P0 | tests | Same supported workflows pass |
+| T-25-01-05 | Responsive/zoom/history matrix | T-25-01-02, T-25-01-03, T-25-01-04 | L | P0 | tests | Desktop/tablet/narrow monitoring, 200% zoom, direct links and back/forward pass |
+| T-25-01-06 | Installed artifact browser smoke | T-25-01-05, T-19-01-02, T-19-01-03 | L | P0 | tests | Wheel and Docker serve complete local-only UI without Node/CDN/outbound traffic |
+
+### WP-25-02 — Accessibility qualification
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-25-02-01 | Automated WCAG 2.2 AA checks | T-25-01-05 | L | P0 | tests | Axe or equivalent passes every representative route/state |
+| T-25-02-02 | Keyboard-only workflow qualification | T-25-01-05 | L | P0 | tests | All primary workflows complete without mouse |
+| T-25-02-03 | Screen-reader manual scripts | T-25-02-01 | M | P0 | docs | Navigation, tabs, dialogs, live updates, tables and viewer status checks recorded |
+| T-25-02-04 | High-contrast/reduced-motion qualification | T-25-02-01 | M | P0 | tests | Focus, contrast, state communication and animation controls pass |
+| T-25-02-05 | Accessibility review publication | T-25-02-02, T-25-02-03, T-25-02-04 | M | P0 | docs | WCAG evidence and any accepted limitation are explicit |
+
+### WP-25-03 — Performance, resilience and security
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-25-03-01 | Navigation/tab interaction measurements | T-25-01-05 | M | P0 | tests | Local feedback and swap measurements meet ratified/applicable budgets or are triaged |
+| T-25-03-02 | Large table/viewer measurements | T-23-04-08, T-25-01-05 | L | P0 | tests | Large studies/search and frame transitions remain bounded/responsive |
+| T-25-03-03 | Live resilience/concurrent-client qualification | T-22-02-07 | L | P0 | tests | Saturation, reconnect, multiple tabs/clients, memory and listener counts remain bounded |
+| T-25-03-04 | UI security boundary review | T-24-04-07 | L | P0 | web | Host/origin/read-only/path/target validation and escaping re-verified |
+| T-25-03-05 | No-outbound/CSP/asset review | T-25-01-06 | M | P0 | tests | Browser makes no external request; committed asset/CSP posture documented |
+| T-25-03-06 | Qualification reports | T-25-03-01, T-25-03-02, T-25-03-03, T-25-03-04, T-25-03-05 | L | P0 | docs | Performance, resilience and security evidence published; misses triaged, not omitted |
+
+### WP-25-04 — Documentation and sign-off
+
+| ID | Task | Deps | Cx | P | Module | ∥ | Acceptance |
+|----|------|------|----|---|--------|---|------------|
+| T-25-04-01 | UI architecture and route guide | T-24-04-07 | M | P0 | docs | Route map, state ownership, controllers, HTMX and `/ws/ui` composition documented |
+| T-25-04-02 | User/operator workflow updates | T-25-04-01 | L | P0 | docs | Dashboard, Live, Captures, Studies, Viewer, Search, Replay, Reports, Settings, Plugins, Audit and Operations |
+| T-25-04-03 | Generated contract/asset reconciliation | T-25-03-05 | M | P0 | docs | OpenAPI, AsyncAPI and committed assets regenerate without drift |
+| T-25-04-04 | UI acceptance matrix | T-25-01-06, T-25-02-05, T-25-03-06 | L | P0 | docs | Every route/workflow/control maps to executed evidence |
+| T-25-04-05 | Phase 21–25 completion and release decision | T-25-04-02, T-25-04-03, T-25-04-04 | M | P0 | docs | Per-phase completion reports and post-GA release posture state verified/unverified items |
+
+---
+
+# 12. Coverage and traceability
+
+## 12.1 Task counts by phase
 
 | Phase | WPs | Tasks | Phase | WPs | Tasks |
 |-------|-----|-------|-------|-----|-------|
@@ -866,14 +1081,21 @@ One counting path, so `14` §6's metrics cannot disagree with `14` §4's events.
 | 08 | 4 | 21 | 18 | 3 | 19 |
 | 09 | 2 | 13 | 19 | 1 | 7 |
 | 10 | 4 | 22 | 20 | 2 | 10 |
+| 21 | 3 | 15 | 24 | 4 | 26 |
+| 22 | 3 | 17 | 25 | 4 | 22 |
+| 23 | 4 | 27 | — | — | — |
 
-**Totals: 7 epics · 20 capabilities · 59 work packages · 310 tasks.**
+**Totals: 8 epics · 25 capabilities · 77 work packages · 417 tasks.**
 
 Phases 13 and 10 carry the largest task counts, which is where the risk concentrates: the
 viewer spans four subsystems, and the DICOM edge is the only phase depending on behaviour
 we do not control.
 
-## 11.2 Findings traceability
+Phase 23 is now the largest post-GA phase because it integrates four already-implemented
+subsystems into one browser workflow; its task count reflects integration and browser
+qualification, not a new domain model.
+
+## 12.2 Findings traceability
 
 | Finding | Closing task(s) |
 |---------|-----------------|
@@ -896,7 +1118,7 @@ we do not control.
 | U-09 | T-16-01-04 |
 | U-10 | T-06-02-06 |
 
-## 11.3 Deferred work — not scheduled
+## 12.3 Deferred work — not scheduled
 
 Per `../adr/README.md`, each needs its own ADR first. Listed so no task above is mistaken
 for covering them: pcap import · byte-exact / mock-peer replay · remote collectors ·
@@ -905,7 +1127,7 @@ enrichment · Prometheus exposition · PS3.15 de-identification profile.
 
 ---
 
-# 12. References
+# 13. References
 
 `00-architecture-review-findings.md` · `02-phase-plan.md` · `03-dependency-graph.md` ·
 `06-deliverables.md` · `07-definition-of-done.md` · `08-implementation-order.md` ·
