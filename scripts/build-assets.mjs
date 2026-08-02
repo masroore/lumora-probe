@@ -55,6 +55,18 @@ await build({
   outfile: resolve(staticRoot, 'js/command-palette.js'),
   platform: 'browser',
 });
+for (const source of ['workspace-controller.js', 'tabs-controller.js', 'dialog-controller.js']) {
+  await build({
+    entryPoints: [resolve(root, 'assets/source', source)],
+    bundle: true,
+    format: 'iife',
+    minify: true,
+    sourcemap: false,
+    outfile: resolve(staticRoot, 'js', source),
+    platform: 'browser',
+  });
+}
+
 await build({
   entryPoints: [resolve(root, 'assets/source/search-panel.js')],
   bundle: true,
