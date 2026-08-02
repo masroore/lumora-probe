@@ -1,7 +1,8 @@
 # Phase 19 — Packaging Completion Report
 
 **Date:** 2026-07-31
-**Status:** Implemented; Docker daemon smoke test pending on the development host
+**Last verified:** 2026-08-02
+**Status:** Complete; Docker image smoke test subsequently verified in Phase 20
 **Governing plan:** `docs/planning/02-phase-plan.md` §Phase 19
 
 ## Completed work
@@ -76,7 +77,7 @@
 | Newer data-directory refusal | Pass |
 | Local-only page-load check | Pass |
 | Dockerfile contract | Pass |
-| Docker image build/run | Not executed: Docker daemon unavailable on host |
+| Docker image build/run | Pass; subsequently verified in Phase 20 with non-root `lumora`, readiness true, and one data volume |
 
 ## Design decisions
 
@@ -89,19 +90,21 @@
 - No schema redesign was introduced. Existing app migration and index projection behavior are
   documented rather than replaced.
 
-## Known limitations and follow-up
+## Verification follow-up
 
-- A Docker daemon must be available to run the final image smoke test. The local command was
-  attempted and failed before build because all configured Docker endpoints were offline.
-  CI or a host with a running daemon must execute:
+- The original Phase 19 host could not run the Docker image smoke test because no Docker
+  daemon was available.
+- Phase 20 later completed the deferred verification. See
+  `docs/planning/phase-20-completion-report.md`: Docker build/run passed with non-root
+  `uid=10001(lumora)`, readiness true, and one data volume.
+- The Phase 19 Docker verification gap is closed. No Phase 19 implementation follow-up remains.
 
-  ```console
-  docker build --pull=false -t lumora-probe:phase19-test .
-  docker run --rm -v lumora-data:/var/lib/lumora lumora-probe:phase19-test
-  ```
+The original smoke-test command was:
 
-- Phase 20 remains the next approved phase: scheduled interoperability, acceptance
-  validation, release notes, and GA sign-off.
+```console
+docker build --pull=false -t lumora-probe:phase19-test .
+docker run --rm -v lumora-data:/var/lib/lumora lumora-probe:phase19-test
+```
 
 ## Implementation commits
 
