@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
@@ -60,6 +60,7 @@ from .metadata_routes import MetadataProvider, create_metadata_router
 from .metric_routes import AlertProvider, MetricsProvider, create_metric_router
 from .operation_routes import OperationRegistry, create_operation_router
 from .plugin_routes import PluginProvider, create_plugin_router
+from .replay_routes import ReplayProvider, create_replay_router
 from .report_routes import CaptureSummaryProvider, ReportJobProvider, create_reports_router
 from .resources import ResourceStore
 from .retention import RetentionClock, RingBufferRetentionMap
@@ -73,6 +74,7 @@ from .study_routes import (
 )
 from .transfer_inspector import TransferInspectorService, create_transfer_inspector_router
 from .ui_routes import create_ui_router
+from .workflow_views import RuntimeWorkflowProvider
 from .workspace_routes import STATIC_ROOT, WorkspaceData, create_workspace_router
 
 API_PREFIX = "/api/v1"
@@ -169,7 +171,7 @@ async def validation_exception_handler(request: Request, error: Exception) -> JS
         code="LUMORA-WEB-VALIDATION-001",
         message="Request validation failed.",
         remediation="Correct the fields listed in context and retry.",
-        context={"errors": validation_error.errors()},
+        context={"errors": _json_safe(validation_error.errors())},
         correlation_id=correlation_id,
     )
     return JSONResponse(
@@ -177,6 +179,20 @@ async def validation_exception_handler(request: Request, error: Exception) -> JS
         content=response.model_dump(mode="json"),
         headers={"X-Correlation-ID": correlation_id},
     )
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert Pydantic error context values into JSON-compatible diagnostics."""
+
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[Any, Any], value)
+        return {str(key): _json_safe(item) for key, item in mapping.items()}
+    if isinstance(value, (list, tuple)):
+        values = cast(list[Any], value)
+        return [_json_safe(item) for item in values]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 class _DateTimeClock:
@@ -213,6 +229,7 @@ def create_app(
     study_browser_provider: StudyBrowserProvider | None = None,
     reports_provider: CaptureSummaryProvider | None = None,
     report_job_provider: ReportJobProvider | None = None,
+    replay_provider: ReplayProvider | None = None,
     bookmark_provider: BookmarkProvider | None = None,
     transfer_inspector: TransferInspectorService | None = None,
     plugin_provider: PluginProvider | None = None,
@@ -325,6 +342,12 @@ def create_app(
             data=workspace_data,
             operational_provider=operational_provider,
             investigation_provider=active_investigation,
+            workflow_provider=RuntimeWorkflowProvider(
+                replay_provider=replay_provider,
+                operation_provider=operation_registry,
+                settings_provider=settings_provider,
+                plugin_provider=plugin_provider,
+            ),
         )
     )
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
@@ -333,7 +356,12 @@ def create_app(
         create_study_browser_router(study_browser_provider, study_retention_map), prefix=API_PREFIX
     )
     application.include_router(
-        create_reports_router(reports_provider, report_job_provider), prefix=API_PREFIX
+        create_reports_router(
+            reports_provider,
+            report_job_provider,
+            operation_provider=operation_registry,
+        ),
+        prefix=API_PREFIX,
     )
     application.include_router(create_bookmark_router(bookmark_provider), prefix=API_PREFIX)
     application.include_router(create_plugin_router(plugin_provider), prefix=API_PREFIX)
@@ -363,6 +391,7 @@ def create_app(
         create_operation_router(operation_registry, audit_sink=operation_audit_sink),
         prefix=API_PREFIX,
     )
+    application.include_router(create_replay_router(replay_provider), prefix=API_PREFIX)
     application.include_router(create_settings_router(settings_provider), prefix=API_PREFIX)
     application.include_router(create_health_router(health_provider), prefix=API_PREFIX)
     application.include_router(

@@ -130,6 +130,189 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "ReplayFidelity": {
+        "description": "Evidence fidelity required by a replay mode.",
+        "enum": [
+          "events",
+          "protocol",
+          "wire"
+        ],
+        "title": "ReplayFidelity",
+        "type": "string"
+      },
+      "ReplayMode": {
+        "description": "Replay execution mode.",
+        "enum": [
+          "event",
+          "protocol"
+        ],
+        "title": "ReplayMode",
+        "type": "string"
+      },
+      "ReplayOutcome": {
+        "description": "Stable application-level preflight result.",
+        "enum": [
+          "eligible",
+          "refused"
+        ],
+        "title": "ReplayOutcome",
+        "type": "string"
+      },
+      "ReplayPreflight": {
+        "additionalProperties": false,
+        "description": "Structured eligibility result that never starts background work.",
+        "properties": {
+          "eligible": {
+            "description": "Return whether creation may proceed.",
+            "readOnly": true,
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReplayOutcome"
+          },
+          "planned_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Planned Count",
+            "type": "integer"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "remediation": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Remediation",
+            "type": "array"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ReplayRequest"
+          }
+        },
+        "required": [
+          "outcome",
+          "request",
+          "eligible"
+        ],
+        "title": "ReplayPreflight",
+        "type": "object"
+      },
+      "ReplayRequest": {
+        "additionalProperties": false,
+        "description": "Boundary request shared by replay preflight and creation.",
+        "properties": {
+          "capture_id": {
+            "minLength": 1,
+            "title": "Capture Id",
+            "type": "string"
+          },
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "fidelity": {
+            "$ref": "#/components/schemas/ReplayFidelity"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ReplayMode"
+          },
+          "speed": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplayTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_confirmed": {
+            "default": false,
+            "title": "Target Confirmed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode",
+          "capture_id",
+          "fidelity"
+        ],
+        "title": "ReplayRequest",
+        "type": "object"
+      },
+      "ReplayTarget": {
+        "additionalProperties": false,
+        "description": "Explicit network destination for a protocol replay.",
+        "properties": {
+          "host": {
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "port": {
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "host",
+          "port"
+        ],
+        "title": "ReplayTarget",
+        "type": "object"
+      },
+      "ReportStartRequest": {
+        "additionalProperties": false,
+        "description": "JSON body for capture-scoped report generation.",
+        "properties": {
+          "format": {
+            "default": "html",
+            "title": "Format",
+            "type": "string"
+          },
+          "rule_set_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Set Version"
+          }
+        },
+        "title": "ReportStartRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -830,6 +1013,7 @@
         },
         "summary": "Get Capture Report",
         "tags": [
+          "reports",
           "reports"
         ]
       },
@@ -872,6 +1056,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReportStartRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -894,6 +1095,7 @@
         },
         "summary": "Start Capture Report",
         "tags": [
+          "reports",
           "reports"
         ]
       }
@@ -1906,6 +2108,342 @@
         "summary": "Enable Plugin",
         "tags": [
           "plugins"
+        ]
+      }
+    },
+    "/api/v1/replays": {
+      "get": {
+        "operationId": "list_replays_api_v1_replays_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Replays Api V1 Replays Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Replays",
+        "tags": [
+          "replays"
+        ]
+      },
+      "post": {
+        "operationId": "create_replay_api_v1_replays_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Replay Api V1 Replays Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/v1/replays/preflight": {
+      "post": {
+        "operationId": "preflight_replay_api_v1_replays_preflight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayPreflight"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preflight Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/v1/replays/{operation_id}": {
+      "get": {
+        "operationId": "get_replay_api_v1_replays__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Replay Api V1 Replays  Operation Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/v1/replays/{operation_id}/cancel": {
+      "post": {
+        "operationId": "cancel_replay_api_v1_replays__operation_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Replay Api V1 Replays  Operation Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Replay",
+        "tags": [
+          "replays"
+        ]
+      }
+    },
+    "/api/v1/reports/{operation_id}": {
+      "get": {
+        "operationId": "get_report_status_api_v1_reports__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Report Status Api V1 Reports  Operation Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Status",
+        "tags": [
+          "reports",
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{operation_id}/artifact": {
+      "get": {
+        "operationId": "get_report_artifact_api_v1_reports__operation_id__artifact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Artifact",
+        "tags": [
+          "reports",
+          "reports"
         ]
       }
     },
