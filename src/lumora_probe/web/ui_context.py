@@ -28,6 +28,7 @@ class UIContext:
     primary_routes: tuple[UIRoute, ...]
     utility_routes: tuple[UIRoute, ...]
     actions: tuple[Any, ...]
+    inspector_tabs: tuple[str, ...]
 
 
 def build_ui_context(
@@ -48,6 +49,7 @@ def build_ui_context(
         primary_routes=routes_for(NavigationGroup.PRIMARY),
         utility_routes=routes_for(NavigationGroup.UTILITY),
         actions=UI_ACTIONS,
+        inspector_tabs=("metadata", "properties", "transfer", "analysis", "events"),
     )
 
 

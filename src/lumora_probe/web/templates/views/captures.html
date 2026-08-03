@@ -1,0 +1,40 @@
+<section class="investigation-view" aria-labelledby="captures-heading">
+  <div class="view-toolbar">
+    <div>
+      <h2 id="captures-heading">Capture inventory</h2>
+      <p class="muted">Bounded capture packages and ring-buffer evidence. Capture directories remain authoritative.</p>
+    </div>
+    <a class="button button-secondary" href="/api/v1/captures/ring-buffer">Ring-buffer status</a>
+  </div>
+  <form class="query-filters" method="get" action="/captures" aria-label="Capture filters">
+    <label>Filter <input name="filter" value="{{ investigation['filter'] }}" autocomplete="off"></label>
+    <label>Sort <input name="sort" value="{{ investigation['sort'] }}" placeholder="-created_at" autocomplete="off"></label>
+    <label>Page size <input name="page_size" type="number" min="1" max="100" value="{{ investigation['page_size'] }}"></label>
+    <button class="button button-secondary" type="submit">Apply filters</button>
+    <a href="/captures">Clear</a>
+  </form>
+  <div class="table-wrap">
+    <table class="resource-table">
+      <caption class="sr-only">Capture packages</caption>
+      <thead><tr><th scope="col">Capture</th><th scope="col">State</th><th scope="col">Fidelity</th><th scope="col">Created</th><th scope="col">Retention</th></tr></thead>
+      <tbody>
+      {% for capture in investigation['items'] %}
+      <tr>
+        <th scope="row"><a href="/captures/{{ capture.capture_id }}">{{ capture.capture_id }}</a></th>
+        <td>{{ capture.state or 'unknown' }}{% if capture.partial %} · partial{% endif %}</td>
+        <td>{{ capture.fidelity or '—' }}</td>
+        <td>{{ capture.created_at or '—' }}</td>
+        <td>{{ capture.retention_state or ('promoted' if capture.promoted_from_buffer else 'capture-owned') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty-state">No captures match this query.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="pagination" aria-label="Capture pages">
+    {% if investigation['page'] > 1 %}<a href="/captures?page={{ investigation['page'] - 1 }}&amp;page_size={{ investigation['page_size'] }}&amp;filter={{ investigation['filter'] }}">Previous</a>{% endif %}
+    <span>Page {{ investigation['page'] }} of {{ investigation['pages'] }} · {{ investigation['total'] }} total</span>
+    {% if investigation['page'] < investigation['pages'] %}<a href="/captures?page={{ investigation['page'] + 1 }}&amp;page_size={{ investigation['page_size'] }}&amp;filter={{ investigation['filter'] }}">Next</a>{% endif %}
+  </nav>
+</section>

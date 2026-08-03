@@ -47,6 +47,7 @@ from .dashboard_routes import RuntimeOperationalProvider
 from .event_routes import create_event_router
 from .frame_routes import FrameProvider, create_frame_router
 from .health_routes import HealthProvider, create_health_router
+from .investigation import InvestigationProvider, ResourceInvestigationProvider
 from .live import (
     CoalescingGovernor,
     LiveEventSource,
@@ -222,6 +223,7 @@ def create_app(
     security_audit_sink: Any | None = None,
     log_search_provider: LogSearchProvider | None = None,
     lifecycle_manager: LifecycleManager | None = None,
+    investigation_provider: InvestigationProvider | None = None,
 ) -> FastAPI:
     """Create the Lumora Probe ASGI application."""
 
@@ -310,8 +312,20 @@ def create_app(
         audit_provider=audit_provider,
         workspace_data=workspace_data,
     )
+    active_investigation = investigation_provider or ResourceInvestigationProvider(
+        capture_store=capture_store,
+        projection_store=projection_store,
+        event_store=event_store,
+        study_browser=study_browser_provider,
+        retention_map=study_retention_map,
+        workspace_data=workspace_data,
+    )
     application.include_router(
-        create_ui_router(data=workspace_data, operational_provider=operational_provider)
+        create_ui_router(
+            data=workspace_data,
+            operational_provider=operational_provider,
+            investigation_provider=active_investigation,
+        )
     )
     application.include_router(create_frame_router(frame_provider), prefix=API_PREFIX)
     application.include_router(create_metadata_router(metadata_provider), prefix=API_PREFIX)

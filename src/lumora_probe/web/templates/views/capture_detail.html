@@ -1,0 +1,62 @@
+{% if investigation.missing %}
+<section class="empty-state" role="status"><h2>Capture not found</h2><p>No capture package with ID <code>{{ investigation.capture_id }}</code> is available.</p><p><strong>Remediation:</strong> return to <a href="/captures">Captures</a> and choose a retained package.</p></section>
+<div data-tabs data-default-tab="{{ ui.active_tab }}">
+  <div role="tablist" aria-label="Capture investigation sections">
+    {% for tab in ui.route.tabs %}<a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}" aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}" tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">{{ tab|title }}</a>{% endfor %}
+  </div>
+  {% for tab in ui.route.tabs %}<section id="panel-{{ tab }}" role="tabpanel" aria-labelledby="tab-{{ tab }}"{% if tab != ui.active_tab %} hidden{% endif %}><h3>{{ tab|title }}</h3><p>Capture data is unavailable; no evidence is fabricated.</p></section>{% endfor %}
+</div>
+{% else %}
+{% set capture = investigation.capture %}
+<section class="investigation-view" data-resource-id="{{ capture.capture_id }}">
+  <div class="view-toolbar">
+    <div><h2>Capture {{ capture.capture_id }}</h2><p class="muted">Capture-backed evidence; not a PACS/archive record.</p></div>
+    <div class="button-row">
+      <a class="button button-secondary" href="/captures/{{ capture.capture_id }}?tab=report">Report entry point</a>
+      {% if investigation.studies %}
+      <button class="button button-secondary" type="button" data-bookmark-capture
+              data-bookmark-study="{{ investigation.studies[0].study_uid }}"
+              data-bookmark-capture-id="{{ capture.capture_id }}">Bookmark evidence</button>
+      {% endif %}
+      <a class="button button-secondary" href="/api/v1/bookmarks?capture_id={{ capture.capture_id }}">Bookmarks</a>
+      <a class="button button-danger" href="/api/v1/captures/{{ capture.capture_id }}" data-delete-capture aria-label="Delete capture {{ capture.capture_id }}">Delete</a>
+    </div>
+  </div>
+  <p class="action-status" data-capture-action-status role="status" aria-live="polite"></p>
+  <div data-tabs data-default-tab="{{ ui.active_tab }}">
+    <div role="tablist" aria-label="Capture investigation sections">
+      {% for tab in ui.route.tabs %}
+      <a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}" aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}" tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">{{ tab|title }}</a>
+      {% endfor %}
+    </div>
+    <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview"{% if ui.active_tab != 'overview' %} hidden{% endif %}>
+      <h3>Manifest and retention</h3>
+      <dl class="property-list">
+        <div><dt>State</dt><dd>{{ capture.state or 'unknown' }}</dd></div>
+        <div><dt>Fidelity</dt><dd>{{ capture.fidelity or 'unknown' }}</dd></div>
+        <div><dt>Created</dt><dd>{{ capture.created_at or '—' }}</dd></div>
+        <div><dt>Completed</dt><dd>{{ capture.completed_at or '—' }}</dd></div>
+        <div><dt>Manifest digest</dt><dd><code>{{ capture.manifest_sha256 or '—' }}</code></dd></div>
+        <div><dt>Retention</dt><dd>{{ capture.retention_state or 'capture-owned' }}</dd></div>
+      </dl>
+      {% if capture.interruption_reason %}<p class="notice notice-warning">Interrupted: {{ capture.interruption_reason }}</p>{% endif %}
+    </section>
+    <section id="panel-transfer" role="tabpanel" aria-labelledby="tab-transfer"{% if ui.active_tab != 'transfer' %} hidden{% endif %}>
+      <h3>Observed transfer evidence</h3>
+      <p>Transfer timing is shown per observed leg. No end-to-end claim is inferred from this capture.</p>
+      <p class="muted">Select an association in Live Monitor or use the Transfer Inspector for per-leg evidence.</p>
+    </section>
+    <section id="panel-analysis" role="tabpanel" aria-labelledby="tab-analysis"{% if ui.active_tab != 'analysis' %} hidden{% endif %}>
+      {% if investigation.findings %}<ol class="analysis-findings">{% for finding in investigation.findings %}<li><strong>{{ finding.rule_id }}</strong> · {{ finding.confidence }}<p>{{ finding.explanation }}</p></li>{% endfor %}</ol>{% else %}<p class="muted">No inferred findings are attached to this capture.</p>{% endif %}
+    </section>
+    <section id="panel-events" role="tabpanel" aria-labelledby="tab-events"{% if ui.active_tab != 'events' %} hidden{% endif %}>
+      <h3>Observed event evidence</h3>
+      <ol class="event-list">{% for event in investigation.events %}<li id="event-sequence-{{ event.sequence }}"><a href="#event-sequence-{{ event.sequence }}">Sequence {{ event.sequence }}</a><span>{{ event.event_name }}</span><span class="event-meta">{{ event.origin or 'observed' }}</span></li>{% else %}<li class="empty-state">No events indexed for this capture.</li>{% endfor %}</ol>
+    </section>
+    <section id="panel-report" role="tabpanel" aria-labelledby="tab-report"{% if ui.active_tab != 'report' %} hidden{% endif %}>
+      <h3>Report</h3><p>Report generation is available from the capture-scoped report entry point.</p><a href="/captures/{{ capture.capture_id }}?tab=report">Open report workflow</a>
+    </section>
+  </div>
+  <section aria-labelledby="capture-objects-heading"><h3 id="capture-objects-heading">Capture objects</h3><ul class="resource-list">{% for object in investigation.objects %}<li><span><code>{{ object.sop_instance_uid or object.digest }}</code></span>{% if object.study_uid %}<a href="/studies/{{ object.study_uid }}">Study</a>{% endif %}{% if object.sop_instance_uid %}<a href="/instances/{{ object.sop_instance_uid }}">Inspect instance</a>{% endif %}</li>{% else %}<li class="empty-state">No object inventory recorded.</li>{% endfor %}</ul></section>
+</section>
+{% endif %}

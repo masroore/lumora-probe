@@ -1,0 +1,41 @@
+<nav aria-label="Breadcrumb"><a href="/dashboard">Workspace</a><span aria-hidden="true"> / </span><span aria-current="page">{{ ui.title }}</span></nav>
+<header class="view-header"><p class="eyebrow">{{ ui.route.group.value }}</p><h1>{{ ui.title }}</h1><p>{{ ui.route.description }}</p></header>
+{% if ui.route.name == 'dashboard' %}
+{% include "views/dashboard.html" %}
+{% elif ui.route.name == 'live' %}
+{% include "views/live.html" %}
+{% elif ui.route.name == 'audit' %}
+{% include "views/audit.html" %}
+{% elif ui.route.name == 'captures' %}
+{% include "views/captures.html" %}
+{% elif ui.route.name == 'capture-detail' %}
+{% include "views/capture_detail.html" %}
+{% elif ui.route.name == 'studies' %}
+{% include "views/studies.html" %}
+{% elif ui.route.name == 'study-detail' %}
+{% include "views/study_detail.html" %}
+{% elif ui.route.name == 'instance-detail' %}
+{% include "views/instance_viewer.html" %}
+{% elif ui.route.name == 'search' %}
+{% include "views/search.html" %}
+{% else %}
+<div data-tabs data-default-tab="{{ ui.active_tab }}">
+  <div role="tablist" aria-label="{{ ui.route.label }} sections">
+    {% for tab in ui.route.tabs %}
+    <a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}"
+       aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}"
+       tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">
+      {{ tab|replace('-', ' ')|title }}
+    </a>
+    {% endfor %}
+  </div>
+  {% for tab in ui.route.tabs %}
+  <section id="panel-{{ tab }}" role="tabpanel" aria-labelledby="tab-{{ tab }}"
+           {% if tab != ui.active_tab %}hidden{% endif %}>
+    <h2>{{ tab|replace('-', ' ')|title }}</h2>
+    <p>Content is unavailable until the corresponding application provider is configured.</p>
+    <p><strong>Remediation:</strong> configure the provider and reload this route.</p>
+  </section>
+  {% endfor %}
+</div>
+{% endif %}

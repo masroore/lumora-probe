@@ -117,14 +117,9 @@
 
           <section id="workspace-view" class="workspace-panel viewer-panel" tabindex="-1"
                  data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}"
-                 aria-labelledby="viewer-heading">
-          {% if ui.route.name == 'dashboard' %}
-          {% include "views/dashboard.html" %}
-          {% elif ui.route.name == 'live' %}
-          {% include "views/live.html" %}
-          {% elif ui.route.name == 'audit' %}
-          {% include "views/audit.html" %}
-          {% endif %}
+                 aria-labelledby="{{ 'instance-heading' if ui.route.name == 'instance-detail' else 'viewer-heading' }}">
+          {% include "views/workspace_content.html" %}
+          {% if ui.route.name != 'instance-detail' %}
           <div class="panel-heading viewer-heading">
             <div>
               <p class="eyebrow">Render surface</p>
@@ -154,6 +149,7 @@
             <span>{{ workspace.active_context }}</span>
             <span>Renderer idle</span>
           </div>
+          {% endif %}
         </section>
 
         <aside id="inspector-panel" class="workspace-panel inspector-panel" aria-labelledby="inspector-heading">
@@ -169,13 +165,16 @@
           </div>
           <div id="inspector-body" class="panel-body" data-panel-body>
             <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
-              <button type="button" role="tab" aria-selected="true" tabindex="0">Metadata</button>
-              <button type="button" role="tab" aria-selected="false" tabindex="-1">Properties</button>
-              <button type="button" role="tab" aria-selected="false" tabindex="-1">Transfer</button>
-              <button type="button" role="tab" aria-selected="false" tabindex="-1">Analysis</button>
-              <button type="button" role="tab" aria-selected="false" tabindex="-1">Events</button>
+              {% for tab in ui.inspector_tabs %}
+              <button id="inspector-tab-{{ tab }}" type="button" role="button"
+                      aria-controls="inspector-panel-{{ tab }}"
+                      aria-pressed="{{ 'true' if loop.first else 'false' }}"
+                      tabindex="{{ '0' if loop.first else '-1' }}"
+                      data-inspector-tab="{{ tab }}">{{ tab|replace('-', ' ')|title }}</button>
+              {% endfor %}
             </div>
-            <div class="metadata-inspector" role="tabpanel" aria-label="Metadata inspector">
+            <div id="inspector-panel-metadata" class="metadata-inspector" role="tabpanel"
+                 aria-labelledby="inspector-tab-metadata">
               <div class="metadata-actions">
                 <label class="search-field" for="metadata-search">
                   <span class="sr-only">Search metadata tags</span>
@@ -220,7 +219,24 @@
               {% endif %}
               <span class="metadata-action-status" data-metadata-status role="status" aria-live="polite"></span>
             </div>
-            <div class="analysis-inspector" role="tabpanel" aria-label="Analysis inspector">
+            <div id="inspector-panel-properties" class="properties-inspector" role="tabpanel"
+                 aria-labelledby="inspector-tab-properties" hidden>
+              {% if investigation.instance %}
+              <dl class="property-list">
+                {% for name, value in investigation.instance.items() if name in ('study_uid', 'series_uid', 'sop_instance_uid', 'capture_id', 'transfer_syntax_uid', 'rows', 'columns', 'frame_count') %}
+                <div><dt>{{ name|replace('_', ' ')|title }}</dt><dd>{{ value or '—' }}</dd></div>
+                {% endfor %}
+              </dl>
+              {% else %}
+              <div class="inspector-empty"><h3>No properties selected</h3><p>Choose a capture-backed instance.</p></div>
+              {% endif %}
+            </div>
+            <div id="inspector-panel-transfer" class="transfer-inspector" role="tabpanel"
+                 aria-labelledby="inspector-tab-transfer" hidden>
+              <div class="inspector-empty"><h3>Transfer evidence</h3><p>Per-leg observed transfer evidence appears when an association or capture is selected.</p><a href="/api/v1/transfers/{{ investigation.instance.capture_id if investigation.instance else '' }}">Open transfer contract</a></div>
+            </div>
+            <div id="inspector-panel-analysis" class="analysis-inspector" role="tabpanel"
+                 aria-labelledby="inspector-tab-analysis" hidden>
               {% if workspace.findings %}
               <ol class="analysis-findings">
                 {% for finding in workspace.findings %}
@@ -253,6 +269,15 @@
                 <p>Run analysis against a capture to inspect evidence-linked findings.</p>
               </div>
               {% endif %}
+            </div>
+            <div id="inspector-panel-events" class="events-inspector" role="tabpanel"
+                 aria-labelledby="inspector-tab-events" hidden>
+              {% set inspector_events = investigation.events if investigation.events else workspace.timeline %}
+              <ol class="event-list">
+                {% for event in inspector_events %}
+                <li id="inspector-event-{{ event.sequence }}"><a href="#event-sequence-{{ event.sequence }}">Sequence {{ event.sequence }}</a><span>{{ event.event_name or event.label }}</span><span>{{ event.origin or event.severity or 'observed' }}</span></li>
+                {% else %}<li class="empty-state">No observed event evidence selected.</li>{% endfor %}
+              </ol>
             </div>
           </div>
         </aside>
@@ -351,13 +376,6 @@
       </section>
     </main>
 
-    {% if ui.route.tabs %}
-    <section class="context-tabs" data-tabs data-default-tab="{{ ui.active_tab }}" aria-label="{{ ui.route.label }} context">
-      <div role="tablist" aria-label="{{ ui.route.label }} sections">{% for tab in ui.route.tabs %}<a id="tab-{{ tab }}" role="tab" href="?tab={{ tab }}" aria-controls="panel-{{ tab }}" aria-selected="{{ 'true' if tab == ui.active_tab else 'false' }}" tabindex="{{ '0' if tab == ui.active_tab else '-1' }}" data-tab="{{ tab }}">{{ tab|replace('-', ' ')|title }}</a>{% endfor %}</div>
-      {% for tab in ui.route.tabs %}<section id="panel-{{ tab }}" role="tabpanel" aria-labelledby="tab-{{ tab }}"{% if tab != ui.active_tab %} hidden{% endif %}><h2>{{ tab|replace('-', ' ')|title }}</h2><p>Context follows the canonical resource URL.</p></section>{% endfor %}
-    </section>
-    {% endif %}
-
     <footer class="status-bar" role="contentinfo">
       <div class="status-group"><span class="status-dot" aria-hidden="true"></span><strong>{{ workspace.connection_state }}</strong><span>Local application</span></div>
       <nav class="status-group" aria-label="Utility navigation">
@@ -385,6 +403,7 @@
     <script src="/static/js/tabs-controller.js" defer></script>
     <script src="/static/js/dialog-controller.js" defer></script>
     <script src="/static/js/live-client.js" defer></script>
+    <script src="/static/js/investigation-controller.js" defer></script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const frame = document.querySelector('.workspace-frame');
@@ -502,6 +521,29 @@
             status.textContent = 'Clipboard unavailable';
           }
         });
+        const inspectorTabs = [...document.querySelectorAll('[data-inspector-tab]')];
+        const selectInspectorTab = (tab, focus = false) => {
+          const name = tab.dataset.inspectorTab;
+          inspectorTabs.forEach((item) => {
+            const selected = item === tab;
+            item.setAttribute('aria-pressed', String(selected));
+            item.tabIndex = selected ? 0 : -1;
+            document.querySelector(`#inspector-panel-${CSS.escape(item.dataset.inspectorTab || '')}`)?.toggleAttribute('hidden', !selected);
+          });
+          if (focus) tab.focus();
+        };
+        inspectorTabs.forEach((tab, index) => {
+          tab.addEventListener('click', () => selectInspectorTab(tab, true));
+          tab.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            let next = index;
+            if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = inspectorTabs.length - 1;
+            else next = (index + (event.key === 'ArrowRight' ? 1 : -1) + inspectorTabs.length) % inspectorTabs.length;
+            selectInspectorTab(inspectorTabs[next], true);
+          });
+        });
         document.querySelectorAll('[data-promote-instance]').forEach((button) => {
           button.addEventListener('click', async () => {
             const status = button.parentElement.querySelector('[data-promotion-status]');
@@ -529,6 +571,45 @@
             } catch (error) {
               button.disabled = false;
               status.textContent = error instanceof Error ? error.message : 'Promotion failed';
+            }
+          });
+        });
+        document.querySelectorAll('[data-delete-capture]').forEach((link) => {
+          link.addEventListener('click', async (event) => {
+            event.preventDefault();
+            if (!window.confirm('Delete this capture package? This cannot be undone.')) return;
+            const status = document.querySelector('[data-capture-action-status]');
+            link.setAttribute('aria-disabled', 'true');
+            try {
+              const response = await fetch(link.href, {method: 'DELETE'});
+              if (!response.ok) throw new Error((await response.text()) || 'Capture deletion refused');
+              window.location.assign('/captures');
+            } catch (error) {
+              link.removeAttribute('aria-disabled');
+              if (status) status.textContent = error instanceof Error ? error.message : 'Capture deletion failed';
+            }
+          });
+        });
+        document.querySelectorAll('[data-bookmark-capture]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const status = document.querySelector('[data-capture-action-status]');
+            button.disabled = true;
+            try {
+              const response = await fetch('/api/v1/bookmarks', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  name: `Capture ${button.dataset.bookmarkCaptureId}`,
+                  study_uid: button.dataset.bookmarkStudy,
+                  capture_id: button.dataset.bookmarkCaptureId,
+                }),
+              });
+              if (!response.ok) throw new Error((await response.text()) || 'Bookmark refused');
+              button.textContent = 'Bookmarked';
+              if (status) status.textContent = 'Capture evidence bookmarked';
+            } catch (error) {
+              button.disabled = false;
+              if (status) status.textContent = error instanceof Error ? error.message : 'Bookmark failed';
             }
           });
         });

@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .dashboard_routes import EmptyOperationalProvider, OperationalProvider
+from .investigation import InvestigationProvider, ResourceInvestigationProvider
 from .ui_actions import UI_ACTIONS
 from .ui_context import build_ui_context
 from .ui_navigation import UI_ROUTES, UIRoute
@@ -47,6 +48,7 @@ def _route_endpoint(
     route: UIRoute,
     data: Mapping[str, Any] | None,
     operational_provider: OperationalProvider,
+    investigation_provider: InvestigationProvider,
 ):
     async def endpoint(request: Request) -> HTMLResponse:
         params = {name: str(value) for name, value in request.path_params.items()}
@@ -59,6 +61,11 @@ def _route_endpoint(
             )
         else:
             operational = await operational_provider.snapshot()
+        investigation = await investigation_provider.context(
+            route.name,
+            params=params,
+            query={key: value for key, value in request.query_params.items()},
+        )
         template_name = (
             "views/platform_fragment.html"
             if request.headers.get("HX-Request", "").lower() == "true"
@@ -69,6 +76,7 @@ def _route_endpoint(
                 request=request,
                 ui=context,
                 operational=operational,
+                investigation=investigation,
                 actions_json=_actions_json(),
                 **workspace_context(data),
             )
@@ -83,6 +91,7 @@ def create_ui_router(
     data: Mapping[str, Any] | None = None,
     template_root: Path | None = None,
     operational_provider: OperationalProvider | None = None,
+    investigation_provider: InvestigationProvider | None = None,
 ) -> APIRouter:
     """Create all canonical HTML routes from one registry."""
 
@@ -92,10 +101,11 @@ def create_ui_router(
     )
     router = APIRouter(tags=["workspace"])
     provider = operational_provider or EmptyOperationalProvider()
+    investigation = investigation_provider or ResourceInvestigationProvider(workspace_data=data)
     for route in UI_ROUTES:
         router.add_api_route(
             route.path,
-            _route_endpoint(environment, route, data, provider),
+            _route_endpoint(environment, route, data, provider, investigation),
             methods=["GET"],
             response_class=HTMLResponse,
             include_in_schema=False,

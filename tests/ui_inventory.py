@@ -51,6 +51,18 @@ _OWNER_ATTRIBUTES: Final = {
     "data-dialog-close",
     "data-metadata-search",
     "data-palette-input",
+    "data-viewer-previous",
+    "data-viewer-frame",
+    "data-viewer-next",
+    "data-viewer-zoom-in",
+    "data-viewer-zoom-out",
+    "data-viewer-pan",
+    "data-viewer-window-level",
+    "data-viewer-invert",
+    "data-viewer-reset",
+    "data-viewer-cine",
+    "data-viewer-fullscreen",
+    "data-inspector-tab",
 }
 
 
