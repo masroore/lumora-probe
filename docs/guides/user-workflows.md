@@ -21,6 +21,16 @@ in the [operator guide](operator-guide.md).
 3. Protocol replay defaults to dry-run; configure an explicit allowlisted target.
 4. Treat client-asserted viewer events as quarantined — they must not drive timing or fidelity
    conclusions.
+5. Generate HTML, Markdown, or JSON reports from a canonical Capture route; follow the
+   operation link to inspect provenance and preview/download the artifact.
+
+## Operator
+
+1. Use Settings to inspect effective values and their source before changing runtime policy.
+2. Environment- and file-owned values are locked; startup-only changes require a restart.
+3. Use Plugins to inspect compatibility, health, failures, and declared capabilities.
+4. Plugin capabilities are disclosure only. Plugins are trusted in-process code, and
+   enable/disable changes take effect after restart. Installation is deliberately CLI-only.
 
 ## QA engineer
 
