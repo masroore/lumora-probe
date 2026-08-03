@@ -68,6 +68,10 @@
 - Ruff format check: passed for changed Python files.
 - Basedpyright: passed with zero errors, warnings, or notes for changed application modules.
 - Frontend assets rebuilt with `npm run build:assets`.
+- Opt-in browser acceptance passed when run by suite: Phase 21 browser navigation
+  (2 passed) and the Phase 13 viewer smoke (1 passed). Running those two historical
+  suites in one pytest invocation still triggers their pre-existing
+  `pytest-asyncio`/sync-Playwright event-loop teardown conflict.
 
 ## Known limitations
 
