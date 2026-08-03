@@ -117,9 +117,8 @@
 
           <section id="workspace-view" class="workspace-panel viewer-panel" tabindex="-1"
                  data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}"
-                 aria-labelledby="{{ 'instance-heading' if ui.route.name == 'instance-detail' else 'viewer-heading' }}">
+                 aria-labelledby="viewer-heading">
           {% include "views/workspace_content.html" %}
-          {% if ui.route.name != 'instance-detail' %}
           <div class="panel-heading viewer-heading">
             <div>
               <p class="eyebrow">Render surface</p>
@@ -149,7 +148,6 @@
             <span>{{ workspace.active_context }}</span>
             <span>Renderer idle</span>
           </div>
-          {% endif %}
         </section>
 
         <aside id="inspector-panel" class="workspace-panel inspector-panel" aria-labelledby="inspector-heading">
