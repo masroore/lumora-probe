@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from itertools import pairwise
-from typing import Any
+from typing import Any, cast
 
 from lumora_probe.associations.contracts import DICOMDatasetSender, DICOMStoreResult
 from lumora_probe.shared.errors import ReplayDomainError
@@ -29,8 +29,12 @@ from .contracts import (
     ReplayAuditSink,
     ReplayAuditStore,
     ReplayCancellation,
+    ReplayCaptureProvider,
     ReplayJobContext,
     ReplayJobRegistry,
+    ReplayOutcome,
+    ReplayPreflight,
+    ReplayRequest,
 )
 
 ReplaySleeper = Callable[[float], Awaitable[None]]
@@ -310,6 +314,170 @@ class ReplayRuntime:
         return await self.jobs.start("protocol-replay", worker, parameters=parameters)
 
 
+class RuntimeReplayProvider:
+    """Compose replay services with the shared operation/job infrastructure."""
+
+    def __init__(
+        self,
+        *,
+        operations: Any,
+        jobs: Any,
+        captures: ReplayCaptureProvider,
+        publisher: Any,
+        id_generator: Any,
+        clock: Any,
+        audit_store: Any,
+        sender_factory: Any | None = None,
+        allowed_targets: frozenset[Any] = frozenset(),
+        read_only: bool = False,
+    ) -> None:
+        self.operations = operations
+        self.jobs = jobs
+        self.captures = captures
+        self.publisher = publisher
+        self.id_generator = id_generator
+        self.clock = clock
+        self.audit_store = audit_store
+        self.sender_factory = sender_factory
+        self.allowed_targets = allowed_targets
+        self.read_only = read_only
+
+    async def list(
+        self, *, limit: int, cursor: int | None = None, state: str | None = None
+    ) -> Mapping[str, Any]:
+        page = await self.operations.list(
+            limit=limit,
+            cursor=cursor,
+            state=state,
+            job_type=None,
+        )
+        return {
+            "items": tuple(
+                item
+                for item in page.get("items", ())
+                if str(item.get("job_type", "")) in {"event-replay", "protocol-replay"}
+            ),
+            "next_cursor": page.get("next_cursor"),
+        }
+
+    async def get(self, operation_id: str) -> Mapping[str, Any] | None:
+        record = await self.operations.get(operation_id)
+        if record is None or str(record.get("job_type", "")) not in {
+            "event-replay",
+            "protocol-replay",
+        }:
+            return None
+        return record
+
+    async def preflight(self, request: ReplayRequest) -> ReplayPreflight:
+        if self.read_only and request.mode.value == "protocol" and not request.dry_run:
+            return ReplayPreflight(
+                outcome=ReplayOutcome.REFUSED,
+                request=request,
+                reasons=("Server is in read-only mode.",),
+                remediation=("Disable read-only mode before starting a protocol write.",),
+            )
+        capture = await self.captures.describe(request.capture_id)
+        if capture is None:
+            return ReplayPreflight(
+                outcome=ReplayOutcome.REFUSED,
+                request=request,
+                reasons=("Capture was not found.",),
+                remediation=("Select an existing capture before replaying.",),
+            )
+        fidelity = str(capture.get("fidelity", ""))
+        planned_count = int(capture.get("event_count", capture.get("object_count", 0)) or 0)
+        reasons: list[str] = []
+        remediation: list[str] = []
+        if request.mode.value == "event":
+            if fidelity not in {"events", "protocol", "wire"}:
+                reasons.append(f"Event replay is unavailable for capture fidelity {fidelity!r}.")
+                remediation.append("Use a capture containing persisted events.")
+        else:
+            if fidelity not in {"protocol", "wire"}:
+                reasons.append(f"Protocol replay is unavailable for capture fidelity {fidelity!r}.")
+                remediation.append("Use a complete protocol or wire-fidelity capture.")
+            if request.target is not None:
+                target = NetworkEndpoint(request.target.host, request.target.port)
+                if target not in self.allowed_targets:
+                    reasons.append(f"Protocol replay target {target} is not allowlisted.")
+                    remediation.append("Add the explicit target to the replay allowlist.")
+            if bool(capture.get("partial", False)):
+                reasons.append("Protocol replay cannot use a partial capture.")
+                remediation.append("Promote a complete association window first.")
+        return ReplayPreflight(
+            outcome=ReplayOutcome.REFUSED if reasons else ReplayOutcome.ELIGIBLE,
+            request=request,
+            planned_count=planned_count,
+            reasons=tuple(reasons),
+            remediation=tuple(remediation),
+        )
+
+    async def create(self, request: ReplayRequest) -> Mapping[str, Any]:
+        preflight = await self.preflight(request)
+        if not preflight.eligible:
+            raise ValueError("; ".join(preflight.reasons + preflight.remediation))
+        if request.mode.value == "event":
+            events = tuple(await self.captures.events(request.capture_id))
+
+            async def worker(context: Any) -> str:
+                result = await EventReplayService(
+                    self.publisher,
+                    id_generator=self.id_generator,
+                ).replay(
+                    events,
+                    capture_id=request.capture_id,
+                    replay_id=context.operation_id,
+                    speed=request.speed,
+                )
+                await context.report_progress({"published": result.count, "planned": len(events)})
+                return "completed"
+
+            record = await self.jobs.start(
+                "event-replay",
+                worker,
+                parameters=request.model_dump(mode="json"),
+                progress_event_name="ReplayProgressed",
+            )
+        else:
+            sender_factory = self.sender_factory
+            if sender_factory is None:
+                raise RuntimeError("Protocol replay sender is not configured")
+            assert request.target is not None
+            target = NetworkEndpoint(request.target.host, request.target.port)
+            runtime = ReplayRuntime(
+                self.jobs,
+                sender_factory=lambda: sender_factory(target),
+                audit_store=self.audit_store,
+                clock=self.clock,
+            )
+            datasets = await self.captures.protocol_datasets(request.capture_id)
+            record = await runtime.start_protocol_replay(
+                datasets,
+                policy=ProtocolReplayPolicy(
+                    target=target,
+                    allowed_targets=self.allowed_targets,
+                    dry_run=request.dry_run,
+                ),
+                capture_fidelity=request.fidelity.value,
+                partial=False,
+                capture_id=request.capture_id,
+                speed=request.speed,
+            )
+        return _record_mapping(record)
+
+    async def cancel(self, operation_id: str) -> Mapping[str, Any] | None:
+        record = await self.get(operation_id)
+        if record is None or not bool(record.get("cancellable", False)):
+            return None
+        if not await self.operations.cancel(operation_id):
+            return None
+        return await self.get(operation_id) or {
+            "operation_id": operation_id,
+            "state": "cancellation_requested",
+        }
+
+
 class EventReplayService:
     """Re-emit persisted envelopes without network access or payload mutation.
 
@@ -371,6 +539,19 @@ class EventReplayService:
 def _validate_speed(speed: float) -> None:
     if not math.isfinite(speed) or speed <= 0:
         raise ValueError("replay speed must be a finite value greater than zero")
+
+
+def _record_mapping(record: Any) -> Mapping[str, Any]:
+    if isinstance(record, Mapping):
+        return dict(cast(Mapping[str, Any], record))
+    return {
+        "operation_id": record.operation_id,
+        "job_type": record.job_type,
+        "state": str(record.state),
+        "parameters": dict(record.parameters),
+        "progress": dict(getattr(record, "progress", {})),
+        "cancellable": True,
+    }
 
 
 def _require_protocol_fidelity(capture_fidelity: str) -> None:

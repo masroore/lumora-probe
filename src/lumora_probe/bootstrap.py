@@ -18,7 +18,12 @@ from typing import Any, ClassVar, cast
 
 from fastapi import FastAPI
 
-from lumora_probe.associations.network import DICOMListener, DICOMListenerConfig
+from lumora_probe.associations.network import (
+    DICOMListener,
+    DICOMListenerConfig,
+    DICOMSCUClient,
+    DICOMSCUConfig,
+)
 from lumora_probe.captures.repository import CaptureRepository
 from lumora_probe.captures.service import CaptureEngine, RingBufferService
 from lumora_probe.core.alerts import AlertRegistry, AlertThresholds
@@ -36,10 +41,14 @@ from lumora_probe.core.storage import StorageDatabases
 from lumora_probe.plugins.contracts import PluginDiagnostic
 from lumora_probe.plugins.repository import PluginRepository
 from lumora_probe.plugins.service import PluginService
+from lumora_probe.replay.contracts import ProtocolReplayDataset
+from lumora_probe.replay.service import RuntimeReplayProvider
 from lumora_probe.reports.jobs import ReportJobService
+from lumora_probe.reports.repository import ReportRepository
 from lumora_probe.reports.service import CaptureSummaryService, ReportService
 from lumora_probe.settings.runtime import RuntimeSettingsStore
 from lumora_probe.shared.events import EventEnvelope
+from lumora_probe.shared.value_objects import NetworkEndpoint
 from lumora_probe.studies.domain import DecodeError
 from lumora_probe.studies.repository import (
     BookmarkRepository,
@@ -111,6 +120,64 @@ class HealthRegistryAdapter:
 
     async def check(self) -> Mapping[str, object]:
         return (await self.registry.check()).as_dict()
+
+
+class _ReplayCaptureProvider:
+    """Load bounded replay inputs from capture packages without crossing repositories."""
+
+    def __init__(self, repository: CaptureRepository, captures_root: Path) -> None:
+        self.repository = repository
+        self.captures_root = captures_root.expanduser().resolve()
+        self.reports = ReportRepository(self.captures_root)
+
+    async def describe(self, capture_id: str) -> Mapping[str, Any] | None:
+        record = await self.repository.get_capture(capture_id)
+        if record is None:
+            return None
+        evidence = await asyncio.to_thread(self.reports.read, capture_id)
+        return {
+            "capture_id": record.capture_id,
+            "fidelity": record.fidelity,
+            "partial": record.partial,
+            "event_count": len(evidence.events) if evidence is not None else 0,
+            "object_count": len(record.objects),
+        }
+
+    async def events(self, capture_id: str) -> tuple[EventEnvelope, ...]:
+        evidence = await asyncio.to_thread(self.reports.read, capture_id)
+        if evidence is None:
+            return ()
+        values: list[EventEnvelope] = []
+        for event in evidence.events:
+            try:
+                values.append(EventEnvelope.model_validate(event))
+            except ValueError:
+                continue
+        return tuple(values)
+
+    async def protocol_datasets(self, capture_id: str) -> tuple[ProtocolReplayDataset, ...]:
+        record = await self.repository.get_capture(capture_id)
+        if record is None:
+            return ()
+
+        def read() -> tuple[ProtocolReplayDataset, ...]:
+            datasets: list[ProtocolReplayDataset] = []
+            for index, item in enumerate(record.objects):
+                path = Path(record.path) / "objects" / item.digest
+                try:
+                    raw = path.read_bytes()
+                except OSError:
+                    continue
+                datasets.append(
+                    ProtocolReplayDataset(
+                        raw_bytes=raw,
+                        transfer_syntax=item.transfer_syntax_uid or "1.2.840.10008.1.2",
+                        monotonic_ns=index,
+                    )
+                )
+            return tuple(datasets)
+
+        return await asyncio.to_thread(read)
 
 
 class AuditedSettingsProvider:
@@ -1170,6 +1237,26 @@ def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
             payload=dict(payload),
         )
 
+    operation_provider = CompositeOperationRegistry(job_registry, operation_registry)
+
+    def replay_sender_factory(target: NetworkEndpoint) -> DICOMSCUClient:
+        return DICOMSCUClient(DICOMSCUConfig(host=target.host, port=target.port))
+
+    replay_provider = RuntimeReplayProvider(
+        operations=operation_provider,
+        jobs=job_registry,
+        captures=_ReplayCaptureProvider(capture_repository, paths.captures),
+        publisher=bus,
+        id_generator=bus.id_generator,
+        clock=clock,
+        audit_store=operation_registry,
+        sender_factory=replay_sender_factory,
+        # Protocol targets have no implicit default. An explicit allowlist must be
+        # supplied by a future configuration contract before writes are enabled.
+        allowed_targets=frozenset(),
+        read_only=security_policy.read_only,
+    )
+
     application = create_app(
         clock=clock,
         event_clock=clock,
@@ -1181,7 +1268,7 @@ def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
         projection_store=_SQLiteResourceStore(storage),
         association_store=live_evidence,
         event_store=live_evidence,
-        operation_registry=CompositeOperationRegistry(job_registry, operation_registry),
+        operation_registry=operation_provider,
         audit_provider=_AuditProvider(audit),
         operation_audit_sink=operation_audit_sink,
         bookmark_provider=_BookmarkProvider(bookmark_repository),
@@ -1190,6 +1277,7 @@ def build_production_runtime(config: StartupConfig) -> ProductionRuntime:
         metadata_provider=metadata_provider,
         reports_provider=summary_service,
         report_job_provider=report_jobs,
+        replay_provider=replay_provider,
         transfer_inspector=transfer_inspector,
         lifecycle_manager=lifecycle,
         event_id_generator=bus.id_generator,

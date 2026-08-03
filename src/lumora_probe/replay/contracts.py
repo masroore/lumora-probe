@@ -11,11 +11,109 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from lumora_probe.associations.contracts import DICOMStoreResult
 from lumora_probe.shared.events import EventEnvelope
 from lumora_probe.shared.value_objects import NetworkEndpoint
+
+
+class ReplayTarget(BaseModel):
+    """Explicit network destination for a protocol replay."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    host: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65535)
+
+    @model_validator(mode="after")
+    def validate_host(self) -> ReplayTarget:
+        if any(character.isspace() for character in self.host):
+            raise ValueError("target host must not contain whitespace")
+        return self
+
+
+class ReplayRequest(BaseModel):
+    """Boundary request shared by replay preflight and creation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: ReplayMode
+    capture_id: str = Field(min_length=1)
+    fidelity: ReplayFidelity
+    speed: float = Field(default=1.0, gt=0)
+    dry_run: bool = True
+    target: ReplayTarget | None = None
+    target_confirmed: bool = False
+
+    @model_validator(mode="after")
+    def validate_invariants(self) -> ReplayRequest:
+        if self.mode is ReplayMode.EVENT and self.fidelity is not ReplayFidelity.EVENTS:
+            raise ValueError("event replay requires events fidelity")
+        if self.mode is ReplayMode.PROTOCOL:
+            if self.fidelity is ReplayFidelity.EVENTS:
+                raise ValueError("protocol replay requires protocol or wire fidelity")
+            if self.target is None:
+                raise ValueError("protocol replay requires an explicit target")
+            if not self.dry_run and not self.target_confirmed:
+                raise ValueError(
+                    "non-dry-run protocol replay requires explicit target confirmation"
+                )
+        return self
+
+
+class ReplayOutcome(StrEnum):
+    """Stable application-level preflight result."""
+
+    ELIGIBLE = "eligible"
+    REFUSED = "refused"
+
+
+class ReplayPreflight(BaseModel):
+    """Structured eligibility result that never starts background work."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    outcome: ReplayOutcome
+    request: ReplayRequest
+    planned_count: int = Field(default=0, ge=0)
+    reasons: tuple[str, ...] = ()
+    remediation: tuple[str, ...] = ()
+    operation_id: str | None = None
+
+    @computed_field
+    @property
+    def eligible(self) -> bool:
+        """Return whether creation may proceed."""
+        return self.outcome is ReplayOutcome.ELIGIBLE
+
+
+class ReplayCaptureProvider(Protocol):
+    """Capture evidence needed to preflight and execute replay."""
+
+    async def describe(self, capture_id: str) -> Mapping[str, Any] | None: ...
+
+    async def events(self, capture_id: str) -> list[Any] | tuple[Any, ...]: ...
+
+    async def protocol_datasets(self, capture_id: str) -> list[Any] | tuple[Any, ...]: ...
+
+
+class ReplayMode(StrEnum):
+    """Replay execution mode."""
+
+    EVENT = "event"
+    PROTOCOL = "protocol"
+
+
+class ReplayFidelity(StrEnum):
+    """Evidence fidelity required by a replay mode."""
+
+    EVENTS = "events"
+    PROTOCOL = "protocol"
+    WIRE = "wire"
 
 
 class EventPublisher(Protocol):
