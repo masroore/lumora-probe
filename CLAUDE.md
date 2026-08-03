@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 21 complete; v0.1.0 GA remains signed off
+## Status: Phase 23 complete; v0.1.0 GA remains signed off
 
-Phase 20 release work is complete. Phase 21 UI platform work is complete. Version 0.1.0 is signed off for trusted engineering
+Phase 20 release work is complete. Phases 21–23 UI work is complete. Version 0.1.0 is signed off for trusted engineering
 deployments after scheduled DCMTK/dcm4che/Orthanc interoperability, PRD acceptance, DoD
 audit, packaging, and Docker smoke verification. Completion reports in
 `docs/planning/phase-*-completion-report.md` and Phase 20 release artifacts are the current
