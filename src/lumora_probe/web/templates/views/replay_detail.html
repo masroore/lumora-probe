@@ -1,0 +1,21 @@
+{% set replay = workflows.replay %}
+<section class="workflow-view" aria-labelledby="replay-detail-heading">
+  {% if not replay %}
+  <div class="empty-state"><h2 id="replay-detail-heading">Replay operation unavailable</h2><p>The operation is missing, expired, or does not identify a replay.</p><a href="/replay">Return to Replay</a></div>
+  {% else %}
+  <header class="view-toolbar"><div><h2 id="replay-detail-heading">Replay {{ replay.operation_id }}</h2><p class="muted">Operation state is durable; execution is never resumed after restart.</p></div><a class="button button-secondary" href="/api/v1/operations/{{ replay.operation_id }}">Open REST status</a></header>
+  <dl class="property-list">
+    <div><dt>State</dt><dd>{{ replay.state }}</dd></div>
+    <div><dt>Mode</dt><dd>{{ replay.parameters.get('mode', '—') }}</dd></div>
+    <div><dt>Fidelity</dt><dd>{{ replay.parameters.get('fidelity', '—') }}</dd></div>
+    <div><dt>Target</dt><dd>{{ replay.parameters.get('target', 'event bus') }}</dd></div>
+    <div><dt>Dry-run</dt><dd>{{ 'yes' if replay.parameters.get('dry_run', True) else 'no' }}</dd></div>
+  </dl>
+  <section class="workflow-card" aria-labelledby="replay-progress-heading">
+    <h3 id="replay-progress-heading">Progress</h3>
+    <pre class="structured-output">{{ replay.progress|tojson(indent=2) }}</pre>
+    {% if replay.cancellable %}<button class="button button-danger" type="button" data-cancel-operation="{{ replay.operation_id }}">Request cooperative cancellation</button>{% endif %}
+    <p class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+  </section>
+  {% endif %}
+</section>

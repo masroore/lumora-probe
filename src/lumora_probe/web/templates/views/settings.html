@@ -1,0 +1,15 @@
+<section class="workflow-view" aria-labelledby="settings-heading">
+  <header class="view-toolbar"><div><h2 id="settings-heading">Settings</h2><p class="muted">Effective runtime values with source provenance. Startup, environment, and file-owned values are locked.</p></div></header>
+  <form method="post" action="/api/v1/settings" data-settings-form aria-describedby="settings-status">
+    <div class="settings-list">
+      {% for setting in workflows.settings['items'] %}
+      <label class="settings-row">
+        <span><strong>{{ setting.name }}</strong><small>source: {{ setting.source }}{% if setting.source in ('env', 'file') %} · locked{% endif %}</small></span>
+        <input name="{{ setting.name }}" value="{{ setting.value }}" {% if setting.source in ('env', 'file') %}readonly aria-readonly="true"{% endif %}>
+      </label>
+      {% else %}<p class="empty-state">No runtime settings provider is configured.</p>{% endfor %}
+    </div>
+    <div class="button-row"><button class="button button-primary" type="submit">Apply supported runtime settings</button></div>
+    <p id="settings-status" class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+  </form>
+</section>

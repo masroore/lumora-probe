@@ -55,7 +55,7 @@ await build({
   outfile: resolve(staticRoot, 'js/command-palette.js'),
   platform: 'browser',
 });
-for (const source of ['workspace-controller.js', 'tabs-controller.js', 'dialog-controller.js', 'live-client.js', 'investigation-controller.js']) {
+for (const source of ['workspace-controller.js', 'tabs-controller.js', 'dialog-controller.js', 'live-client.js', 'investigation-controller.js', 'workflow-controller.js']) {
   await build({
     entryPoints: [resolve(root, 'assets/source', source)],
     bundle: true,

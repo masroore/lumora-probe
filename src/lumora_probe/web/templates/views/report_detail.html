@@ -1,0 +1,12 @@
+{% set report = workflows.report %}
+<section class="workflow-view" aria-labelledby="report-heading">
+  {% if not report %}
+  <div class="empty-state"><h2 id="report-heading">Report unavailable</h2><p>The operation is missing, expired, or is not a report generation operation.</p><a href="/captures">Return to Captures</a></div>
+  {% else %}
+  <header class="view-toolbar"><div><h2 id="report-heading">Report {{ report.operation.operation_id }}</h2><p class="muted">Capture {{ report.capture_id }} · format {{ report.format }} · rule set {{ report.rule_set_version or 'persisted' }}</p></div></header>
+  <dl class="property-list"><div><dt>State</dt><dd>{{ report.operation.state }}</dd></div><div><dt>Progress</dt><dd>{{ report.operation.progress }}</dd></div></dl>
+  {% if report.operation.state == 'completed' %}
+  <div class="button-row"><a class="button button-primary" href="/api/v1/reports/{{ report.operation.operation_id }}/artifact" target="_blank" rel="noopener">Preview / download artifact</a><a class="button button-secondary" href="/captures/{{ report.capture_id }}?tab=report">Capture evidence</a></div>
+  {% else %}<p class="notice notice-warning">Artifact is not available until generation completes.</p>{% endif %}
+  {% endif %}
+</section>

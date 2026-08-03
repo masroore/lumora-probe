@@ -15,6 +15,19 @@ from fastapi import APIRouter, Body
 
 from lumora_probe.core.errors import SettingLockedError
 
+_STARTUP_ONLY_NAMES = frozenset(
+    {
+        "data_dir",
+        "captures_root",
+        "additional_capture_roots",
+        "bind_host",
+        "port",
+        "dicom_port",
+        "executor_workers",
+        "shutdown_grace_seconds",
+    }
+)
+
 
 class SettingsProvider(Protocol):
     """Read and update contract for the runtime settings store."""
@@ -35,7 +48,16 @@ class InMemorySettingsProvider:
         }
 
     async def get(self) -> Mapping[str, Any]:
-        return {"items": [dict(value) for value in self._values.values()]}
+        return {
+            "items": [
+                {
+                    **dict(value),
+                    "locked": value.get("source") in {"env", "file"},
+                    "restart_required": value.get("name") in _STARTUP_ONLY_NAMES,
+                }
+                for value in self._values.values()
+            ]
+        }
 
     async def update(self, values: Mapping[str, Any]) -> Mapping[str, Any]:
         for name, value in values.items():
@@ -52,6 +74,7 @@ class InMemorySettingsProvider:
                 "value": value,
                 "source": "runtime",
                 "locked": False,
+                "restart_required": name in _STARTUP_ONLY_NAMES,
             }
         return await self.get()
 

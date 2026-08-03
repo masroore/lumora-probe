@@ -54,7 +54,19 @@
       <ol class="event-list">{% for event in investigation.events %}<li id="event-sequence-{{ event.sequence }}"><a href="#event-sequence-{{ event.sequence }}">Sequence {{ event.sequence }}</a><span>{{ event.event_name }}</span><span class="event-meta">{{ event.origin or 'observed' }}</span></li>{% else %}<li class="empty-state">No events indexed for this capture.</li>{% endfor %}</ol>
     </section>
     <section id="panel-report" role="tabpanel" aria-labelledby="tab-report"{% if ui.active_tab != 'report' %} hidden{% endif %}>
-      <h3>Report</h3><p>Report generation is available from the capture-scoped report entry point.</p><a href="/captures/{{ capture.capture_id }}?tab=report">Open report workflow</a>
+      <h3>Report</h3>
+      <p>Generate a capture-backed engineering report with explicit format and provenance.</p>
+      <form method="post" action="/api/v1/captures/{{ capture.capture_id }}/report" data-report-form>
+        <label>Format
+          <select name="format">
+            <option value="html">HTML preview</option>
+            <option value="markdown">Markdown</option>
+            <option value="json">JSON</option>
+          </select>
+        </label>
+        <button class="button button-primary" type="submit">Generate report</button>
+        <p class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+      </form>
     </section>
   </div>
   <section aria-labelledby="capture-objects-heading"><h3 id="capture-objects-heading">Capture objects</h3><ul class="resource-list">{% for object in investigation.objects %}<li><span><code>{{ object.sop_instance_uid or object.digest }}</code></span>{% if object.study_uid %}<a href="/studies/{{ object.study_uid }}">Study</a>{% endif %}{% if object.sop_instance_uid %}<a href="/instances/{{ object.sop_instance_uid }}">Inspect instance</a>{% endif %}</li>{% else %}<li class="empty-state">No object inventory recorded.</li>{% endfor %}</ul></section>

@@ -1,0 +1,42 @@
+<section class="workflow-view" aria-labelledby="replay-heading">
+  <header class="view-toolbar">
+    <div><h2 id="replay-heading">Replay</h2><p class="muted">Replay captured evidence into the event bus or an explicitly confirmed DICOM destination.</p></div>
+  </header>
+  <section class="workflow-card" aria-labelledby="replay-create-heading">
+    <h3 id="replay-create-heading">Create replay</h3>
+    <p class="notice notice-warning"><strong>Dry-run is the default.</strong> Protocol replay writes require an explicit target and confirmation.</p>
+    <form method="post" action="/api/v1/replays" data-replay-form aria-describedby="replay-form-status">
+      <div class="form-grid">
+        <label>Capture ID <input name="capture_id" required minlength="1" autocomplete="off"></label>
+        <label>Mode
+          <select name="mode" data-replay-mode>
+            <option value="event">Event replay</option>
+            <option value="protocol">Protocol replay</option>
+          </select>
+        </label>
+        <label>Fidelity
+          <select name="fidelity" data-replay-fidelity>
+            <option value="events">Events</option>
+            <option value="protocol">Protocol</option>
+            <option value="wire">Wire</option>
+          </select>
+        </label>
+        <label>Speed <input name="speed" type="number" min="0.01" step="0.01" value="1"></label>
+        <label>Target host <input name="target_host" data-protocol-field autocomplete="off"></label>
+        <label>Target port <input name="target_port" data-protocol-field type="number" min="1" max="65535"></label>
+      </div>
+      <label class="check-row"><input name="dry_run" type="checkbox" checked data-replay-dry-run> Dry-run only</label>
+      <label class="check-row"><input name="target_confirmed" type="checkbox" data-replay-confirmation> I confirm the explicit destination and write impact.</label>
+      <div class="button-row"><button class="button button-primary" type="submit">Preflight replay</button></div>
+      <p id="replay-form-status" class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+    </form>
+  </section>
+  <section class="workflow-card" aria-labelledby="replay-history-heading">
+    <div class="card-heading"><h3 id="replay-history-heading">Replay history</h3><span class="summary-meta">{{ workflows.replays|length }} shown</span></div>
+    <ul class="resource-list">
+      {% for replay in workflows.replays %}
+      <li><span class="status-badge status-{{ replay.state }}">{{ replay.state }}</span><a href="/replay/{{ replay.operation_id }}">{{ replay.operation_id }}</a><span class="muted">{{ replay.parameters.get('mode', replay.job_type) }}</span></li>
+      {% else %}<li class="empty-state">No replay operations recorded.</li>{% endfor %}
+    </ul>
+  </section>
+</section>

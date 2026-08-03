@@ -63,6 +63,19 @@ _OWNER_ATTRIBUTES: Final = {
     "data-viewer-cine",
     "data-viewer-fullscreen",
     "data-inspector-tab",
+    "data-cancel-operation",
+    "data-plugin-toggle",
+    "data-replay-mode",
+    "data-replay-fidelity",
+    "data-replay-dry-run",
+    "data-replay-confirmation",
+    "data-protocol-field",
+    "data-replay-form",
+    "data-settings-form",
+    "data-report-form",
+    "data-workflow-confirm-cancel",
+    "data-workflow-confirm",
+    "data-workflow-status",
 }
 
 

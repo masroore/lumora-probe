@@ -392,6 +392,16 @@
         <div data-palette-list id="palette-listbox" role="listbox" aria-label="Available commands" data-actions='{{ actions_json }}'></div>
       </div>
     </div>
+    <dialog id="workflow-confirmation" aria-labelledby="workflow-confirmation-title" aria-describedby="workflow-confirmation-message">
+      <form method="dialog" class="confirmation-dialog">
+        <h2 id="workflow-confirmation-title">Confirm controlled change</h2>
+        <p id="workflow-confirmation-message"></p>
+        <div class="button-row">
+          <button class="button button-secondary" value="cancel" data-workflow-confirm-cancel>Cancel</button>
+          <button class="button button-danger" value="confirm" data-workflow-confirm>Confirm</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="/static/vendor/htmx.min.js" defer></script>
     <script src="/static/vendor/alpine.min.js" defer></script>
@@ -404,6 +414,7 @@
     <script src="/static/js/dialog-controller.js" defer></script>
     <script src="/static/js/live-client.js" defer></script>
     <script src="/static/js/investigation-controller.js" defer></script>
+    <script src="/static/js/workflow-controller.js" defer></script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const frame = document.querySelector('.workspace-frame');

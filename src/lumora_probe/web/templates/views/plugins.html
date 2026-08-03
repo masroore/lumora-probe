@@ -1,0 +1,15 @@
+<section class="workflow-view" aria-labelledby="plugins-heading">
+  <header class="view-toolbar"><div><h2 id="plugins-heading">Plugins</h2><p class="muted">Trusted in-process extensions. Enablement takes effect after restart.</p></div></header>
+  <p class="notice notice-warning">{{ workflows.trust_notice }}</p>
+  <p class="muted">Capabilities are disclosure only; Lumora Probe does not enforce plugin capability restrictions. Installation and upload are intentionally unavailable.</p>
+  <ul class="resource-list plugin-list">
+    {% for plugin in workflows.plugins %}
+    <li>
+      <div><a href="/plugins/{{ plugin.id }}">{{ plugin.name or plugin.id }}</a><span class="muted">{{ plugin.version or 'unknown version' }}</span></div>
+      <span class="status-badge status-{{ plugin.status }}">{{ plugin.status }}</span>
+      <button class="button button-secondary" type="button" data-plugin-toggle data-plugin-id="{{ plugin.id }}" data-plugin-enabled="{{ 'true' if plugin.status == 'enabled' else 'false' }}">{{ 'Disable' if plugin.status == 'enabled' else 'Enable' }}</button>
+    </li>
+    {% else %}<li class="empty-state">No plugins discovered.</li>{% endfor %}
+  </ul>
+  <p class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+</section>

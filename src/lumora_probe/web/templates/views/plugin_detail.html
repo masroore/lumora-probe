@@ -1,0 +1,20 @@
+{% set plugin = workflows.plugin %}
+<section class="workflow-view" aria-labelledby="plugin-detail-heading">
+  {% if not plugin %}
+  <div class="empty-state"><h2 id="plugin-detail-heading">Plugin unavailable</h2><p>The plugin was not discovered or the identifier is invalid.</p><a href="/plugins">Return to Plugins</a></div>
+  {% else %}
+  <header class="view-toolbar"><div><h2 id="plugin-detail-heading">{{ plugin.name or plugin.id }}</h2><p class="muted">{{ plugin.description or 'No description provided.' }}</p></div></header>
+  <p class="notice notice-warning">{{ workflows.trust_notice }}</p>
+  <dl class="property-list">
+    <div><dt>Plugin ID</dt><dd><code>{{ plugin.id }}</code></dd></div>
+    <div><dt>Version</dt><dd>{{ plugin.version }}</dd></div>
+    <div><dt>SDK</dt><dd>{{ plugin.sdk.min_major }}–{{ plugin.sdk.max_major }}</dd></div>
+    <div><dt>Hooks</dt><dd>{{ plugin.hooks|join(', ') }}</dd></div>
+    <div><dt>Capabilities</dt><dd>{{ plugin.capabilities|join(', ') or 'none declared' }} (not enforced)</dd></div>
+    <div><dt>Status</dt><dd>{{ plugin.status }}</dd></div>
+    <div><dt>Failures</dt><dd>{{ plugin.failure_count }}</dd></div>
+  </dl>
+  <button class="button button-secondary" type="button" data-plugin-toggle data-plugin-id="{{ plugin.id }}" data-plugin-enabled="{{ 'true' if plugin.status == 'enabled' else 'false' }}">{{ 'Disable' if plugin.status == 'enabled' else 'Enable' }}</button>
+  <p class="action-status" data-workflow-status role="status" aria-live="polite"></p>
+  {% endif %}
+</section>

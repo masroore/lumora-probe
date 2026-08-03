@@ -18,6 +18,18 @@
 {% include "views/instance_viewer.html" %}
 {% elif ui.route.name == 'search' %}
 {% include "views/search.html" %}
+{% elif ui.route.name == 'replay' %}
+{% include "views/replay.html" %}
+{% elif ui.route.name == 'replay-detail' %}
+{% include "views/replay_detail.html" %}
+{% elif ui.route.name == 'settings' %}
+{% include "views/settings.html" %}
+{% elif ui.route.name == 'plugins' %}
+{% include "views/plugins.html" %}
+{% elif ui.route.name == 'plugin-detail' %}
+{% include "views/plugin_detail.html" %}
+{% elif ui.route.name == 'report-detail' %}
+{% include "views/report_detail.html" %}
 {% else %}
 <div data-tabs data-default-tab="{{ ui.active_tab }}">
   <div role="tablist" aria-label="{{ ui.route.label }} sections">
