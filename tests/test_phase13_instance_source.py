@@ -24,9 +24,11 @@ class _FakeDatabases:
 
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
+        self.last_query: tuple[str, tuple] | None = None
         self.index = self
 
     async def execute_read(self, sql: str, params: tuple = ()) -> list[dict]:
+        self.last_query = (sql, params)
         return self._rows
 
 
@@ -61,6 +63,31 @@ async def test_happy_path_returns_verified_source(tmp_path: Path) -> None:
     assert source.raw_bytes == data
     assert source.capture_id == "capture-1"
     assert source.instance_id == "sop-instance-1"
+
+
+@pytest.mark.asyncio
+async def test_numeric_projection_id_resolves_verified_source(tmp_path: Path) -> None:
+    data = b"synthetic-dicom-bytes"
+    digest = _write_object(tmp_path, "capture-1", data)
+    databases = _FakeDatabases(
+        [
+            {
+                "capture_id": "capture-1",
+                "object_digest": digest,
+                "object_path": f"objects/{digest}",
+            }
+        ]
+    )
+    repo = FileSystemInstanceSourceRepository(tmp_path, databases)
+
+    source = await repo.get_instance_source("1")
+
+    assert source is not None
+    assert source.raw_bytes == data
+    assert databases.last_query is not None
+    query, params = databases.last_query
+    assert "CAST(i.instance_id AS TEXT)" in query
+    assert params == ("1", "1")
 
 
 @pytest.mark.asyncio

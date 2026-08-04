@@ -19,12 +19,9 @@
         </div>
       </div>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a href="/dashboard" hx-get="/dashboard" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="dashboard" aria-current="page">Dashboard</a>
-        <a href="/live" hx-get="/live" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="live">Live Monitor</a>
-        <a href="/captures" hx-get="/captures" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="captures">Captures</a>
-        <a href="/studies" hx-get="/studies" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="studies">Studies</a>
-        <a href="/search" hx-get="/search" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="search">Search</a>
-        <a href="/replay" hx-get="/replay" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="replay">Replay</a>
+        {% for item in ui.primary_routes %}
+        <a href="{{ item.path }}" hx-get="{{ item.path }}" hx-target="#workspace-view" hx-swap="outerHTML" hx-push-url="true" data-route-name="{{ item.name }}"{% if item.name == ui.route.name %} aria-current="page"{% endif %}>{{ item.label }}</a>
+        {% endfor %}
       </nav>
       <div class="toolbar-actions">
         <button class="button button-secondary" type="button" data-command-palette>
@@ -115,40 +112,7 @@
           </div>
         </aside>
 
-          <section id="workspace-view" class="workspace-panel viewer-panel" tabindex="-1"
-                 data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}"
-                 aria-labelledby="viewer-heading">
-          {% include "views/workspace_content.html" %}
-          <div class="panel-heading viewer-heading">
-            <div>
-              <p class="eyebrow">Render surface</p>
-              <h2 id="viewer-heading">Viewer</h2>
-            </div>
-            <div class="viewer-tools" aria-label="Viewer tools">
-              <button class="tool-button" type="button" aria-label="Zoom in" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">+</button>
-              <button class="tool-button" type="button" aria-label="Zoom out" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">−</button>
-              <button class="tool-button" type="button" disabled aria-disabled="true" title="Select a supported image instance to enable pan">Pan</button>
-              <button class="tool-button" type="button" disabled aria-disabled="true" title="Select a supported image instance to enable window and level">Window / level</button>
-              <button type="button" id="cine-toggle" class="tool-button" disabled aria-disabled="true" title="Select a multi-frame image to enable cine"
-                      aria-pressed="false" aria-label="Toggle cine playback"
-                      title="Play/Pause cine (frames)">▶ Cine</button>
-              <button type="button" id="fullscreen-toggle" class="tool-button" disabled aria-disabled="true" title="Select a supported image instance to enable fullscreen"
-                      aria-pressed="false" aria-label="Toggle fullscreen viewer"
-                      title="Fullscreen (f)">⛶ Fullscreen</button>
-            </div>
-          </div>
-          <div class="viewer-canvas" role="img" aria-label="Empty viewer canvas">
-            <div class="empty-state">
-              <span class="empty-state-icon" aria-hidden="true">◇</span>
-              <h3>Select an instance to inspect</h3>
-              <p>This engineering render surface is ready for a capture-backed selection.</p>
-            </div>
-          </div>
-          <div class="viewer-footer" aria-label="Viewer context">
-            <span>{{ workspace.active_context }}</span>
-            <span>Renderer idle</span>
-          </div>
-        </section>
+          {% include "views/viewer_panel.html" %}
 
         <aside id="inspector-panel" class="workspace-panel inspector-panel" aria-labelledby="inspector-heading">
           <div class="panel-heading">
@@ -400,6 +364,32 @@
         </div>
       </form>
     </dialog>
+    <dialog id="association-dialog" class="association-dialog"
+            aria-labelledby="association-dialog-title">
+      <section class="association-modal" role="document">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">Observed association</p>
+            <h2 id="association-dialog-title">Association details</h2>
+          </div>
+          <button type="button" class="icon-button" data-dialog-close data-association-dialog-close
+                  aria-label="Close association details">×</button>
+        </header>
+        <div class="modal-body">
+          <p class="modal-status" data-association-dialog-status role="status" aria-live="polite">
+            Loading association details…
+          </p>
+          <dl class="association-details" data-association-dialog-details hidden>
+            <div><dt>Association ID</dt><dd data-association-field="association_id">—</dd></div>
+            <div><dt>Status</dt><dd data-association-field="status">—</dd></div>
+            <div><dt>Calling AE</dt><dd data-association-field="calling_ae">—</dd></div>
+            <div><dt>Called AE</dt><dd data-association-field="called_ae">—</dd></div>
+            <div><dt>Started</dt><dd data-association-field="started_at">—</dd></div>
+            <div><dt>Completed</dt><dd data-association-field="completed_at">—</dd></div>
+          </dl>
+        </div>
+      </section>
+    </dialog>
 
     <script src="/static/vendor/htmx.min.js" defer></script>
     <script src="/static/vendor/alpine.min.js" defer></script>
@@ -410,6 +400,7 @@
     <script src="/static/js/workspace-controller.js" defer></script>
     <script src="/static/js/tabs-controller.js" defer></script>
     <script src="/static/js/dialog-controller.js" defer></script>
+    <script src="/static/js/association-controller.js" defer></script>
     <script src="/static/js/live-client.js" defer></script>
     <script src="/static/js/investigation-controller.js" defer></script>
     <script src="/static/js/workflow-controller.js" defer></script>

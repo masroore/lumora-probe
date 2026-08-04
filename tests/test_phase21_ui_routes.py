@@ -72,6 +72,19 @@ async def test_every_registered_route_renders_full_page_and_htmx_fragment() -> N
 
 
 @pytest.mark.asyncio
+async def test_navigation_and_viewer_shell_follow_htmx_route_changes() -> None:
+    transport = httpx.ASGITransport(app=create_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        full = await client.get("/captures")
+        fragment = await client.get("/captures", headers={"HX-Request": "true"})
+
+    assert 'data-route-name="captures" aria-current="page">Captures' in full.text
+    assert 'class="explorer-item is-active" href="/captures"' in full.text
+    assert 'class="workspace-panel viewer-panel"' in fragment.text
+    assert 'id="viewer-heading"' in fragment.text
+
+
+@pytest.mark.asyncio
 async def test_contextual_route_owns_valid_tab_state() -> None:
     transport = httpx.ASGITransport(app=create_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:

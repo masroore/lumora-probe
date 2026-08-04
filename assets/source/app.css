@@ -126,12 +126,16 @@ h3 { font-size: .88rem; }
 .search-field input { width: 100%; padding: .55rem .6rem; border: 1px solid var(--color-lumora-line); border-radius: .35rem; background: transparent; color: inherit; }
 .explorer-list, .event-list, .log-list { padding: 0; margin: .8rem 0 0; list-style: none; }
 .explorer-item { display: grid; gap: .15rem; padding: .6rem; border-radius: .35rem; text-decoration: none; }
-.explorer-item:hover, .explorer-item.is-active { background: var(--color-lumora-accent-soft); }
+.explorer-item:hover, .explorer-item.is-active, .explorer-item[aria-current="page"] { background: var(--color-lumora-accent-soft); }
 .explorer-item-label { font-size: .84rem; font-weight: 700; }
 .explorer-item-detail, .summary-meta, .muted, .panel-note span { color: var(--color-lumora-muted); font-size: .76rem; }
 .panel-note { display: grid; gap: .25rem; margin-top: 1rem; padding: .7rem; border: 1px solid var(--color-lumora-line); border-radius: .4rem; }
 
 .viewer-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.viewer-panel > nav[aria-label="Breadcrumb"] { padding: .75rem .9rem 0; color: var(--color-lumora-muted); font-size: .76rem; }
+.viewer-panel > nav[aria-label="Breadcrumb"] a { color: inherit; }
+.viewer-panel > .view-header { padding: .15rem .9rem .8rem; }
+.viewer-panel > .view-header h1 { margin: .15rem 0 .3rem; font-size: 1.05rem; }
 .viewer-heading { flex-wrap: wrap; }
 .viewer-tools { flex-wrap: wrap; justify-content: flex-end; }
 .tool-button { padding: .35rem .5rem; font-size: .72rem; }
@@ -152,6 +156,7 @@ h3 { font-size: .88rem; }
 .bottom-dock details { min-width: 0; overflow: auto; background: var(--color-lumora-panel); }
 .bottom-dock summary { display: flex; justify-content: space-between; gap: .6rem; padding: .7rem .8rem; border-bottom: 1px solid var(--color-lumora-line); cursor: pointer; font-size: .82rem; font-weight: 750; list-style-position: inside; }
 .dock-panel { padding: .1rem .8rem .8rem; }
+.event-list { max-height: 30rem; overflow: auto; border-top: 1px solid var(--color-lumora-line); }
 .event-list li, .log-list li { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid color-mix(in srgb, var(--color-lumora-line) 65%, transparent); font-size: .76rem; }
 .event-sequence, .log-level { color: var(--color-lumora-accent); font-variant-numeric: tabular-nums; }
 .event-meta, .log-list time { color: var(--color-lumora-muted); }
@@ -199,6 +204,7 @@ h3 { font-size: .88rem; }
 .operational-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
 .operational-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
 .status-card, .operational-card { min-width: 0; border: 1px solid var(--color-lumora-line); border-radius: .45rem; background: var(--color-lumora-surface); padding: .8rem; }
+.operational-card { display: grid; align-content: start; }
 .status-card { display: grid; gap: .3rem; }
 .status-card strong { font-size: 1.25rem; }
 .status-card > span:not(.eyebrow), .operational-list span, .metric-card small { color: var(--color-lumora-muted); font-size: .74rem; }
@@ -208,7 +214,8 @@ h3 { font-size: .88rem; }
 .card-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; margin-bottom: .6rem; }
 .card-heading h3 { margin: 0; font-size: .9rem; }
 .operational-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
-.operational-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .45rem; align-items: baseline; border-bottom: 1px solid color-mix(in srgb, var(--color-lumora-line) 65%, transparent); padding: .4rem 0; }
+.operational-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 9rem); gap: .45rem; align-items: baseline; border-bottom: 1px solid color-mix(in srgb, var(--color-lumora-line) 65%, transparent); padding: .4rem 0; }
+.operational-list li > a, .operational-list li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .operational-list li:last-child { border-bottom: 0; }
 .operational-list .empty-state { display: block; border: 0; }
 .state-dot { width: .48rem; height: .48rem; margin-top: .2rem; border-radius: 50%; background: var(--color-lumora-success); }
@@ -228,6 +235,18 @@ h3 { font-size: .88rem; }
 .live-monitor-view[data-live-state="connected"] .live-connection-state { color: var(--color-lumora-success); }
 .live-monitor-view[data-live-state="stale"] .live-connection-state, .live-monitor-view[data-live-state="error"] .live-connection-state { color: var(--color-lumora-warning); }
 .evidence-note { color: var(--color-lumora-muted); font-size: .72rem; }
+.association-dialog { position: fixed; top: 50%; left: 50%; width: min(32rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); margin: 0; transform: translate(-50%, -50%); overflow: auto; padding: 0; border: 1px solid var(--color-lumora-line); border-radius: .6rem; background: var(--color-lumora-panel); box-shadow: 0 1rem 3rem rgb(23 32 51 / 22%); color: var(--color-lumora-ink); }
+.association-dialog::backdrop { background: rgb(23 32 51 / 38%); }
+.modal-header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; border-bottom: 1px solid var(--color-lumora-line); }
+.modal-header h2 { margin-top: .15rem; font-size: 1rem; }
+.modal-body { padding: 1rem; }
+.modal-status { color: var(--color-lumora-muted); font-size: .8rem; }
+.modal-status[data-state="error"] { color: var(--color-lumora-danger); }
+.association-details { display: grid; gap: .55rem; margin: 0; }
+.association-details > div { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: .75rem; padding-bottom: .55rem; border-bottom: 1px solid var(--color-lumora-line); }
+.association-details > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.association-details dt { color: var(--color-lumora-muted); font-size: .74rem; }
+.association-details dd { margin: 0; overflow-wrap: anywhere; font-size: .82rem; }
 .audit-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
 .audit-filters label { display: grid; gap: .25rem; color: var(--color-lumora-muted); font-size: .72rem; }
 .audit-filters input { min-width: 12rem; padding: .45rem; border: 1px solid var(--color-lumora-line); border-radius: .3rem; background: transparent; color: inherit; }

@@ -1,0 +1,34 @@
+<section id="workspace-view" class="workspace-panel viewer-panel" tabindex="-1"
+         data-page-title="{{ ui.title }}" data-route-name="{{ ui.route.name }}"
+         aria-labelledby="viewer-heading">
+  {% include "views/workspace_content.html" %}
+  <div class="panel-heading viewer-heading">
+    <div>
+      <p class="eyebrow">Render surface</p>
+      <h2 id="viewer-heading">Viewer</h2>
+    </div>
+    <div class="viewer-tools" aria-label="Viewer tools">
+      <button class="tool-button" type="button" aria-label="Zoom in" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">+</button>
+      <button class="tool-button" type="button" aria-label="Zoom out" disabled aria-disabled="true" title="Select a supported image instance to enable zoom">−</button>
+      <button class="tool-button" type="button" disabled aria-disabled="true" title="Select an instance to enable pan">Pan</button>
+      <button class="tool-button" type="button" disabled aria-disabled="true" title="Select an instance to enable window and level">Window / level</button>
+      <button type="button" id="cine-toggle" class="tool-button" disabled aria-disabled="true"
+              aria-pressed="false" aria-label="Toggle cine playback"
+              title="Play/Pause cine (frames)">▶ Cine</button>
+      <button type="button" id="fullscreen-toggle" class="tool-button" disabled aria-disabled="true"
+              aria-pressed="false" aria-label="Toggle fullscreen viewer"
+              title="Fullscreen (f)">⛶ Fullscreen</button>
+    </div>
+  </div>
+  <div class="viewer-canvas" role="img" aria-label="Empty viewer canvas">
+    <div class="empty-state">
+      <span class="empty-state-icon" aria-hidden="true">◇</span>
+      <h3>Select an instance to inspect</h3>
+      <p>This engineering render surface is ready for a capture-backed selection.</p>
+    </div>
+  </div>
+  <div class="viewer-footer" aria-label="Viewer context">
+    <span>{{ workspace.active_context }}</span>
+    <span>Renderer idle</span>
+  </div>
+</section>

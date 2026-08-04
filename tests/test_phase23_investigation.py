@@ -108,6 +108,8 @@ async def test_phase23_deep_links_render_capture_study_instance_and_search(
     assert study.status_code == 200
     assert "Cross-capture projection" in study.text
     assert "instance-1" in study.text
+    assert 'class="context-tabs" data-tabs' in study.text
+    assert "Instances (1)" in study.text
     assert instance.status_code == 200
     assert "Frame 0 of 3" in instance.text
     assert "Server-decoded engineering inspection" in instance.text

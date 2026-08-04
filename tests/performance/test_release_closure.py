@@ -211,6 +211,16 @@ async def test_projection_pages_use_unique_ties_and_direct_point_lookups(tmp_pat
                 timestamp,
             ),
         )
+        connection.execute(
+            "INSERT INTO studies(study_uid, first_seen_at, last_seen_at, partial) "
+            "VALUES (?, ?, ?, ?)",
+            ("study", timestamp, timestamp, 0),
+        )
+        connection.execute(
+            "INSERT INTO series(study_uid, series_uid, first_seen_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?)",
+            ("study", "series", timestamp, timestamp),
+        )
         connection.executemany(
             "INSERT INTO instances(capture_id, study_uid, series_uid, sop_instance_uid, "
             "object_digest, object_path, object_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -254,6 +264,12 @@ async def test_projection_pages_use_unique_ties_and_direct_point_lookups(tmp_pat
     assert [(item["sop_instance_uid"], item["instance_id"]) for item in items] == sorted(
         (item["sop_instance_uid"], item["instance_id"]) for item in items
     )
+    series, series_total = await store.list_page("series", offset=0, limit=2)
+    assert series_total == 1
+    assert [(item["study_uid"], item["series_uid"]) for item in series] == [("study", "series")]
+    events, events_total = await store.list_page("events", offset=0, limit=2)
+    assert events_total == 6
+    assert [item["sequence"] for item in events] == [0, 1]
     assert await store.get("instances", str(items[0]["instance_id"]))
     assert await store.get("events", "event-3")
 

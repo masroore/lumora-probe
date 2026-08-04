@@ -316,8 +316,8 @@ class FileSystemInstanceSourceRepository:
         rows = await self._databases.index.execute_read(
             "SELECT i.capture_id, i.object_digest, i.object_path, c.path AS capture_path "
             "FROM instances AS i JOIN captures AS c ON c.capture_id = i.capture_id "
-            "WHERE i.sop_instance_uid = ? LIMIT 1",
-            (instance_id,),
+            "WHERE i.sop_instance_uid = ? OR CAST(i.instance_id AS TEXT) = ? LIMIT 1",
+            (instance_id, instance_id),
         )
         if not rows:
             return None

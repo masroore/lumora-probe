@@ -18,7 +18,7 @@
       <div class="card-heading"><h3 id="active-associations-heading">Active associations</h3><span class="summary-meta">first paint</span></div>
       <ul class="operational-list" data-live-status-list>
         {% for association in operational.associations %}
-        <li><a href="/associations/{{ association.association_id }}">{{ association.association_id }}</a><span>{{ association.state or association.status or 'observed' }}</span><span>{{ association.called_ae_title or association.remote_ae_title or 'DICOM peer' }}</span></li>
+        <li><a href="/api/v1/associations/{{ association.association_id }}" data-association-link aria-haspopup="dialog">{{ association.association_id }}</a><span>{{ association.state or association.status or 'observed' }}</span><span>{{ association.called_ae_title or association.remote_ae_title or 'DICOM peer' }}</span></li>
         {% else %}<li class="empty-state">No active associations.</li>{% endfor %}
       </ul>
     </section>

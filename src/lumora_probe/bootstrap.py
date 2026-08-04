@@ -473,13 +473,14 @@ class _SQLiteResourceStore:
         default_order = query[0].split(" ORDER BY ", 1)[1]
         order: list[str] = []
         for raw in (sort or default_order).split(","):
+            raw = raw.strip()
             descending = raw.startswith("-")
-            name = raw.lstrip("+-")
+            name = raw.lstrip("+-").strip()
             column = allowed.get(name)
             if column is None:
                 raise ValueError(f"unsupported {resource} sort: {name}")
             order.append(f"{column} {'DESC' if descending else 'ASC'}")
-        requested = {raw.lstrip("+-") for raw in (sort or default_order).split(",")}
+        requested = {raw.strip().lstrip("+-").strip() for raw in (sort or default_order).split(",")}
         for tie in query[1]:
             if tie not in requested and tie in allowed:
                 order.append(f"{allowed[tie]} ASC")
@@ -947,10 +948,14 @@ class _LiveEvidenceStore:
             )
             return _event_mapping(json.loads(rows[0]["raw_json"])) if rows else None
         if resource == "associations":
-            records, _total = await self.list_associations_page(
-                offset=0, limit=1, filter=f"association_id:{resource_id}"
+            return next(
+                (
+                    record
+                    for record in await self.list("associations")
+                    if str(record.get("association_id", "")) == resource_id
+                ),
+                None,
             )
-            return records[0] if records else None
         return None
 
     async def delete(self, resource: str, resource_id: str) -> bool:

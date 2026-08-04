@@ -12,6 +12,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from lumora_probe.bootstrap import _LiveEvidenceStore
 from lumora_probe.core.bus import EventBus
 from lumora_probe.web.api import create_app
 from lumora_probe.web.operation_routes import InMemoryOperationRegistry
@@ -92,8 +93,50 @@ async def test_dashboard_and_live_render_provider_backed_first_paint() -> None:
     assert "events.total" in dashboard.text
     assert "Live Monitor" in live.text
     assert "assoc-1" in live.text
+    assert 'href="/api/v1/associations/assoc-1"' in live.text
+    assert 'data-association-link aria-haspopup="dialog"' in live.text
+    assert 'id="association-dialog"' in live.text
     assert "CStoreReceived" in live.text
     assert "first-paint" in live.text
+
+
+@pytest.mark.asyncio
+async def test_live_association_lookup_includes_ring_buffer_events() -> None:
+    class EmptyIndex:
+        async def execute_read(self, *args: object, **kwargs: object) -> tuple[object, ...]:
+            del args, kwargs
+            return ()
+
+    class EmptyStorage:
+        index = EmptyIndex()
+
+    class Ring:
+        def snapshot(self) -> tuple[object, ...]:
+            return (
+                type(
+                    "EventRecord",
+                    (),
+                    {
+                        "kind": "event",
+                        "raw": (
+                            '{"event_id":"event-1","aggregate_type":"Association",'
+                            '"aggregate_id":"assoc-ring","event_name":"AssociationAccepted",'
+                            '"occurred_at":"2026-08-04T00:00:00+00:00","payload":{}}'
+                        ),
+                    },
+                )(),
+            )
+
+    store = _LiveEvidenceStore(EmptyStorage(), Ring())
+
+    assert await store.get("associations", "assoc-ring") == {
+        "association_id": "assoc-ring",
+        "status": "accepted",
+        "started_at": "2026-08-04T00:00:00+00:00",
+        "completed_at": None,
+        "calling_ae": None,
+        "called_ae": None,
+    }
 
 
 @pytest.mark.asyncio

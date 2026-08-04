@@ -34,8 +34,10 @@ function activateRoute(root = document) {
   if (!view) return;
   const route = view.dataset.routeName;
   root.querySelectorAll('[data-route-name]').forEach((link) => {
-    if (link.dataset.routeName === route) link.setAttribute('aria-current', 'page');
+    const selected = link.dataset.routeName === route;
+    if (selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
+    if (link.classList.contains('explorer-item')) link.classList.toggle('is-active', selected);
   });
   document.title = `${view.dataset.pageTitle} · Lumora Probe`;
   root.querySelector('#route-announcer')?.replaceChildren(`${view.dataset.pageTitle} loaded`);
@@ -67,7 +69,10 @@ function initialise() {
     activateRoute();
     if (event.detail.target.id === 'workspace-view') focusWorkspace();
   });
-  document.body.addEventListener('htmx:afterSettle', focusWorkspace);
+  document.body.addEventListener('htmx:afterSettle', () => {
+    activateRoute();
+    focusWorkspace();
+  });
   window.addEventListener('popstate', () => activateRoute());
   activateRoute();
 }
